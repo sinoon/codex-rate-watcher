@@ -4,7 +4,6 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
 
 ![macOS](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.2-orange)
-![Python](https://img.shields.io/badge/Python-3.x-green)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 
 ## Why?
@@ -19,26 +18,16 @@ If you use Codex (ChatGPT Pro/Team) heavily for coding, you've likely hit the fr
 
 ## Features
 
-| Feature | Python Version | Native Version |
-|---|:---:|:---:|
-| Menu bar percentage display | ✅ | ✅ |
-| 5-hour primary rate limit tracking | ✅ | ✅ |
-| Weekly rate limit tracking | ✅ | ✅ |
-| Code review rate limit tracking | ✅ | ✅ |
-| Burn rate estimation | ✅ | ✅ |
-| Auto-refresh (60s interval) | ✅ | ✅ |
-| Multi-account profile management | — | ✅ |
-| Smart switch recommendations | — | ✅ |
-| auth.json file watching | — | ✅ |
-| One-click account switching | — | ✅ |
-| Popover GUI | — | ✅ |
-
-## Screenshots
-
-The native version features a dark-themed popover with two panels:
-
-- **Left panel**: Current account status card, switch recommendation, and three quota cards (5h primary / weekly / code review) with color-coded progress (🟢 >60% / 🟡 26–60% / 🔴 <26%) and burn rate estimates
-- **Right panel**: Saved account profiles list with status indicators and quick-switch buttons
+- **Menu bar status** — percentage display always visible
+- **5-hour primary rate limit** tracking with reset countdown
+- **Weekly rate limit** tracking
+- **Code review rate limit** tracking
+- **Burn rate estimation** — predicts when your quota will run out
+- **Multi-account profile management** — auto-captures and stores account snapshots
+- **Smart switch recommendations** — weighted scoring to find the best account
+- **auth.json file watching** — detects Codex CLI login changes in real time
+- **One-click account switching** — with automatic backup
+- **Dark-themed Popover GUI** — with color-coded quota cards
 
 ## How It Works
 
@@ -80,7 +69,7 @@ The estimator collects usage samples over time and uses linear regression to pro
 4. Projects `remaining / rate` → estimated time until exhaustion
 5. If the window resets before exhaustion → reports "Won't run out before reset"
 
-### Smart Account Switching (Native)
+### Smart Account Switching
 
 The scoring algorithm evaluates each saved profile:
 
@@ -99,46 +88,23 @@ The profile with the highest score is recommended. When you switch, the current 
 
 - **macOS 14** (Sonoma) or later
 - **Codex CLI** installed and logged in (creates `~/.codex/auth.json`)
-- For the Python version: Python 3.x
-- For the Native version: Swift 6.2+ toolchain (Xcode 26 or swift.org toolchain)
+- **Swift 6.2+** toolchain (Xcode 26 or [swift.org](https://swift.org) toolchain)
 
 ## Installation
 
-### Option 1: Native Version (Recommended)
-
-#### Build from source
+### Build from source
 
 ```bash
-cd native
 swift build -c release
 ./scripts/build_app.sh
 ```
 
-The built app bundle will be at `native/dist/Codex Rate Watcher Native.app`. Move it to `/Applications` if you'd like.
+The built app bundle will be at `dist/Codex Rate Watcher Native.app`. Move it to `/Applications` if you'd like.
 
-#### Run directly
+### Run directly
 
 ```bash
-cd native
 swift run
-```
-
-### Option 2: Python Version
-
-```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run in development mode
-./scripts/run_app.sh
-
-# Or build as a standalone .app
-./scripts/build_app.sh
-# Output: dist/Codex Rate Watcher.app
 ```
 
 ## Usage
@@ -150,13 +116,13 @@ pip install -r requirements.txt
 
 2. **Launch the app** — a speedometer icon appears in your menu bar
 
-3. **Click the icon** to see the popover (Native) or dropdown menu (Python):
+3. **Click the icon** to see the popover:
    - Current account plan and status
    - Three rate-limit quota cards with percentages and reset countdowns
    - Burn rate estimates ("At this pace, runs out in ~2h 15m")
-   - Account switch recommendations (Native)
+   - Account switch recommendations
 
-4. **Multi-account workflow** (Native version):
+4. **Multi-account workflow**:
    - Log in with different Codex accounts — the app auto-captures each one
    - When your current account runs low, the app recommends the best alternative
    - Click "Switch" to swap `auth.json` instantly (with auto-backup)
@@ -179,34 +145,25 @@ No data is sent anywhere except the official ChatGPT Usage API (`chatgpt.com/bac
 
 ```
 codex-rate-watcher/
-├── app.py                    # Python version — menu bar app (rumps)
-├── requirements.txt          # Python dependencies
-├── setup.py                  # py2app packaging config
+├── Package.swift                       # Swift Package Manager manifest
 ├── scripts/
-│   ├── build_app.sh          # Build Python .app bundle
-│   └── run_app.sh            # Run Python version
-├── native/                   # Swift native version
-│   ├── Package.swift         # Swift Package Manager manifest
-│   ├── scripts/
-│   │   └── build_app.sh      # Build native .app bundle
-│   └── Sources/CodexRateWatcherNative/
-│       ├── main.swift                  # Entry point
-│       ├── AppDelegate.swift           # Status bar + popover
-│       ├── Models.swift                # Data models & types
-│       ├── AuthStore.swift             # Auth file read/write
-│       ├── AuthFileWatcher.swift       # File system monitoring
-│       ├── UsageAPIClient.swift        # ChatGPT Usage API client
-│       ├── UsageMonitor.swift          # Core monitor + multi-account
-│       ├── UsageEstimator.swift        # Burn rate estimation
-│       ├── Persistence.swift           # Sample & profile storage
-│       └── PopoverViewController.swift # Full AppKit GUI
+│   └── build_app.sh                    # Build .app bundle
+├── Sources/CodexRateWatcherNative/
+│   ├── main.swift                      # Entry point
+│   ├── AppDelegate.swift               # Status bar + popover controller
+│   ├── Models.swift                    # Data models & types
+│   ├── AuthStore.swift                 # Auth file read/write
+│   ├── AuthFileWatcher.swift           # File system monitoring (kqueue)
+│   ├── UsageAPIClient.swift            # ChatGPT Usage API client
+│   ├── UsageMonitor.swift              # Core monitor + multi-account logic
+│   ├── UsageEstimator.swift            # Burn rate estimation
+│   ├── Persistence.swift               # Sample & profile storage
+│   └── PopoverViewController.swift     # Full AppKit GUI
 ├── LICENSE
 └── README.md
 ```
 
 ## Tech Stack
-
-### Native Version
 
 | Component | Technology |
 |---|---|
@@ -218,16 +175,6 @@ codex-rate-watcher/
 | Crypto | CryptoKit (SHA256 fingerprinting) |
 | File Watching | GCD DispatchSource (kqueue) |
 | Dependencies | **None** — pure system frameworks |
-
-### Python Version
-
-| Component | Technology |
-|---|---|
-| Language | Python 3 |
-| UI Framework | [rumps](https://github.com/jaredks/rumps) (macOS menu bar) |
-| Packaging | py2app |
-| Networking | urllib (stdlib) |
-| Threading | threading + PyObjCTools |
 
 ## Contributing
 

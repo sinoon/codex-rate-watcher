@@ -1,37 +1,35 @@
+# macOS
 .DS_Store
-/.build
-/Packages
-/build
-/dist
-/.venv
-/__pycache__
-*.pyc
-*.pyo
-*.pyd
-*.log
-.env
-.env.*
 xcuserdata/
 DerivedData/
+
+# Swift Package Manager
+/.build
+/Packages
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
-.netrc
+
+# Build artifacts
+/dist
+/build
+
+# Sensitive files
+.env
+.env.*
 .codex/
+.netrc
+auth.json
+samples.json
+*.tokens.json
+*.secret
 *.pem
 *.key
 *.p12
 *.mobileprovision
 
-# Local auth / app data
-auth.json
-samples.json
-*.tokens.json
-*.secret
-
-# Native build artifacts
-native/.build/
-native/dist/
-
 # IDE
 .vscode/
 .idea/
+
+# Logs
+*.log
