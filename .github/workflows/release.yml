@@ -10,47 +10,45 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }} .app
+    name: Build ${{ matrix.label }} .app
     runs-on: macos-15
     strategy:
       matrix:
         include:
           - arch: arm64
-            triple: arm64-apple-macosx
-            artifact_suffix: Apple-Silicon
+            sdk_arch: arm64
+            label: Apple-Silicon
           - arch: x86_64
-            triple: x86_64-apple-macosx
-            artifact_suffix: Intel
+            sdk_arch: x86_64
+            label: Intel
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Swift
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: '6.0'
+      - name: Show Swift version
+        run: swift --version
 
       - name: Build release binary
         run: |
-          swift build -c release --triple ${{ matrix.triple }}
+          swift build -c release --arch ${{ matrix.arch }}
 
       - name: Package .app bundle
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
+          VER="${VERSION#v}"
           APP_NAME="Codex Rate Watcher"
-          EXECUTABLE_NAME="CodexRateWatcherNative"
+          EXEC="CodexRateWatcherNative"
           APP_DIR="dist/${APP_NAME}.app"
-          VERSION="${GITHUB_REF_NAME#v}"
 
           rm -rf dist
           mkdir -p "${APP_DIR}/Contents/MacOS"
           mkdir -p "${APP_DIR}/Contents/Resources"
 
-          # Copy binary
-          cp ".build/${{ matrix.triple }}/release/${EXECUTABLE_NAME}" \
-             "${APP_DIR}/Contents/MacOS/${EXECUTABLE_NAME}"
+          cp ".build/${{ matrix.arch }}-apple-macosx/release/${EXEC}" \
+             "${APP_DIR}/Contents/MacOS/${EXEC}"
 
-          # Generate Info.plist
           cat > "${APP_DIR}/Contents/Info.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -64,11 +62,11 @@ jobs:
             <key>CFBundleIdentifier</key>
             <string>com.sinoon.codex-rate-watcher</string>
             <key>CFBundleVersion</key>
-            <string>${VERSION}</string>
+            <string>${VER}</string>
             <key>CFBundleShortVersionString</key>
-            <string>${VERSION}</string>
+            <string>${VER}</string>
             <key>CFBundleExecutable</key>
-            <string>${EXECUTABLE_NAME}</string>
+            <string>${EXEC}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>LSMinimumSystemVersion</key>
@@ -81,16 +79,18 @@ jobs:
           </plist>
           PLIST
 
-          echo "✅ Built ${APP_NAME}.app (${VERSION}) for ${{ matrix.arch }}"
+          echo "Built ${APP_NAME}.app (${VER}) for ${{ matrix.arch }}"
 
       - name: Create ZIP archive
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VER="${VERSION#v}"
           cd dist
-          zip -r -y "../Codex-Rate-Watcher-${VERSION}-${{ matrix.artifact_suffix }}.zip" \
+          zip -r -y "../Codex-Rate-Watcher-${VER}-${{ matrix.label }}.zip" \
             "Codex Rate Watcher.app"
           cd ..
-          echo "ASSET_PATH=Codex-Rate-Watcher-${VERSION}-${{ matrix.artifact_suffix }}.zip" >> $GITHUB_ENV
+          echo "ASSET_PATH=Codex-Rate-Watcher-${VER}-${{ matrix.label }}.zip" >> $GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -103,7 +103,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (for changelog)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -119,38 +119,51 @@ jobs:
 
       - name: Generate release notes
         id: notes
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VER="${VERSION#v}"
           PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p' || echo "")
 
           {
             echo "body<<RELEASE_EOF"
-            echo "## ⚡ Codex Rate Watcher ${GITHUB_REF_NAME}"
+            echo "## Codex Rate Watcher ${VERSION}"
             echo ""
-            echo "### 📦 Downloads"
+            echo "### Downloads"
             echo ""
             echo "| Platform | File |"
             echo "|---|---|"
-            echo "| **Apple Silicon** (M1/M2/M3/M4) | \`Codex-Rate-Watcher-${VERSION}-Apple-Silicon.zip\` |"
-            echo "| **Intel** (x86_64) | \`Codex-Rate-Watcher-${VERSION}-Intel.zip\` |"
+            echo "| **Apple Silicon** (M1/M2/M3/M4) | \`Codex-Rate-Watcher-${VER}-Apple-Silicon.zip\` |"
+            echo "| **Intel** (x86_64) | \`Codex-Rate-Watcher-${VER}-Intel.zip\` |"
             echo ""
-            echo "### 🚀 Installation"
+            echo "### Installation"
             echo ""
-            echo "1. Download the ZIP for your Mac's chip"
+            echo "1. Download the ZIP for your Mac chip"
             echo "2. Unzip and drag **Codex Rate Watcher.app** to \`/Applications\`"
             echo "3. Launch the app — it lives in your menu bar"
-            echo "4. Make sure Codex CLI is logged in (\`~/.codex/auth.json\` exists)"
+            echo "4. Codex CLI must be logged in (\`~/.codex/auth.json\`)"
             echo ""
-            echo "> **Note:** The app is not notarized. On first launch, right-click → Open, or go to System Settings → Privacy & Security → Open Anyway."
+            echo "> **Note:** The app is not notarized. On first launch: right-click the app, select Open, or go to System Settings > Privacy & Security > Open Anyway."
+            echo ""
+            echo "### Key Features"
+            echo ""
+            echo "- Real-time 3-dimensional quota tracking (5h primary + weekly + code review)"
+            echo "- Burn-rate estimation with linear regression"
+            echo "- Reset countdown on every quota card"
+            echo "- Multi-account management with weighted smart switching"
+            echo "- Orphaned snapshot auto-reconciliation"
+            echo "- Plus / Team plan badges"
+            echo "- Dark-themed Linear-inspired UI"
+            echo "- Zero dependencies — pure Apple system frameworks"
             echo ""
             if [ -n "$PREV_TAG" ]; then
-              echo "### 📝 Changes since ${PREV_TAG}"
+              echo "### Changes since ${PREV_TAG}"
               echo ""
               git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD" -- || true
             else
-              echo "### 📝 Changes"
+              echo "### Changes"
               echo ""
-              echo "🎉 Initial release!"
+              echo "Initial release!"
             fi
             echo ""
             echo "RELEASE_EOF"
