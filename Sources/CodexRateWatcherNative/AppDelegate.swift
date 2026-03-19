@@ -5,9 +5,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let popover = NSPopover()
   private var statusItem: NSStatusItem!
   private let monitor = UsageMonitor()
+  private let alertManager = AlertManager()
   private var observerID: UUID?
   private let windowMode: Bool
   private var debugWindow: NSWindow?
+  private var currentTier: StatusBarIcon.Tier = .unknown
 
   init(windowMode: Bool = false) {
     self.windowMode = windowMode
@@ -17,13 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Lifecycle
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    // ── Build standard main menu (for keyboard shortcuts) ──
     buildMainMenu()
 
     let viewController = PopoverViewController(monitor: monitor)
 
     if windowMode {
-      // ── Standalone window mode (for debugging / screenshots) ──
       NSApp.setActivationPolicy(.regular)
 
       let windowSize = NSSize(width: 380, height: 580)
@@ -42,7 +42,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       NSApp.activate(ignoringOtherApps: true)
       debugWindow = window
     } else {
-      // ── Normal menu bar mode ──
       NSApp.setActivationPolicy(.accessory)
 
       popover.behavior = .transient
@@ -52,10 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
       if let button = statusItem.button {
-        button.image = NSImage(
-          systemSymbolName: "speedometer",
-          accessibilityDescription: "Rate limits"
-        )
+        button.image = StatusBarIcon.icon(for: .unknown)
         button.imagePosition = .imageLeading
         button.title = "Codex 额度"
         button.font = .systemFont(ofSize: 13, weight: .semibold)
@@ -65,9 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
 
-    // ── Monitor ──
     observerID = monitor.addObserver { [weak self] state in
-      DispatchQueue.main.async { self?.renderMenuBar(state: state) }
+      DispatchQueue.main.async {
+        self?.renderMenuBar(state: state)
+        self?.alertManager.evaluate(state: state)
+      }
     }
     monitor.start()
   }
@@ -81,7 +79,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    // In window mode, quit when window is closed
     return windowMode
   }
 
@@ -92,14 +89,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           let event = NSApp.currentEvent else { return }
 
     if event.type == .rightMouseUp {
-      // Right-click → show context menu
       let menu = buildStatusMenu()
       statusItem.menu = menu
       statusItem.button?.performClick(nil)
-      // Reset to nil so left-click works next time
       statusItem.menu = nil
     } else {
-      // Left-click → toggle popover
       if popover.isShown {
         popover.performClose(sender)
       } else {
@@ -114,26 +108,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func buildStatusMenu() -> NSMenu {
     let menu = NSMenu()
 
-    // Open popover
     let openItem = NSMenuItem(title: "打开面板", action: #selector(openPopover), keyEquivalent: "o")
     openItem.target = self
     menu.addItem(openItem)
 
-    // Refresh
     let refreshItem = NSMenuItem(title: "立即刷新", action: #selector(refreshNow), keyEquivalent: "r")
     refreshItem.target = self
     menu.addItem(refreshItem)
 
     menu.addItem(NSMenuItem.separator())
 
-    // About
+    let alertLabel = alertManager.config.enabled ? "🔔 通知预警：已开启" : "🔕 通知预警：已关闭"
+    let alertToggle = NSMenuItem(title: alertLabel, action: #selector(toggleAlerts), keyEquivalent: "")
+    alertToggle.target = self
+    menu.addItem(alertToggle)
+
+    let soundLabel = alertManager.config.playSound ? "🔊 提示音：已开启" : "🔇 提示音：已关闭"
+    let soundToggle = NSMenuItem(title: soundLabel, action: #selector(toggleAlertSound), keyEquivalent: "")
+    soundToggle.target = self
+    menu.addItem(soundToggle)
+
+    menu.addItem(NSMenuItem.separator())
+
     let aboutItem = NSMenuItem(title: "关于 Codex Rate Watcher", action: #selector(showAbout), keyEquivalent: "")
     aboutItem.target = self
     menu.addItem(aboutItem)
 
     menu.addItem(NSMenuItem.separator())
 
-    // Quit
     let quitItem = NSMenuItem(title: "退出 Codex Rate Watcher", action: #selector(quitApp), keyEquivalent: "q")
     quitItem.target = self
     menu.addItem(quitItem)
@@ -153,11 +155,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     Task { await monitor.refresh(manual: true) }
   }
 
+  @objc private func toggleAlerts() {
+    var config = alertManager.config
+    config.enabled.toggle()
+    alertManager.updateConfig(config)
+  }
+
+  @objc private func toggleAlertSound() {
+    var config = alertManager.config
+    config.playSound.toggle()
+    alertManager.updateConfig(config)
+  }
+
   @objc private func showAbout() {
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     NSApp.orderFrontStandardAboutPanel(nil)
-    // Go back to accessory after a delay (only in non-window mode)
     if !windowMode {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
         NSApp.setActivationPolicy(.accessory)
@@ -169,12 +182,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.terminate(nil)
   }
 
-  // MARK: - Main Menu (for ⌘Q keyboard shortcut)
+  // MARK: - Main Menu
 
   private func buildMainMenu() {
     let mainMenu = NSMenu()
 
-    // ── App menu ──
     let appMenu = NSMenu()
     let appMenuItem = NSMenuItem()
     appMenuItem.submenu = appMenu
@@ -185,7 +197,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     mainMenu.addItem(appMenuItem)
 
-    // ── Edit menu (for standard text operations) ──
     let editMenu = NSMenu(title: "编辑")
     let editMenuItem = NSMenuItem()
     editMenuItem.submenu = editMenu
@@ -197,7 +208,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     mainMenu.addItem(editMenuItem)
 
-    // ── Window menu ──
     let windowMenu = NSMenu(title: "窗口")
     let windowMenuItem = NSMenuItem()
     windowMenuItem.submenu = windowMenu
@@ -214,6 +224,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func renderMenuBar(state: UsageMonitor.State) {
     guard let button = statusItem?.button else { return }
+
+    let tier = StatusBarIcon.tier(for: state)
+    if tier != currentTier {
+      currentTier = tier
+      button.image = StatusBarIcon.icon(for: tier)
+    }
+
     guard let snapshot = state.snapshot else {
       button.title = "Codex 额度"
       return

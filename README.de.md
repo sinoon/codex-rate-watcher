@@ -63,6 +63,8 @@ Codex Rate Watcher lebt in Ihrer macOS-Menüleiste und bietet Ihnen **vollständ
 - **Auth-Datei-Überwachung** — erkennt `codex login` in Echtzeit via kqueue
 - **Verwaiste Snapshot-Abstimmung** — Konten gehen nie verloren
 - **Debug-Fenstermodus** — `--window`-Flag für eigenständiges Fenster
+- **🔔 Intelligentes Warnsystem** — konfigurierbare Schwellenwert-Benachrichtigungen (50 %, 30 %, 15 %, 5 %), native macOS-Benachrichtigungen, Deduplizierung pro Reset-Fenster und dringlichkeitsbasierte Tonalarme
+- **🎨 Dynamisches Statusleisten-Icon** — das Menüleisten-Icon ändert seine Farbe in Echtzeit je nach Kontingent-Gesundheit (grün → gelb → orange → rot), sofortiges visuelles Feedback ohne die App zu öffnen
 - **Null Abhängigkeiten** — reine Apple-System-Frameworks
 
 ## 📥 Download

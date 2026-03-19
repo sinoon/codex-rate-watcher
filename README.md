@@ -50,6 +50,8 @@ Codex Rate Watcher lives in your macOS menu bar and gives you **total visibility
 | **🧠 Smart switching** | Weighted scoring algorithm recommends the best account to switch to |
 | **🔄 Auto-reconciliation** | Orphaned auth snapshots are auto-discovered and registered on startup |
 | **🏷️ Plan badges** | Clearly labels Plus vs. Team in the UI |
+| **🔔 Smart alert system** | Configurable threshold notifications (50%, 30%, 15%, 5%) with macOS native alerts |
+| **🎨 Dynamic status bar icon** | Color-coded menu bar icon changes based on quota health (green → yellow → orange → red) |
 | **🎨 Dark-themed UI** | Linear-inspired design with color-coded quota cards |
 
 ## ✨ Key Features
@@ -73,6 +75,14 @@ Managing multiple ChatGPT Pro or Team accounts? The app auto-captures authentica
 ### 🔄 Self-Healing Profile Store
 
 The **orphaned snapshot reconciliation** engine scans your profile directory on startup, automatically discovers untracked auth snapshots, and registers them (deduplicated by SHA256 fingerprint). Even if the index file gets corrupted, your accounts are never lost.
+
+### 🔔 Smart Alert System
+
+Stay ahead of rate limits with **configurable threshold notifications** at 50%, 30%, 15%, and 5% remaining quota. Alerts are delivered through **macOS native notifications**, with per-reset-window deduplication so you never get spammed by the same warning twice. As your quota drops, the urgency escalates — low-threshold alerts include **sound notifications** to grab your attention even when you're deep in flow.
+
+### 🎨 Dynamic Status Bar Icon
+
+The menu bar icon is no longer static. It **changes color in real time** based on your quota health — **green** when you're comfortable, **yellow** when usage is climbing, **orange** when you should slow down, and **red** when you're critically low. This gives you **instant visual feedback** without ever opening the app, so you always know your quota status at a glance.
 
 ### 🛡️ Privacy-First Architecture
 

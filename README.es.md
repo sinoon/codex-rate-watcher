@@ -63,6 +63,8 @@ Codex Rate Watcher vive en tu barra de menú de macOS y te da **visibilidad tota
 - **Monitoreo de archivo auth** — detecta `codex login` en tiempo real vía kqueue
 - **Reconciliación de snapshots huérfanos** — nunca pierdas una cuenta
 - **Modo ventana de depuración** — bandera `--window` para ventana independiente
+- **🔔 Sistema de alertas inteligentes** — notificaciones configurables por umbral (50%, 30%, 15%, 5%), alertas nativas de macOS, deduplicación por ventana de reinicio y alertas sonoras según la urgencia
+- **🎨 Icono dinámico en la barra de menú** — el icono cambia de color en tiempo real según el estado de la cuota (verde → amarillo → naranja → rojo), retroalimentación visual instantánea sin abrir la app
 - **Cero dependencias** — frameworks puros del sistema Apple
 
 ## 📥 Descarga
