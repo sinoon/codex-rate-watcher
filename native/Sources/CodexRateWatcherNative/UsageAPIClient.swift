@@ -7,12 +7,12 @@ enum UsageAPIError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidResponse:
-      return "Usage API returned an invalid response."
+      return "额度接口返回的数据格式不对。"
     case .httpError(let statusCode, let message):
       if message.isEmpty {
-        return "Usage API request failed with status \(statusCode)."
+        return "额度接口请求失败，状态码 \(statusCode)。"
       }
-      return "Usage API request failed with status \(statusCode): \(message)"
+      return "额度接口请求失败，状态码 \(statusCode)：\(message)"
     }
   }
 }

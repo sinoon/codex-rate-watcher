@@ -13,14 +13,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let viewController = PopoverViewController(monitor: monitor)
     popover.behavior = .transient
     popover.animates = true
-    popover.contentSize = NSSize(width: 400, height: 520)
+    popover.contentSize = NSSize(width: 860, height: 580)
     popover.contentViewController = viewController
 
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     if let button = statusItem.button {
       button.image = NSImage(systemSymbolName: "speedometer", accessibilityDescription: "Rate limits")
       button.imagePosition = .imageLeading
-      button.title = "Codex RL"
+      button.title = "Codex 额度"
       button.font = .systemFont(ofSize: 13, weight: .semibold)
       button.target = self
       button.action = #selector(togglePopover(_:))
@@ -58,21 +58,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func renderMenuBar(state: UsageMonitor.State) {
     guard let button = statusItem.button else { return }
     guard let snapshot = state.snapshot else {
-      button.title = "Codex RL"
+      button.title = "Codex 额度"
       return
     }
 
     if let weeklyWindow = snapshot.rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-      button.title = "Blocked · \(state.availableProfileCount) ready"
+      button.title = "不可用 · \(state.availableProfileCount) 个可切"
       return
     }
 
     if !snapshot.rateLimit.allowed || snapshot.rateLimit.limitReached || snapshot.rateLimit.primaryWindow.remainingPercent <= 0 {
-      button.title = "Blocked · \(state.availableProfileCount) ready"
+      button.title = "不可用 · \(state.availableProfileCount) 个可切"
       return
     }
 
     let primary = snapshot.rateLimit.primaryWindow
-    button.title = "\(Int(primary.remainingPercent.rounded()))% left · \(state.availableProfileCount) ready"
+    button.title = "还剩 \(Int(primary.remainingPercent.rounded()))% · \(state.availableProfileCount) 个可切"
   }
 }

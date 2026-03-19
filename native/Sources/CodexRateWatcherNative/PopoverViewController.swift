@@ -4,18 +4,19 @@ final class PopoverViewController: NSViewController {
   private let monitor: UsageMonitor
   private var observerID: UUID?
 
-  private let updatedLabel = NSTextField(labelWithString: "Waiting for the first successful sync")
+  private let updatedLabel = NSTextField(labelWithString: "正在等第一次同步")
   private let refreshButton = NSButton()
   private let footerLabel = NSTextField(labelWithString: "")
   private let errorLabel = NSTextField(wrappingLabelWithString: "")
   private let currentAuthCard = CurrentAuthCardView()
+  private let recommendationCard = RecommendationCardView()
   private let profilesSummaryLabel = NSTextField(labelWithString: "")
   private let profilesStack = NSStackView()
-  private let profilesEmptyLabel = NSTextField(labelWithString: "No saved auth profiles yet.")
+  private let profilesEmptyLabel = NSTextField(labelWithString: "还没有保存过账号。你切换登录后，这里会自动出现。")
 
-  private let primaryCard = LimitCardView(title: "5h left")
-  private let weeklyCard = LimitCardView(title: "Weekly left")
-  private let reviewCard = LimitCardView(title: "Review left")
+  private let primaryCard = LimitCardView(title: "近 5 小时主额度")
+  private let weeklyCard = LimitCardView(title: "本周主额度")
+  private let reviewCard = LimitCardView(title: "代码审查额度")
 
   init(monitor: UsageMonitor) {
     self.monitor = monitor
@@ -28,7 +29,7 @@ final class PopoverViewController: NSViewController {
   }
 
   override func loadView() {
-    view = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 520))
+    view = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 580))
     view.wantsLayer = true
     view.layer?.backgroundColor = NSColor.clear.cgColor
   }
@@ -65,23 +66,23 @@ final class PopoverViewController: NSViewController {
     let content = NSStackView()
     content.translatesAutoresizingMaskIntoConstraints = false
     content.orientation = .vertical
-    content.spacing = 14
-    content.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+    content.spacing = 10
+    content.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
     background.addSubview(content)
 
     let header = NSStackView()
     header.orientation = .horizontal
-    header.alignment = .top
-    header.spacing = 12
+    header.alignment = .centerY
+    header.spacing = 10
 
     let iconContainer = NSView()
     iconContainer.wantsLayer = true
     iconContainer.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
-    iconContainer.layer?.cornerRadius = 18
+    iconContainer.layer?.cornerRadius = 16
     iconContainer.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
-      iconContainer.widthAnchor.constraint(equalToConstant: 36),
-      iconContainer.heightAnchor.constraint(equalToConstant: 36)
+      iconContainer.widthAnchor.constraint(equalToConstant: 32),
+      iconContainer.heightAnchor.constraint(equalToConstant: 32)
     ])
 
     let iconView = NSImageView(image: NSImage(systemSymbolName: "speedometer", accessibilityDescription: nil) ?? NSImage())
@@ -93,20 +94,20 @@ final class PopoverViewController: NSViewController {
       iconView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor)
     ])
 
-    let titleLabel = NSTextField(labelWithString: "Rate limits remaining")
-    titleLabel.font = .systemFont(ofSize: 26, weight: .bold)
+    let titleLabel = NSTextField(labelWithString: "Codex 剩余额度")
+    titleLabel.font = .systemFont(ofSize: 22, weight: .bold)
     titleLabel.textColor = .white
 
-    updatedLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    updatedLabel.font = .systemFont(ofSize: 11, weight: .medium)
     updatedLabel.textColor = .white.withAlphaComponent(0.58)
 
     let headerText = NSStackView(views: [titleLabel, updatedLabel])
     headerText.orientation = .vertical
-    headerText.spacing = 4
+    headerText.spacing = 2
 
     refreshButton.bezelStyle = .texturedRounded
     refreshButton.isBordered = false
-    refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
+    refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "刷新")
     refreshButton.contentTintColor = .white
     refreshButton.wantsLayer = true
     refreshButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
@@ -115,8 +116,8 @@ final class PopoverViewController: NSViewController {
     refreshButton.target = self
     refreshButton.action = #selector(refreshTapped)
     NSLayoutConstraint.activate([
-      refreshButton.widthAnchor.constraint(equalToConstant: 30),
-      refreshButton.heightAnchor.constraint(equalToConstant: 30)
+      refreshButton.widthAnchor.constraint(equalToConstant: 28),
+      refreshButton.heightAnchor.constraint(equalToConstant: 28)
     ])
 
     let spacer = NSView()
@@ -125,15 +126,26 @@ final class PopoverViewController: NSViewController {
     header.addArrangedSubview(spacer)
     header.addArrangedSubview(refreshButton)
 
-    let cards = NSStackView(views: [primaryCard, weeklyCard, reviewCard])
-    cards.orientation = .vertical
-    cards.spacing = 12
+    let topCardsRow = NSStackView(views: [primaryCard, weeklyCard])
+    topCardsRow.orientation = .horizontal
+    topCardsRow.alignment = .top
+    topCardsRow.distribution = .fillEqually
+    topCardsRow.spacing = 10
 
-    let profilesHeaderLabel = NSTextField(labelWithString: "Saved auth profiles")
+    let cards = NSStackView(views: [topCardsRow, reviewCard])
+    cards.orientation = .vertical
+    cards.spacing = 10
+
+    [primaryCard, weeklyCard, reviewCard].forEach { card in
+      card.translatesAutoresizingMaskIntoConstraints = false
+      card.heightAnchor.constraint(equalToConstant: 126).isActive = true
+    }
+
+    let profilesHeaderLabel = NSTextField(labelWithString: "已保存账号")
     profilesHeaderLabel.font = .systemFont(ofSize: 15, weight: .semibold)
     profilesHeaderLabel.textColor = .white
 
-    profilesSummaryLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    profilesSummaryLabel.font = .systemFont(ofSize: 11, weight: .medium)
     profilesSummaryLabel.textColor = .white.withAlphaComponent(0.58)
 
     let profilesHeader = NSStackView(views: [profilesHeaderLabel, NSView(), profilesSummaryLabel])
@@ -144,7 +156,7 @@ final class PopoverViewController: NSViewController {
     profilesSection.translatesAutoresizingMaskIntoConstraints = false
     profilesSection.wantsLayer = true
     profilesSection.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
-    profilesSection.layer?.cornerRadius = 18
+    profilesSection.layer?.cornerRadius = 16
 
     let profilesScrollView = NSScrollView()
     profilesScrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -158,10 +170,10 @@ final class PopoverViewController: NSViewController {
 
     profilesStack.translatesAutoresizingMaskIntoConstraints = false
     profilesStack.orientation = .vertical
-    profilesStack.spacing = 10
+    profilesStack.spacing = 8
     documentView.addSubview(profilesStack)
 
-    profilesEmptyLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    profilesEmptyLabel.font = .systemFont(ofSize: 11, weight: .medium)
     profilesEmptyLabel.textColor = .white.withAlphaComponent(0.54)
 
     profilesSection.addSubview(profilesHeader)
@@ -169,16 +181,17 @@ final class PopoverViewController: NSViewController {
     profilesHeader.translatesAutoresizingMaskIntoConstraints = false
 
     NSLayoutConstraint.activate([
-      profilesSection.heightAnchor.constraint(equalToConstant: 190),
+      profilesSection.widthAnchor.constraint(equalToConstant: 340),
+      profilesSection.heightAnchor.constraint(equalToConstant: 480),
 
       profilesHeader.leadingAnchor.constraint(equalTo: profilesSection.leadingAnchor, constant: 16),
       profilesHeader.trailingAnchor.constraint(equalTo: profilesSection.trailingAnchor, constant: -16),
-      profilesHeader.topAnchor.constraint(equalTo: profilesSection.topAnchor, constant: 14),
+      profilesHeader.topAnchor.constraint(equalTo: profilesSection.topAnchor, constant: 12),
 
-      profilesScrollView.leadingAnchor.constraint(equalTo: profilesSection.leadingAnchor, constant: 12),
-      profilesScrollView.trailingAnchor.constraint(equalTo: profilesSection.trailingAnchor, constant: -12),
-      profilesScrollView.topAnchor.constraint(equalTo: profilesHeader.bottomAnchor, constant: 12),
-      profilesScrollView.bottomAnchor.constraint(equalTo: profilesSection.bottomAnchor, constant: -12),
+      profilesScrollView.leadingAnchor.constraint(equalTo: profilesSection.leadingAnchor, constant: 10),
+      profilesScrollView.trailingAnchor.constraint(equalTo: profilesSection.trailingAnchor, constant: -10),
+      profilesScrollView.topAnchor.constraint(equalTo: profilesHeader.bottomAnchor, constant: 10),
+      profilesScrollView.bottomAnchor.constraint(equalTo: profilesSection.bottomAnchor, constant: -10),
 
       profilesStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
       profilesStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
@@ -187,23 +200,31 @@ final class PopoverViewController: NSViewController {
       profilesStack.widthAnchor.constraint(equalTo: profilesScrollView.contentView.widthAnchor)
     ])
 
-    footerLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    footerLabel.font = .systemFont(ofSize: 11, weight: .medium)
     footerLabel.textColor = .white.withAlphaComponent(0.68)
     footerLabel.maximumNumberOfLines = 0
     footerLabel.lineBreakMode = .byWordWrapping
 
-    errorLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    errorLabel.font = .systemFont(ofSize: 11, weight: .medium)
     errorLabel.textColor = NSColor(red: 1.0, green: 0.84, blue: 0.45, alpha: 1)
     errorLabel.maximumNumberOfLines = 0
     errorLabel.lineBreakMode = .byWordWrapping
     errorLabel.isHidden = true
 
+    let leftColumn = NSStackView(views: [currentAuthCard, recommendationCard, cards, footerLabel, errorLabel])
+    leftColumn.orientation = .vertical
+    leftColumn.spacing = 10
+
+    let body = NSStackView(views: [leftColumn, profilesSection])
+    body.orientation = .horizontal
+    body.alignment = .top
+    body.spacing = 12
+
+    leftColumn.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    profilesSection.setContentHuggingPriority(.required, for: .horizontal)
+
     content.addArrangedSubview(header)
-    content.addArrangedSubview(currentAuthCard)
-    content.addArrangedSubview(cards)
-    content.addArrangedSubview(profilesSection)
-    content.addArrangedSubview(footerLabel)
-    content.addArrangedSubview(errorLabel)
+    content.addArrangedSubview(body)
 
     NSLayoutConstraint.activate([
       background.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -231,28 +252,51 @@ final class PopoverViewController: NSViewController {
     footerLabel.stringValue = state.footerMessage ?? ""
     errorLabel.stringValue = state.errorMessage ?? ""
     errorLabel.isHidden = state.errorMessage == nil
-    profilesSummaryLabel.stringValue = "\(state.availableProfileCount) available / \(state.profiles.count) saved"
+    profilesSummaryLabel.stringValue = "可用 \(state.availableProfileCount) 个 · 共 \(state.profiles.count) 个"
     renderProfiles(state: state)
 
     let activeProfile = state.profiles.first(where: { $0.id == state.activeProfileID })
     guard let snapshot = state.snapshot else {
       currentAuthCard.configure(
-        title: activeProfile?.displayName ?? "Current auth",
-        subtitle: "Syncing",
-        status: "Waiting",
-        detail: "Fetching the first usage snapshot from the active auth profile.",
+        title: activeProfile?.displayName ?? "当前账号",
+        subtitle: "正在同步",
+        status: "稍等一下",
+        detail: "我正在读取当前账号的额度信息，第一次打开通常要等几秒。",
         accent: NSColor.white.withAlphaComponent(0.38)
       )
+      recommendationCard.configure(
+        title: "切换建议",
+        headline: state.switchRecommendation.headline,
+        detail: state.switchRecommendation.detail,
+        accent: Self.recommendationAccentColor(for: state.switchRecommendation.kind),
+        actionTitle: nil
+      ) { }
       return
     }
 
     currentAuthCard.configure(
-      title: activeProfile?.displayName ?? "Current auth",
-      subtitle: snapshot.planType.uppercased(),
+      title: activeProfile?.displayName ?? "当前账号",
+      subtitle: "\(Self.planDisplayName(for: snapshot.planType)) 套餐",
       status: state.availabilityLabel(for: snapshot.rateLimit),
       detail: state.availabilityDetail(for: snapshot.rateLimit),
       accent: Self.currentAuthAccentColor(for: snapshot.rateLimit)
     )
+
+    let recommendation = state.switchRecommendation
+    recommendationCard.configure(
+      title: "切换建议",
+      headline: recommendation.headline,
+      detail: recommendation.detail,
+      accent: Self.recommendationAccentColor(for: recommendation.kind),
+      actionTitle: recommendation.recommendedProfileID == nil ? nil : "切到推荐账号"
+    ) { [weak self] in
+      guard let self,
+            let profileID = recommendation.recommendedProfileID,
+            let profile = state.profiles.first(where: { $0.id == profileID }) else {
+        return
+      }
+      self.confirmSwitch(to: profile)
+    }
 
     primaryCard.configure(
       status: state.statusLine(for: snapshot.rateLimit.primaryWindow),
@@ -298,10 +342,12 @@ final class PopoverViewController: NSViewController {
     for profile in state.profiles {
       let row = AuthProfileRowView()
       let isCurrent = profile.id == state.activeProfileID
+      let isRecommended = profile.id == state.switchRecommendation.recommendedProfileID
       row.configure(
         profile: profile,
         isCurrent: isCurrent,
-        isBusy: state.isRefreshing
+        isBusy: state.isRefreshing,
+        isRecommended: isRecommended
       ) { [weak self] in
         self?.confirmSwitch(to: profile)
       }
@@ -311,11 +357,11 @@ final class PopoverViewController: NSViewController {
 
   private func confirmSwitch(to profile: AuthProfileRecord) {
     let alert = NSAlert()
-    alert.messageText = "Switch auth profile?"
-    alert.informativeText = "This will replace ~/.codex/auth.json with \(profile.displayName). The current auth file will be backed up automatically."
+    alert.messageText = "切换到这个账号吗？"
+    alert.informativeText = "我会用 \(profile.displayName) 覆盖当前的 ~/.codex/auth.json，并先自动备份你现在这份登录信息。"
     alert.alertStyle = .warning
-    alert.addButton(withTitle: "Switch")
-    alert.addButton(withTitle: "Cancel")
+    alert.addButton(withTitle: "切换")
+    alert.addButton(withTitle: "取消")
 
     if alert.runModal() == .alertFirstButtonReturn {
       Task {
@@ -346,10 +392,34 @@ final class PopoverViewController: NSViewController {
 
     return accentColor(for: rateLimit.primaryWindow.remainingPercent)
   }
+
+  private static func recommendationAccentColor(for kind: UsageMonitor.SwitchRecommendation.Kind) -> NSColor {
+    switch kind {
+    case .stay:
+      return NSColor(red: 0.35, green: 0.81, blue: 0.66, alpha: 1)
+    case .switchNow:
+      return NSColor(red: 0.96, green: 0.73, blue: 0.25, alpha: 1)
+    case .noAvailable:
+      return NSColor(red: 0.98, green: 0.45, blue: 0.41, alpha: 1)
+    case .syncing:
+      return NSColor.white.withAlphaComponent(0.38)
+    }
+  }
+
+  private static func planDisplayName(for value: String) -> String {
+    switch value.lowercased() {
+    case "team":
+      return "Team"
+    case "plus":
+      return "Plus"
+    default:
+      return value.capitalized
+    }
+  }
 }
 
 private final class CurrentAuthCardView: NSView {
-  private let titleLabel = NSTextField(labelWithString: "Current auth")
+  private let titleLabel = NSTextField(labelWithString: "当前账号")
   private let subtitleLabel = NSTextField(labelWithString: "")
   private let detailLabel = NSTextField(wrappingLabelWithString: "")
   private let statusLabel = NSTextField(labelWithString: "")
@@ -368,23 +438,23 @@ private final class CurrentAuthCardView: NSView {
   private func setupUI() {
     wantsLayer = true
     layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
-    layer?.cornerRadius = 18
+    layer?.cornerRadius = 16
 
-    titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+    titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
     titleLabel.textColor = .white
 
-    subtitleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+    subtitleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
     subtitleLabel.textColor = .white.withAlphaComponent(0.62)
 
-    detailLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    detailLabel.font = .systemFont(ofSize: 11, weight: .medium)
     detailLabel.textColor = .white.withAlphaComponent(0.78)
-    detailLabel.maximumNumberOfLines = 0
+    detailLabel.maximumNumberOfLines = 2
 
     statusContainer.wantsLayer = true
-    statusContainer.layer?.cornerRadius = 10
+    statusContainer.layer?.cornerRadius = 9
     statusContainer.translatesAutoresizingMaskIntoConstraints = false
 
-    statusLabel.font = .systemFont(ofSize: 12, weight: .bold)
+    statusLabel.font = .systemFont(ofSize: 11, weight: .bold)
     statusLabel.textColor = .white
 
     let topLeft = NSStackView(views: [titleLabel, subtitleLabel])
@@ -402,10 +472,10 @@ private final class CurrentAuthCardView: NSView {
       statusContainer.trailingAnchor.constraint(equalTo: statusWrapper.trailingAnchor),
       statusContainer.topAnchor.constraint(equalTo: statusWrapper.topAnchor),
       statusContainer.bottomAnchor.constraint(equalTo: statusWrapper.bottomAnchor),
-      statusLabel.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: 10),
-      statusLabel.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -10),
-      statusLabel.topAnchor.constraint(equalTo: statusContainer.topAnchor, constant: 5),
-      statusLabel.bottomAnchor.constraint(equalTo: statusContainer.bottomAnchor, constant: -5)
+      statusLabel.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: 9),
+      statusLabel.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -9),
+      statusLabel.topAnchor.constraint(equalTo: statusContainer.topAnchor, constant: 4),
+      statusLabel.bottomAnchor.constraint(equalTo: statusContainer.bottomAnchor, constant: -4)
     ])
 
     let top = NSStackView(views: [topLeft, NSView(), statusWrapper])
@@ -415,25 +485,114 @@ private final class CurrentAuthCardView: NSView {
     let content = NSStackView(views: [top, detailLabel])
     content.translatesAutoresizingMaskIntoConstraints = false
     content.orientation = .vertical
-    content.spacing = 12
+    content.spacing = 10
     addSubview(content)
 
     NSLayoutConstraint.activate([
-      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-      content.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16)
+      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+      content.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
     ])
   }
 
   func configure(title: String, subtitle: String, status: String, detail: String, accent: NSColor) {
     titleLabel.stringValue = title
     subtitleLabel.stringValue = subtitle
-    statusLabel.stringValue = status.uppercased()
+    statusLabel.stringValue = status
     detailLabel.stringValue = detail
     statusContainer.layer?.backgroundColor = accent.withAlphaComponent(0.24).cgColor
     layer?.borderWidth = 1
     layer?.borderColor = accent.withAlphaComponent(0.34).cgColor
+  }
+}
+
+private final class RecommendationCardView: NSView {
+  private let titleLabel = NSTextField(labelWithString: "切换建议")
+  private let headlineLabel = NSTextField(wrappingLabelWithString: "")
+  private let detailLabel = NSTextField(wrappingLabelWithString: "")
+  private let actionButton = NSButton()
+  private var onAction: (() -> Void)?
+
+  override init(frame frameRect: NSRect) {
+    super.init(frame: frameRect)
+    setupUI()
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+
+  private func setupUI() {
+    wantsLayer = true
+    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
+    layer?.cornerRadius = 16
+
+    titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+    titleLabel.textColor = .white.withAlphaComponent(0.66)
+
+    headlineLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+    headlineLabel.textColor = .white
+    headlineLabel.maximumNumberOfLines = 2
+
+    detailLabel.font = .systemFont(ofSize: 11, weight: .medium)
+    detailLabel.textColor = .white.withAlphaComponent(0.76)
+    detailLabel.maximumNumberOfLines = 3
+
+    actionButton.bezelStyle = .rounded
+    actionButton.font = .systemFont(ofSize: 11, weight: .semibold)
+    actionButton.target = self
+    actionButton.action = #selector(handleAction)
+    actionButton.isHidden = true
+
+    let header = NSStackView(views: [titleLabel, NSView(), actionButton])
+    header.orientation = .horizontal
+    header.alignment = .centerY
+
+    let content = NSStackView(views: [header, headlineLabel, detailLabel])
+    content.translatesAutoresizingMaskIntoConstraints = false
+    content.orientation = .vertical
+    content.spacing = 8
+    addSubview(content)
+
+    NSLayoutConstraint.activate([
+      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+      content.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
+    ])
+  }
+
+  func configure(
+    title: String,
+    headline: String,
+    detail: String,
+    accent: NSColor,
+    actionTitle: String?,
+    onAction: @escaping () -> Void
+  ) {
+    self.onAction = onAction
+    titleLabel.stringValue = title
+    headlineLabel.stringValue = headline
+    detailLabel.stringValue = detail
+    layer?.borderWidth = 1
+    layer?.borderColor = accent.withAlphaComponent(0.34).cgColor
+
+    if let actionTitle {
+      actionButton.title = actionTitle
+      actionButton.isHidden = false
+      actionButton.isEnabled = true
+    } else {
+      actionButton.title = ""
+      actionButton.isHidden = true
+      actionButton.isEnabled = false
+    }
+  }
+
+  @objc
+  private func handleAction() {
+    onAction?()
   }
 }
 
@@ -458,7 +617,7 @@ private final class AuthProfileRowView: NSView {
   private func setupUI() {
     wantsLayer = true
     layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
-    layer?.cornerRadius = 14
+    layer?.cornerRadius = 12
     layer?.borderWidth = 1
     layer?.borderColor = NSColor.clear.cgColor
 
@@ -470,19 +629,20 @@ private final class AuthProfileRowView: NSView {
       statusDot.heightAnchor.constraint(equalToConstant: 8)
     ])
 
-    titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+    titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
     titleLabel.textColor = .white
 
-    statusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
     statusLabel.textColor = .white.withAlphaComponent(0.72)
-    statusLabel.maximumNumberOfLines = 2
+    statusLabel.maximumNumberOfLines = 1
     statusLabel.lineBreakMode = .byTruncatingTail
 
-    detailLabel.font = .systemFont(ofSize: 11, weight: .medium)
+    detailLabel.font = .systemFont(ofSize: 10, weight: .medium)
     detailLabel.textColor = .white.withAlphaComponent(0.5)
-    detailLabel.maximumNumberOfLines = 2
+    detailLabel.maximumNumberOfLines = 1
 
     switchButton.bezelStyle = .rounded
+    switchButton.font = .systemFont(ofSize: 11, weight: .semibold)
     switchButton.target = self
     switchButton.action = #selector(handleSwitch)
 
@@ -494,27 +654,33 @@ private final class AuthProfileRowView: NSView {
     let content = NSStackView(views: [titleRow, statusLabel, detailLabel])
     content.translatesAutoresizingMaskIntoConstraints = false
     content.orientation = .vertical
-    content.spacing = 6
+    content.spacing = 4
     addSubview(content)
 
     NSLayoutConstraint.activate([
-      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-      content.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12)
+      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+      content.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
     ])
   }
 
-  func configure(profile: AuthProfileRecord, isCurrent: Bool, isBusy: Bool, onSwitch: @escaping () -> Void) {
+  func configure(
+    profile: AuthProfileRecord,
+    isCurrent: Bool,
+    isBusy: Bool,
+    isRecommended: Bool,
+    onSwitch: @escaping () -> Void
+  ) {
     self.onSwitch = onSwitch
     titleLabel.stringValue = profile.displayName
     statusLabel.stringValue = profile.statusText
     detailLabel.stringValue = profile.detailText
-    switchButton.title = isCurrent ? "Current" : "Switch"
+    switchButton.title = isCurrent ? "当前" : (isRecommended ? "推荐切换" : "切换")
     switchButton.isEnabled = !isCurrent && !isBusy
     statusDot.layer?.backgroundColor = statusColor(for: profile).cgColor
     statusLabel.textColor = statusTextColor(for: profile)
-    layer?.borderColor = borderColor(for: profile, isCurrent: isCurrent).cgColor
+    layer?.borderColor = borderColor(for: profile, isCurrent: isCurrent, isRecommended: isRecommended).cgColor
   }
 
   @objc
@@ -546,13 +712,17 @@ private final class AuthProfileRowView: NSView {
     return .white.withAlphaComponent(0.72)
   }
 
-  private func borderColor(for profile: AuthProfileRecord, isCurrent: Bool) -> NSColor {
+  private func borderColor(for profile: AuthProfileRecord, isCurrent: Bool, isRecommended: Bool) -> NSColor {
     if profile.validationError != nil || profile.latestUsage?.isBlocked == true {
       return NSColor(red: 0.98, green: 0.45, blue: 0.41, alpha: isCurrent ? 0.6 : 0.28)
     }
 
     if isCurrent {
       return NSColor.white.withAlphaComponent(0.22)
+    }
+
+    if isRecommended {
+      return NSColor(red: 0.96, green: 0.73, blue: 0.25, alpha: 0.42)
     }
 
     return .clear
@@ -580,23 +750,23 @@ private final class LimitCardView: NSView {
   private func setupUI() {
     wantsLayer = true
     layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
-    layer?.cornerRadius = 18
+    layer?.cornerRadius = 16
 
-    titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+    titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
     titleLabel.textColor = .white.withAlphaComponent(0.66)
 
-    statusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+    statusLabel.font = .systemFont(ofSize: 12, weight: .semibold)
     statusLabel.textColor = .white.withAlphaComponent(0.72)
 
-    percentLabel.font = .systemFont(ofSize: 30, weight: .bold)
+    percentLabel.font = .systemFont(ofSize: 26, weight: .bold)
     percentLabel.textColor = .white
 
-    resetLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    resetLabel.font = .systemFont(ofSize: 11, weight: .medium)
     resetLabel.textColor = .white.withAlphaComponent(0.58)
 
-    burnLabel.font = .systemFont(ofSize: 12, weight: .medium)
+    burnLabel.font = .systemFont(ofSize: 11, weight: .medium)
     burnLabel.textColor = .white.withAlphaComponent(0.68)
-    burnLabel.maximumNumberOfLines = 0
+    burnLabel.maximumNumberOfLines = 2
 
     let left = NSStackView(views: [titleLabel, statusLabel])
     left.orientation = .vertical
@@ -613,14 +783,14 @@ private final class LimitCardView: NSView {
     let content = NSStackView(views: [top, valueBlock, burnLabel])
     content.translatesAutoresizingMaskIntoConstraints = false
     content.orientation = .vertical
-    content.spacing = 10
+    content.spacing = 8
     addSubview(content)
 
     NSLayoutConstraint.activate([
-      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-      content.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16)
+      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+      content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+      content.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
     ])
   }
 

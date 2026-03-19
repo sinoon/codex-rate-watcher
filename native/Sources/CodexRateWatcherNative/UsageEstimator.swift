@@ -58,7 +58,7 @@ enum UsageEstimator {
       .sorted { $0.capturedAt < $1.capturedAt }
 
     guard !sameWindow.isEmpty else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "Need more samples to project a burn rate.")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "还在收集样本，先别急，过几分钟我再帮你估算。")
     }
 
     let cutoff = Date().addingTimeInterval(-sampleWindow)
@@ -70,22 +70,22 @@ enum UsageEstimator {
           let firstPercent = usedPercent(first),
           let lastPercent = usedPercent(last)
     else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "Need more samples to project a burn rate.")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "还在收集样本，先别急，过几分钟我再帮你估算。")
     }
 
     let elapsed = last.capturedAt.timeIntervalSince(first.capturedAt)
     guard elapsed >= 5 * 60 else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "Collecting a few more minutes of data before estimating.")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "还在收集样本，过几分钟后才能估算多久会用完。")
     }
 
     let delta = lastPercent - firstPercent
     guard delta > 0.2 else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: 0, statusText: "Usage looks steady so far.")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: 0, statusText: "最近消耗比较平稳，暂时看不出明显下降速度。")
     }
 
     let percentPerHour = delta / elapsed * 3600
     guard percentPerHour > 0 else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "Usage looks steady so far.")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "最近消耗比较平稳，暂时看不出明显下降速度。")
     }
 
     let timeUntilExhausted = currentRemainingPercent / percentPerHour * 3600
@@ -94,14 +94,14 @@ enum UsageEstimator {
       return BurnEstimate(
         timeUntilExhausted: nil,
         percentPerHour: percentPerHour,
-        statusText: "At this pace the window resets before it fully drains."
+        statusText: "按现在这个速度，这一轮会先重置，不太会在重置前用完。"
       )
     }
 
     return BurnEstimate(
       timeUntilExhausted: timeUntilExhausted,
       percentPerHour: percentPerHour,
-      statusText: "Burning about \(percentPerHour.formatted(.number.precision(.fractionLength(1))))% per hour."
+      statusText: "按现在速度，大约每小时会消耗 \(percentPerHour.formatted(.number.precision(.fractionLength(1))))%。"
     )
   }
 }

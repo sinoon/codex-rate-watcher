@@ -84,7 +84,7 @@ enum AuthProfileStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .profileNotFound:
-      return "The selected auth profile could not be found."
+      return "没找到你刚才选中的那份账号档案。"
     }
   }
 }

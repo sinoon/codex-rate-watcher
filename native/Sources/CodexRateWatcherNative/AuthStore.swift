@@ -19,7 +19,7 @@ enum AuthStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .missingToken:
-      return "Could not find a valid access token in ~/.codex/auth.json."
+      return "我在 ~/.codex/auth.json 里没有找到可用的 access token。"
     }
   }
 }
