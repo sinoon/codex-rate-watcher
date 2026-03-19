@@ -1,5 +1,36 @@
 import AppKit
 
+private enum SurfacePalette {
+  static let windowBackground = NSColor(
+    calibratedRed: 0.09,
+    green: 0.10,
+    blue: 0.12,
+    alpha: 1
+  )
+  static let sectionBackground = NSColor(
+    calibratedRed: 0.12,
+    green: 0.13,
+    blue: 0.16,
+    alpha: 1
+  )
+  static let cardBackground = NSColor(
+    calibratedRed: 0.15,
+    green: 0.16,
+    blue: 0.19,
+    alpha: 1
+  )
+  static let controlBackground = NSColor(
+    calibratedRed: 0.18,
+    green: 0.19,
+    blue: 0.23,
+    alpha: 1
+  )
+  static let border = NSColor(calibratedWhite: 1, alpha: 0.08)
+  static let secondaryText = NSColor(calibratedWhite: 1, alpha: 0.72)
+  static let tertiaryText = NSColor(calibratedWhite: 1, alpha: 0.58)
+  static let mutedText = NSColor(calibratedWhite: 1, alpha: 0.48)
+}
+
 final class PopoverViewController: NSViewController {
   private let monitor: UsageMonitor
   private var observerID: UUID?
@@ -31,7 +62,7 @@ final class PopoverViewController: NSViewController {
   override func loadView() {
     view = NSView(frame: NSRect(x: 0, y: 0, width: 860, height: 580))
     view.wantsLayer = true
-    view.layer?.backgroundColor = NSColor.clear.cgColor
+    view.layer?.backgroundColor = SurfacePalette.windowBackground.cgColor
   }
 
   override func viewDidLoad() {
@@ -54,13 +85,14 @@ final class PopoverViewController: NSViewController {
   }
 
   private func setupUI() {
-    let background = NSVisualEffectView()
+    let background = NSView()
     background.translatesAutoresizingMaskIntoConstraints = false
-    background.material = .hudWindow
-    background.state = .active
     background.wantsLayer = true
+    background.layer?.backgroundColor = SurfacePalette.windowBackground.cgColor
     background.layer?.cornerRadius = 22
     background.layer?.masksToBounds = true
+    background.layer?.borderWidth = 1
+    background.layer?.borderColor = SurfacePalette.border.cgColor
     view.addSubview(background)
 
     let content = NSStackView()
@@ -77,8 +109,10 @@ final class PopoverViewController: NSViewController {
 
     let iconContainer = NSView()
     iconContainer.wantsLayer = true
-    iconContainer.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+    iconContainer.layer?.backgroundColor = SurfacePalette.controlBackground.cgColor
     iconContainer.layer?.cornerRadius = 16
+    iconContainer.layer?.borderWidth = 1
+    iconContainer.layer?.borderColor = SurfacePalette.border.cgColor
     iconContainer.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
       iconContainer.widthAnchor.constraint(equalToConstant: 32),
@@ -99,7 +133,7 @@ final class PopoverViewController: NSViewController {
     titleLabel.textColor = .white
 
     updatedLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    updatedLabel.textColor = .white.withAlphaComponent(0.58)
+    updatedLabel.textColor = SurfacePalette.tertiaryText
 
     let headerText = NSStackView(views: [titleLabel, updatedLabel])
     headerText.orientation = .vertical
@@ -110,8 +144,10 @@ final class PopoverViewController: NSViewController {
     refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "刷新")
     refreshButton.contentTintColor = .white
     refreshButton.wantsLayer = true
-    refreshButton.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
+    refreshButton.layer?.backgroundColor = SurfacePalette.controlBackground.cgColor
     refreshButton.layer?.cornerRadius = 10
+    refreshButton.layer?.borderWidth = 1
+    refreshButton.layer?.borderColor = SurfacePalette.border.cgColor
     refreshButton.translatesAutoresizingMaskIntoConstraints = false
     refreshButton.target = self
     refreshButton.action = #selector(refreshTapped)
@@ -146,7 +182,7 @@ final class PopoverViewController: NSViewController {
     profilesHeaderLabel.textColor = .white
 
     profilesSummaryLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    profilesSummaryLabel.textColor = .white.withAlphaComponent(0.58)
+    profilesSummaryLabel.textColor = SurfacePalette.tertiaryText
 
     let profilesHeader = NSStackView(views: [profilesHeaderLabel, NSView(), profilesSummaryLabel])
     profilesHeader.orientation = .horizontal
@@ -155,8 +191,10 @@ final class PopoverViewController: NSViewController {
     let profilesSection = NSView()
     profilesSection.translatesAutoresizingMaskIntoConstraints = false
     profilesSection.wantsLayer = true
-    profilesSection.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
+    profilesSection.layer?.backgroundColor = SurfacePalette.sectionBackground.cgColor
     profilesSection.layer?.cornerRadius = 16
+    profilesSection.layer?.borderWidth = 1
+    profilesSection.layer?.borderColor = SurfacePalette.border.cgColor
 
     let profilesScrollView = NSScrollView()
     profilesScrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -174,7 +212,7 @@ final class PopoverViewController: NSViewController {
     documentView.addSubview(profilesStack)
 
     profilesEmptyLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    profilesEmptyLabel.textColor = .white.withAlphaComponent(0.54)
+    profilesEmptyLabel.textColor = SurfacePalette.mutedText
 
     profilesSection.addSubview(profilesHeader)
     profilesSection.addSubview(profilesScrollView)
@@ -201,7 +239,7 @@ final class PopoverViewController: NSViewController {
     ])
 
     footerLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    footerLabel.textColor = .white.withAlphaComponent(0.68)
+    footerLabel.textColor = SurfacePalette.secondaryText
     footerLabel.maximumNumberOfLines = 0
     footerLabel.lineBreakMode = .byWordWrapping
 
@@ -437,17 +475,19 @@ private final class CurrentAuthCardView: NSView {
 
   private func setupUI() {
     wantsLayer = true
-    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
+    layer?.backgroundColor = SurfacePalette.cardBackground.cgColor
     layer?.cornerRadius = 16
+    layer?.borderWidth = 1
+    layer?.borderColor = SurfacePalette.border.cgColor
 
     titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
     titleLabel.textColor = .white
 
     subtitleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-    subtitleLabel.textColor = .white.withAlphaComponent(0.62)
+    subtitleLabel.textColor = SurfacePalette.tertiaryText
 
     detailLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    detailLabel.textColor = .white.withAlphaComponent(0.78)
+    detailLabel.textColor = SurfacePalette.secondaryText
     detailLabel.maximumNumberOfLines = 2
 
     statusContainer.wantsLayer = true
@@ -526,18 +566,20 @@ private final class RecommendationCardView: NSView {
 
   private func setupUI() {
     wantsLayer = true
-    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
+    layer?.backgroundColor = SurfacePalette.cardBackground.cgColor
     layer?.cornerRadius = 16
+    layer?.borderWidth = 1
+    layer?.borderColor = SurfacePalette.border.cgColor
 
     titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-    titleLabel.textColor = .white.withAlphaComponent(0.66)
+    titleLabel.textColor = SurfacePalette.tertiaryText
 
     headlineLabel.font = .systemFont(ofSize: 15, weight: .semibold)
     headlineLabel.textColor = .white
     headlineLabel.maximumNumberOfLines = 2
 
     detailLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    detailLabel.textColor = .white.withAlphaComponent(0.76)
+    detailLabel.textColor = SurfacePalette.secondaryText
     detailLabel.maximumNumberOfLines = 3
 
     actionButton.bezelStyle = .rounded
@@ -616,10 +658,10 @@ private final class AuthProfileRowView: NSView {
 
   private func setupUI() {
     wantsLayer = true
-    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.04).cgColor
+    layer?.backgroundColor = SurfacePalette.cardBackground.cgColor
     layer?.cornerRadius = 12
     layer?.borderWidth = 1
-    layer?.borderColor = NSColor.clear.cgColor
+    layer?.borderColor = SurfacePalette.border.cgColor
 
     statusDot.wantsLayer = true
     statusDot.layer?.cornerRadius = 4
@@ -633,12 +675,12 @@ private final class AuthProfileRowView: NSView {
     titleLabel.textColor = .white
 
     statusLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    statusLabel.textColor = .white.withAlphaComponent(0.72)
+    statusLabel.textColor = SurfacePalette.secondaryText
     statusLabel.maximumNumberOfLines = 1
     statusLabel.lineBreakMode = .byTruncatingTail
 
     detailLabel.font = .systemFont(ofSize: 10, weight: .medium)
-    detailLabel.textColor = .white.withAlphaComponent(0.5)
+    detailLabel.textColor = SurfacePalette.mutedText
     detailLabel.maximumNumberOfLines = 1
 
     switchButton.bezelStyle = .rounded
@@ -701,7 +743,7 @@ private final class AuthProfileRowView: NSView {
       return NSColor(red: 0.35, green: 0.81, blue: 0.66, alpha: 1)
     }
 
-    return NSColor.white.withAlphaComponent(0.32)
+    return SurfacePalette.mutedText
   }
 
   private func statusTextColor(for profile: AuthProfileRecord) -> NSColor {
@@ -709,7 +751,7 @@ private final class AuthProfileRowView: NSView {
       return NSColor(red: 1.0, green: 0.84, blue: 0.45, alpha: 1)
     }
 
-    return .white.withAlphaComponent(0.72)
+    return SurfacePalette.secondaryText
   }
 
   private func borderColor(for profile: AuthProfileRecord, isCurrent: Bool, isRecommended: Bool) -> NSColor {
@@ -718,14 +760,14 @@ private final class AuthProfileRowView: NSView {
     }
 
     if isCurrent {
-      return NSColor.white.withAlphaComponent(0.22)
+      return NSColor(red: 0.35, green: 0.81, blue: 0.66, alpha: 0.42)
     }
 
     if isRecommended {
       return NSColor(red: 0.96, green: 0.73, blue: 0.25, alpha: 0.42)
     }
 
-    return .clear
+    return SurfacePalette.border
   }
 }
 
@@ -749,23 +791,25 @@ private final class LimitCardView: NSView {
 
   private func setupUI() {
     wantsLayer = true
-    layer?.backgroundColor = NSColor.white.withAlphaComponent(0.05).cgColor
+    layer?.backgroundColor = SurfacePalette.cardBackground.cgColor
     layer?.cornerRadius = 16
+    layer?.borderWidth = 1
+    layer?.borderColor = SurfacePalette.border.cgColor
 
     titleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-    titleLabel.textColor = .white.withAlphaComponent(0.66)
+    titleLabel.textColor = SurfacePalette.tertiaryText
 
     statusLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-    statusLabel.textColor = .white.withAlphaComponent(0.72)
+    statusLabel.textColor = SurfacePalette.secondaryText
 
     percentLabel.font = .systemFont(ofSize: 26, weight: .bold)
     percentLabel.textColor = .white
 
     resetLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    resetLabel.textColor = .white.withAlphaComponent(0.58)
+    resetLabel.textColor = SurfacePalette.tertiaryText
 
     burnLabel.font = .systemFont(ofSize: 11, weight: .medium)
-    burnLabel.textColor = .white.withAlphaComponent(0.68)
+    burnLabel.textColor = SurfacePalette.secondaryText
     burnLabel.maximumNumberOfLines = 2
 
     let left = NSStackView(views: [titleLabel, statusLabel])
