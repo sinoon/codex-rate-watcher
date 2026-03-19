@@ -1,0 +1,15 @@
+.DS_Store
+/.build
+/Packages
+/build
+/dist
+/.venv
+/__pycache__
+*.pyc
+*.pyo
+*.pyd
+xcuserdata/
+DerivedData/
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc
