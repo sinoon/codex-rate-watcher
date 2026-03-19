@@ -119,6 +119,7 @@ struct AuthProfileRecord: Codable, Identifiable {
   let snapshotFileName: String
   var authMode: String?
   var accountID: String?
+  var email: String?
   let createdAt: Date
   var lastSeenAt: Date
   var lastValidatedAt: Date?
@@ -131,17 +132,37 @@ extension AuthProfileRecord {
     validationError == nil && latestUsage != nil
   }
 
-  var displayName: String {
-    if let accountID, !accountID.isEmpty {
-      if accountID.count <= 12 {
-        return "账号 \(accountID)"
-      }
-      let prefix = accountID.prefix(6)
-      let suffix = accountID.suffix(4)
-      return "账号 \(prefix)...\(suffix)"
-    }
+  /// Whether the subscription check failed (e.g. 402 Payment Required).
+  /// These profiles should be hidden from the UI by default.
+  var isSubscriptionFailed: Bool {
+    validationError != nil
+  }
 
-    return "账号档案 \(fingerprint.prefix(8))"
+  /// Short account identifier: email prefix if exists, else account ID suffix
+  var accountIdentifier: String {
+    if let email, !email.isEmpty {
+      // Take part before @, e.g. "sinoon1218" from "sinoon1218@gmail.com"
+      return email.components(separatedBy: "@").first ?? email
+    }
+    guard let accountID, accountID.count >= 4 else { return "????" }
+    return String(accountID.suffix(4))
+  }
+
+  /// Plan badge text: "Plus" or "Team"
+  var planBadge: String {
+    if let usage = latestUsage {
+      return usage.planDisplayName
+    }
+    // Fallback: no usage data yet
+    return "—"
+  }
+
+  /// Display name for UI.
+  /// Plus accounts: "Plus · sinoon1218"
+  /// Team accounts: "Team · sinoon1218"
+  var displayName: String {
+    let plan = planBadge
+    return "\(plan) · \(accountIdentifier)"
   }
 
   var statusText: String {
@@ -150,7 +171,7 @@ extension AuthProfileRecord {
     }
 
     guard let latestUsage else {
-      return "正在校验这个账号"
+      return "校验中"
     }
 
     if let blockingLabel = latestUsage.blockingLabel {
@@ -158,24 +179,24 @@ extension AuthProfileRecord {
     }
 
     if latestUsage.isRunningLow {
-      return "额度快见底了"
+      return "即将耗尽"
     }
 
-    return "现在还能用"
+    return "可用"
   }
 
   var detailText: String {
     var parts: [String] = []
 
     if let latestUsage {
-      parts.append("\(latestUsage.planDisplayName) 套餐")
+      parts.append(latestUsage.planDisplayName)
       parts.append(latestUsage.usageSummaryText)
     }
 
     if let lastValidatedAt {
       parts.append("\(lastValidatedAt.relativeDescription)校验")
     } else {
-      parts.append("还没校验过")
+      parts.append("未校验")
     }
 
     return parts.joined(separator: " · ")
@@ -207,6 +228,13 @@ extension AuthProfileUsageSummary {
     isWeeklyExhausted || isPrimaryExhausted || !isAllowed || limitReached
   }
 
+  /// Effective overall availability percent (considering all quotas)
+  /// When any quota is exhausted, this becomes 0
+  var effectiveAvailablePercent: Double {
+    if isBlocked { return 0 }
+    return min(primaryRemainingPercent, secondaryRemainingPercent ?? 100)
+  }
+
   var isRunningLow: Bool {
     if primaryRemainingPercent <= 15 {
       return true
@@ -221,27 +249,29 @@ extension AuthProfileUsageSummary {
 
   var blockingLabel: String? {
     if isWeeklyExhausted {
-      return "本周主额度已用完"
+      if let resetLabel = nextResetLabel(for: secondaryResetAt) {
+        return "周额度耗尽，\(resetLabel) 重置"
+      }
+      return "周额度已耗尽"
     }
-
     if isPrimaryExhausted {
-      return "近 5 小时主额度已用完"
+      let resetLabel = nextResetLabel(for: primaryResetAt)
+      if let resetLabel {
+        return "5h 耗尽，\(resetLabel) 重置"
+      }
+      return "5h 额度已耗尽"
     }
-
-    if !isAllowed || limitReached {
-      return "这个账号现在不可用"
-    }
-
+    if !isAllowed || limitReached { return "不可用" }
     return nil
   }
 
   var usageSummaryText: String {
-    let primaryText = "近 5 小时还剩 \(primaryRemainingPercentLabel)"
+    let primaryText = "5h \(primaryRemainingPercentLabel)"
     let weeklyText: String
     if let secondaryRemainingPercentLabel {
-      weeklyText = "本周还剩 \(secondaryRemainingPercentLabel)"
+      weeklyText = "周 \(secondaryRemainingPercentLabel)"
     } else {
-      weeklyText = "本周剩余未知"
+      weeklyText = "周 --"
     }
     return "\(primaryText) · \(weeklyText)"
   }
@@ -268,10 +298,55 @@ extension AuthProfileUsageSummary {
   }
 
   var switchSummaryText: String {
-    if let secondaryRemainingPercentLabel {
-      return "近 5 小时 \(primaryRemainingPercentLabel) · 本周 \(secondaryRemainingPercentLabel)"
+    if isBlocked, let resetText = nextBlockingResetLabel {
+      return "\(resetText) 重置"
     }
-    return "近 5 小时 \(primaryRemainingPercentLabel)"
+    if let secondaryRemainingPercentLabel {
+      return "5h \(primaryRemainingPercentLabel) · 周 \(secondaryRemainingPercentLabel)"
+    }
+    return "5h \(primaryRemainingPercentLabel)"
+  }
+
+  // MARK: - Reset time formatting
+
+  /// The most relevant next reset label when blocked.
+  /// Weekly exhausted → weekly reset; primary exhausted → primary reset.
+  var nextBlockingResetLabel: String? {
+    if isWeeklyExhausted {
+      return nextResetLabel(for: secondaryResetAt)
+    }
+    if isPrimaryExhausted {
+      return nextResetLabel(for: primaryResetAt)
+    }
+    return nil
+  }
+
+  /// Format a reset timestamp into a human-readable label.
+  /// - Within today: "14:30"
+  /// - Tomorrow: "明天 14:30"
+  /// - Further: "3月22日"
+  private func nextResetLabel(for resetAt: TimeInterval?) -> String? {
+    guard let resetAt else { return nil }
+    let date = Date(timeIntervalSince1970: resetAt)
+    let now = Date()
+
+    // Already past
+    guard date > now else { return nil }
+
+    let calendar = Calendar.current
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "zh_Hans_CN")
+
+    if calendar.isDateInToday(date) {
+      formatter.dateFormat = "HH:mm"
+      return formatter.string(from: date)
+    } else if calendar.isDateInTomorrow(date) {
+      formatter.dateFormat = "HH:mm"
+      return "明天 \(formatter.string(from: date))"
+    } else {
+      formatter.dateFormat = "M月d日"
+      return formatter.string(from: date)
+    }
   }
 }
 

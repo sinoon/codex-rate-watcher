@@ -94,6 +94,7 @@ actor AuthProfileStore {
   private let authStore: AuthStore
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
+  private var hasReconciled = false
 
   init(authStore: AuthStore = AuthStore()) {
     self.authStore = authStore
@@ -116,6 +117,12 @@ actor AuthProfileStore {
   }
 
   func captureCurrentAuthIfNeeded() async throws -> [AuthProfileRecord] {
+    // Reconcile orphaned snapshots on first call
+    if !hasReconciled {
+      reconcileOrphanedSnapshots()
+      hasReconciled = true
+    }
+
     let envelope = try authStore.loadEnvelope()
     return try storeEnvelopeIfNeeded(envelope)
   }
@@ -159,6 +166,9 @@ actor AuthProfileStore {
         if profiles[index].accountID == nil {
           profiles[index].accountID = envelope.snapshot.accountID
         }
+        if profiles[index].email == nil {
+          profiles[index].email = envelope.snapshot.email
+        }
       } catch {
         profiles[index].lastValidatedAt = now
         profiles[index].validationError = error.localizedDescription
@@ -189,6 +199,75 @@ actor AuthProfileStore {
     try writeProfiles(profiles)
   }
 
+  // MARK: - Reconcile orphaned snapshot files
+
+  /// Scan auth-profiles/ directory for .json files not tracked in profiles.json,
+  /// parse them to extract fingerprint/email/accountID, and register them into the index.
+  private func reconcileOrphanedSnapshots() {
+    do {
+      try createDirectoriesIfNeeded()
+    } catch {
+      return
+    }
+
+    var profiles = (try? readProfiles()) ?? []
+    let trackedFileNames = Set(profiles.map(\.snapshotFileName))
+    let now = Date()
+    var didChange = false
+
+    guard let files = try? fileManager.contentsOfDirectory(
+      at: AppPaths.profilesDirectory,
+      includingPropertiesForKeys: nil,
+      options: [.skipsHiddenFiles]
+    ) else {
+      return
+    }
+
+    for fileURL in files {
+      guard fileURL.pathExtension == "json" else { continue }
+      let fileName = fileURL.lastPathComponent
+
+      // Skip files already tracked
+      if trackedFileNames.contains(fileName) { continue }
+
+      // Try to parse the snapshot file
+      guard let data = try? Data(contentsOf: fileURL),
+            let envelope = try? authStore.envelope(from: data) else {
+        continue
+      }
+
+      // Skip if same fingerprint already tracked (different filename, same content)
+      if profiles.contains(where: { $0.fingerprint == envelope.fingerprint }) {
+        continue
+      }
+
+      // Derive UUID from the filename if it's a valid UUID, otherwise generate new
+      let stem = fileURL.deletingPathExtension().lastPathComponent
+      let profileID = UUID(uuidString: stem) ?? UUID()
+
+      profiles.append(
+        AuthProfileRecord(
+          id: profileID,
+          fingerprint: envelope.fingerprint,
+          snapshotFileName: fileName,
+          authMode: envelope.snapshot.authMode,
+          accountID: envelope.snapshot.accountID,
+          email: envelope.snapshot.email,
+          createdAt: now,
+          lastSeenAt: now,
+          lastValidatedAt: nil,
+          latestUsage: nil,
+          validationError: nil
+        )
+      )
+      didChange = true
+    }
+
+    if didChange {
+      try? writeProfiles(profiles)
+    }
+  }
+
   private func storeEnvelopeIfNeeded(_ envelope: AuthEnvelope) throws -> [AuthProfileRecord] {
     try createDirectoriesIfNeeded()
     var profiles = try readProfiles()
@@ -216,6 +295,7 @@ actor AuthProfileStore {
         snapshotFileName: fileName,
         authMode: envelope.snapshot.authMode,
         accountID: envelope.snapshot.accountID,
+        email: envelope.snapshot.email,
         createdAt: now,
         lastSeenAt: now,
         lastValidatedAt: nil,
@@ -251,13 +331,53 @@ actor AuthProfileStore {
     try fileManager.createDirectory(at: AppPaths.backupsDirectory, withIntermediateDirectories: true)
   }
 
+  /// Sort profiles by availability: usable first (by remaining% desc), then
+  /// running-low, then blocked/errored, then unvalidated.
+  /// Within the same tier, sort by effective remaining percent descending,
+  /// then by lastSeenAt descending as tiebreaker.
   private func sortProfiles(_ profiles: [AuthProfileRecord]) -> [AuthProfileRecord] {
     profiles.sorted { lhs, rhs in
+      let lhsTier = availabilityTier(for: lhs)
+      let rhsTier = availabilityTier(for: rhs)
+
+      if lhsTier != rhsTier {
+        return lhsTier < rhsTier  // lower tier number = higher priority
+      }
+
+      // Within same tier, sort by effective remaining percent descending
+      let lhsPct = lhs.latestUsage?.effectiveAvailablePercent ?? -1
+      let rhsPct = rhs.latestUsage?.effectiveAvailablePercent ?? -1
+      if lhsPct != rhsPct {
+        return lhsPct > rhsPct
+      }
+
+      // Tiebreaker: most recently seen first
       if lhs.lastSeenAt != rhs.lastSeenAt {
         return lhs.lastSeenAt > rhs.lastSeenAt
       }
       return lhs.createdAt > rhs.createdAt
     }
+  }
+
+  /// Tier 0: usable and not running low
+  /// Tier 1: usable but running low
+  /// Tier 2: blocked (exhausted / not allowed)
+  /// Tier 3: validation error (e.g. 401, 402)
+  /// Tier 4: not yet validated
+  private func availabilityTier(for profile: AuthProfileRecord) -> Int {
+    if profile.validationError != nil {
+      return 3
+    }
+    guard let usage = profile.latestUsage else {
+      return 4
+    }
+    if usage.isBlocked {
+      return 2
+    }
+    if usage.isRunningLow {
+      return 1
+    }
+    return 0
   }
 
   private static let backupFormatter: DateFormatter = {

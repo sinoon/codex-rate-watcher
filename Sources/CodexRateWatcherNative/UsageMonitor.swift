@@ -33,95 +33,75 @@ final class UsageMonitor {
 
     var lastUpdatedLabel: String {
       guard let lastUpdatedAt else {
-        return "正在等第一次同步"
+        return "等待首次同步"
       }
-      return "上次更新：\(RelativeDateTimeFormatter().localizedString(for: lastUpdatedAt, relativeTo: .now))"
+      return "更新于 \(RelativeDateTimeFormatter().localizedString(for: lastUpdatedAt, relativeTo: .now))"
     }
 
     var footerMessage: String? {
       guard let snapshot else { return nil }
 
       if let weeklyWindow = snapshot.rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "这个账号的本周主额度已经用完了，要等到 \(resetLabel(for: weeklyWindow)) 才会恢复。"
+        return "本周额度耗尽，\(resetLabel(for: weeklyWindow)) 重置"
       }
 
       if snapshot.rateLimit.primaryWindow.remainingPercent <= 0 {
-        return "这个账号近 5 小时主额度已经用完了，要等到 \(resetLabel(for: snapshot.rateLimit.primaryWindow)) 才会恢复。"
+        return "5h 额度耗尽，\(resetLabel(for: snapshot.rateLimit.primaryWindow)) 重置"
       }
 
       if !snapshot.rateLimit.allowed || snapshot.rateLimit.limitReached {
-        return "这个账号现在被限流状态拦住了，建议先切到别的账号。"
+        return "当前账号被限流，建议切换"
       }
 
       if snapshot.credits.hasCredits {
-        return "这个账号还有 credits，可以在主额度之外作为兜底。"
+        return "有 credits 兜底"
       }
 
-      return "我会每分钟自动刷新一次，也会在你切换登录账号后自动识别。"
+      return "每分钟自动刷新"
     }
 
     func availabilityLabel(for rateLimit: UsageLimit) -> String {
       if let weeklyWindow = rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "现在不可用"
+        return "不可用"
       }
-
       if rateLimit.primaryWindow.remainingPercent <= 0 {
-        return "现在不可用"
+        return "不可用"
       }
-
       if !rateLimit.allowed || rateLimit.limitReached {
-        return "现在不可用"
+        return "不可用"
       }
-
       if rateLimit.primaryWindow.remainingPercent <= 15 {
-        return "快见底了"
+        return "即将耗尽"
       }
-
       if let weeklyWindow = rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 15 {
-        return "快见底了"
+        return "即将耗尽"
       }
-
-      return "现在可用"
+      return "可用"
     }
 
     func availabilityDetail(for rateLimit: UsageLimit) -> String {
       let primaryLeft = rateLimit.primaryWindow.remainingPercentLabel
-      let weeklyLeft: String
-      if let weeklyWindow = rateLimit.secondaryWindow {
-        weeklyLeft = weeklyWindow.remainingPercentLabel
-      } else {
-        weeklyLeft = "--"
-      }
+      _ = rateLimit.secondaryWindow?.remainingPercentLabel
 
       if let weeklyWindow = rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "本周主额度已经用完。虽然近 5 小时还剩 \(primaryLeft)，但现在也不能继续用了，要等到 \(resetLabel(for: weeklyWindow)) 恢复。"
+        return "本周额度已耗尽，\(resetLabel(for: weeklyWindow)) 重置"
       }
-
       if rateLimit.primaryWindow.remainingPercent <= 0 {
-        return "近 5 小时主额度已经用完，本周主额度还剩 \(weeklyLeft)。要等到 \(resetLabel(for: rateLimit.primaryWindow)) 恢复。"
+        return "5h 额度已耗尽，\(resetLabel(for: rateLimit.primaryWindow)) 重置"
       }
-
       if !rateLimit.allowed || rateLimit.limitReached {
-        return "这个账号虽然看起来还有剩余，但当前还是不可用，建议先切到别的账号。"
+        return "账号被限流，建议切换其他账号"
       }
-
       if let weeklyWindow = rateLimit.secondaryWindow {
-        return "近 5 小时主额度还剩 \(primaryLeft)，本周主额度还剩 \(weeklyWindow.remainingPercentLabel)。"
+        return "5h 剩 \(primaryLeft) · 周 剩 \(weeklyWindow.remainingPercentLabel)"
       }
-
-      return "近 5 小时主额度还剩 \(primaryLeft)。"
+      return "5h 剩 \(primaryLeft)"
     }
 
     func statusLine(for window: LimitWindow) -> String {
-      if window.remainingPercent <= 0 {
-        return "已用完"
-      }
-
-      if window.remainingPercent <= 15 {
-        return "快见底了"
-      }
-
-      return "还有剩余"
+      if window.remainingPercent <= 0 { return "已耗尽" }
+      if window.remainingPercent <= 15 { return "即将耗尽" }
+      return "正常"
     }
 
     func remainingLabel(for window: LimitWindow) -> String {
@@ -130,35 +110,36 @@ final class UsageMonitor {
 
     func resetLine(for window: LimitWindow) -> String {
       let countdown = Date(timeIntervalSince1970: window.resetAt).timeIntervalSinceNow
-      if countdown <= 0 {
-        return "正在重置"
-      }
-
-      return "大约 \(countdown.condensedDuration) 后重置 · \(resetLabel(for: window))"
+      if countdown <= 0 { return "重置中" }
+      return "\(countdown.condensedDuration) 后重置 · \(resetLabel(for: window))"
     }
 
     func primaryBurnLabel(for rateLimit: UsageLimit) -> String {
+      let reset = resetLabel(for: rateLimit.primaryWindow)
       if let weeklyWindow = rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "虽然近 5 小时这桶还剩 \(rateLimit.primaryWindow.remainingPercentLabel)，但因为本周主额度已经用完，现在也不能继续用了。"
+        return "本周额度耗尽，\(resetLabel(for: weeklyWindow)) 重置"
       }
-
       if rateLimit.primaryWindow.remainingPercent <= 0 {
-        return "近 5 小时主额度已经见底了，等到 \(resetLabel(for: rateLimit.primaryWindow)) 会恢复。"
+        return "\(reset) 重置"
       }
-
-      return burnLabel(from: primaryEstimate)
+      if let t = primaryEstimate.timeUntilExhausted {
+        return "预计 \(t.condensedDuration) 后耗尽，\(reset) 重置"
+      }
+      return "\(reset) 重置 · \(primaryEstimate.statusText)"
     }
 
     func weeklyBurnLabel(for rateLimit: UsageLimit) -> String {
       guard let weeklyWindow = rateLimit.secondaryWindow else {
         return secondaryEstimate.statusText
       }
-
+      let reset = resetLabel(for: weeklyWindow)
       if weeklyWindow.remainingPercent <= 0 {
-        return "本周主额度已经见底了，等到 \(resetLabel(for: weeklyWindow)) 会恢复。"
+        return "\(reset) 重置"
       }
-
-      return burnLabel(from: secondaryEstimate)
+      if let t = secondaryEstimate.timeUntilExhausted {
+        return "预计 \(t.condensedDuration) 后耗尽，\(reset) 重置"
+      }
+      return "\(reset) 重置 · \(secondaryEstimate.statusText)"
     }
 
     func resetLabel(for window: LimitWindow) -> String {
@@ -171,7 +152,7 @@ final class UsageMonitor {
 
     func burnLabel(from estimate: BurnEstimate) -> String {
       if let timeUntilExhausted = estimate.timeUntilExhausted {
-        return "按现在这个速度，大约 \(timeUntilExhausted.condensedDuration) 后会用完。"
+        return "预计 \(timeUntilExhausted.condensedDuration) 后耗尽"
       }
       return estimate.statusText
     }
@@ -193,8 +174,8 @@ final class UsageMonitor {
       guard snapshot != nil else {
         return SwitchRecommendation(
           kind: .syncing,
-          headline: "还在计算推荐",
-          detail: "等第一轮额度和账号池校验完成后，我会告诉你先用哪个、下一个该切谁。",
+          headline: "正在计算",
+          detail: "首轮校验完成后给出建议",
           recommendedProfileID: nil
         )
       }
@@ -202,14 +183,14 @@ final class UsageMonitor {
       guard let bestProfile = rankedProfiles.first else {
         let fallbackDetail: String
         if let currentProfile, let currentUsage = currentProfile.latestUsage {
-          fallbackDetail = "\(currentProfile.displayName) 现在也不可用，最近一轮是 \(currentUsage.switchSummaryText)。先等额度重置后再看。"
+          fallbackDetail = "\(currentProfile.displayName) 不可用（\(currentUsage.switchSummaryText)），等重置"
         } else {
-          fallbackDetail = "账号池里暂时没有可立即切过去的账号，先等下一轮刷新或额度重置。"
+          fallbackDetail = "无可切账号，等额度重置"
         }
 
         return SwitchRecommendation(
           kind: .noAvailable,
-          headline: "现在没有更优的可用账号",
+          headline: "无更优账号",
           detail: fallbackDetail,
           recommendedProfileID: nil
         )
@@ -225,7 +206,7 @@ final class UsageMonitor {
          !currentUsage.isBlocked {
         return SwitchRecommendation(
           kind: .stay,
-          headline: currentUsage.isRunningLow ? "先继续用当前账号，准备下一跳" : "先继续用 \(currentProfile.displayName)",
+          headline: currentUsage.isRunningLow ? "当前最优，准备下一跳" : "继续用当前账号",
           detail: stayDetail(for: currentProfile, backupProfile: backupProfile),
           recommendedProfileID: nil
         )
@@ -240,7 +221,7 @@ final class UsageMonitor {
          !currentUsage.isRunningLow {
         return SwitchRecommendation(
           kind: .stay,
-          headline: "当前账号先不用急着切",
+          headline: "暂不需要切换",
           detail: stayDetail(for: currentProfile, backupProfile: bestProfile),
           recommendedProfileID: nil
         )
@@ -299,18 +280,18 @@ final class UsageMonitor {
 
     private func stayDetail(for currentProfile: AuthProfileRecord, backupProfile: AuthProfileRecord?) -> String {
       guard let currentUsage = currentProfile.latestUsage else {
-        return "当前账号还在同步校验，先保持现状。"
+        return "当前账号同步中"
       }
 
       if currentUsage.isRunningLow, let backupProfile, let backupUsage = backupProfile.latestUsage {
-        return "\(currentProfile.displayName) 虽然已经快见底了，但它仍然比其他账号更能撑。你可以先把这一轮用完，再切到 \(backupProfile.displayName)；后者目前是 \(backupUsage.switchSummaryText)。"
+        return "余量低但仍最优，用完后切 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）"
       }
 
       if let backupProfile, let backupUsage = backupProfile.latestUsage {
-        return "\(currentProfile.displayName) 现在的综合余量仍然最划算，先继续用它。等它接近见底时，再切到 \(backupProfile.displayName)；后者目前是 \(backupUsage.switchSummaryText)。"
+        return "余量最优，备选 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）"
       }
 
-      return "\(currentProfile.displayName) 现在最稳，当前剩余是 \(currentUsage.switchSummaryText)。先继续用它就好。"
+      return "余量最优，\(currentUsage.switchSummaryText)"
     }
 
     private func switchDetail(
@@ -318,23 +299,23 @@ final class UsageMonitor {
       currentProfile: AuthProfileRecord?,
       backupProfile: AuthProfileRecord?
     ) -> String {
-      let recommendedUsageText = recommendedProfile.latestUsage?.switchSummaryText ?? "剩余信息还在同步"
+      let recommendedUsageText = recommendedProfile.latestUsage?.switchSummaryText ?? "同步中"
       let currentText: String
 
       if let currentProfile, let currentUsage = currentProfile.latestUsage {
-        currentText = "当前账号 \(currentProfile.displayName) 只有 \(currentUsage.switchSummaryText)。"
+        currentText = "当前 \(currentProfile.displayName) 仅 \(currentUsage.switchSummaryText)"
       } else {
-        currentText = "当前账号信息还不完整，所以先按已校验账号来推荐。"
+        currentText = "当前账号信息不完整"
       }
 
       let backupText: String
       if let backupProfile, backupProfile.id != recommendedProfile.id, let backupUsage = backupProfile.latestUsage {
-        backupText = "如果后面还要继续跑，下一顺位是 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）。"
+        backupText = " · 备选 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）"
       } else {
-        backupText = "目前没有第二个更好的候补账号。"
+        backupText = ""
       }
 
-      return "\(recommendedProfile.displayName) 现在最能撑，\(recommendedUsageText)。\(currentText)\(backupText)"
+      return "\(recommendedProfile.displayName) 余量最多（\(recommendedUsageText)）· \(currentText)\(backupText)"
     }
   }
 
@@ -353,9 +334,9 @@ final class UsageMonitor {
   private var lastProfilesValidationAt: Date?
   private var isRefreshing = false
   private var samples: [UsageSample] = []
-  private var primaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "还在收集样本，过几分钟后我再估算多久会用完。")
-  private var secondaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "还在收集样本，过几分钟后我再估算本周额度的消耗速度。")
-  private var reviewEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "还在收集样本，过几分钟后我再估算代码审查额度的消耗速度。")
+  private var primaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
+  private var secondaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
+  private var reviewEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
   private var observers: [UUID: (State) -> Void] = [:]
 
   init(
@@ -565,7 +546,7 @@ final class UsageMonitor {
   }
 }
 
-private extension TimeInterval {
+extension TimeInterval {
   var condensedDuration: String {
     let totalMinutes = max(0, Int(self / 60))
     let days = totalMinutes / (60 * 24)
@@ -581,11 +562,11 @@ private extension TimeInterval {
 
     if hours > 0 {
       if minutes > 0 {
-        return "\(hours)小时\(minutes)分钟"
+        return "\(hours)h\(minutes)min"
       }
-      return "\(hours)小时"
+      return "\(hours)h"
     }
 
-    return "\(max(1, minutes))分钟"
+    return "\(max(1, minutes))min"
   }
 }

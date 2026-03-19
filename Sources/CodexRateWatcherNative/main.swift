@@ -1,6 +1,10 @@
 import AppKit
 
 let app = NSApplication.shared
-let delegate = AppDelegate()
+
+// --window mode: standalone window for debugging (screenshotable)
+let useWindowMode = CommandLine.arguments.contains("--window")
+
+let delegate = AppDelegate(windowMode: useWindowMode)
 app.delegate = delegate
 app.run()

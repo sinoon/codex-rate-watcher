@@ -5,6 +5,7 @@ struct AuthSnapshot {
   let accessToken: String
   let accountID: String?
   let authMode: String?
+  let email: String?
 }
 
 struct AuthEnvelope {
@@ -15,11 +16,14 @@ struct AuthEnvelope {
 
 enum AuthStoreError: LocalizedError {
   case missingToken
+  case invalidJWT
 
   var errorDescription: String? {
     switch self {
     case .missingToken:
       return "我在 ~/.codex/auth.json 里没有找到可用的 access token。"
+    case .invalidJWT:
+      return "Access token 格式无效。"
     }
   }
 }
@@ -74,12 +78,17 @@ struct AuthStore {
     guard let accessToken = payload.tokens.accessToken, !accessToken.isEmpty else {
       throw AuthStoreError.missingToken
     }
+
+    // Parse email from JWT access token
+    let email = Self.extractEmail(from: accessToken)
+
     return AuthEnvelope(
       rawData: data,
       snapshot: AuthSnapshot(
         accessToken: accessToken,
         accountID: payload.tokens.accountID,
-        authMode: payload.authMode
+        authMode: payload.authMode,
+        email: email
       ),
       fingerprint: fingerprint(for: data)
     )
@@ -92,5 +101,30 @@ struct AuthStore {
   private func fingerprint(for data: Data) -> String {
     let digest = SHA256.hash(data: data)
     return digest.compactMap { String(format: "%02x", $0) }.joined()
+  }
+
+  // MARK: - JWT Parsing
+
+  /// Extract email from JWT access token (if exists)
+  private static func extractEmail(from jwt: String) -> String? {
+    let parts = jwt.split(separator: ".")
+    guard parts.count >= 2 else { return nil }
+
+    var payload = String(parts[1])
+    // Fix base64 padding
+    payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+
+    guard let payloadData = Data(base64Encoded: payload, options: .ignoreUnknownCharacters) else {
+      return nil
+    }
+
+    do {
+      let json = try JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+      if let profile = json?["https://api.openai.com/profile"] as? [String: Any] {
+        return profile["email"] as? String
+      }
+    } catch { }
+
+    return nil
   }
 }
