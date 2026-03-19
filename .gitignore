@@ -8,8 +8,30 @@
 *.pyc
 *.pyo
 *.pyd
+*.log
+.env
+.env.*
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
+.codex/
+*.pem
+*.key
+*.p12
+*.mobileprovision
+
+# Local auth / app data
+auth.json
+samples.json
+*.tokens.json
+*.secret
+
+# Native build artifacts
+native/.build/
+native/dist/
+
+# IDE
+.vscode/
+.idea/

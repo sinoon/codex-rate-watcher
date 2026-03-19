@@ -6,7 +6,7 @@ OPTIONS = {
   "plist": {
     "CFBundleDisplayName": "Codex Rate Watcher",
     "CFBundleName": "Codex Rate Watcher",
-    "CFBundleIdentifier": "com.bytedance.codex-rate-watcher",
+    "CFBundleIdentifier": "io.github.codex-rate-watcher",
     "CFBundleShortVersionString": "0.1.0",
     "CFBundleVersion": "1",
     "LSUIElement": True,
