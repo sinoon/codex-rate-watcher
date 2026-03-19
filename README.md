@@ -6,6 +6,10 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
 ![Swift](https://img.shields.io/badge/Swift-6.2-orange)
 ![License](https://img.shields.io/badge/license-MIT-brightgreen)
 
+<p align="center">
+  <img src="docs/screenshot.jpg" width="420" alt="Codex Rate Watcher Screenshot" />
+</p>
+
 ## Why?
 
 If you use Codex (ChatGPT Pro/Team) heavily for coding, you've likely hit the frustrating moment where your rate limit runs out mid-session — with no warning. **Codex Rate Watcher** sits quietly in your menu bar and:
@@ -13,21 +17,28 @@ If you use Codex (ChatGPT Pro/Team) heavily for coding, you've likely hit the fr
 - Shows your remaining quota at a glance
 - Tracks usage across **three dimensions**: 5-hour primary window, weekly window, and code review limits
 - **Estimates** how fast you're burning through your quota and when it'll run out
+- Shows **reset countdown** — always know exactly when your quota resets
 - Manages **multiple accounts** so you can switch to a fresh one when needed
 - **Recommends** the best account to switch to based on a weighted scoring algorithm
+- **Auto-discovers** orphaned account snapshots and registers them at startup
 
 ## Features
 
 - **Menu bar status** — percentage display always visible
-- **5-hour primary rate limit** tracking with reset countdown
-- **Weekly rate limit** tracking
+- **5-hour primary rate limit** tracking with burn rate estimation and reset countdown
+- **Weekly rate limit** tracking with reset time display
 - **Code review rate limit** tracking
-- **Burn rate estimation** — predicts when your quota will run out
+- **Burn rate estimation** — predicts when your quota will run out (e.g. "预计 1h32min 后耗尽，14:30 重置")
+- **Reset time display** — every quota shows when it resets, not just when blocked
+- **Plan badge** — clearly labels Plus / Team accounts in the primary card
 - **Multi-account profile management** — auto-captures and stores account snapshots
+- **Orphaned snapshot reconciliation** — auto-discovers auth snapshots not in the index and registers them
+- **5-tier availability sorting** — profiles ranked by usable > running low > blocked > error > unvalidated
 - **Smart switch recommendations** — weighted scoring to find the best account
 - **auth.json file watching** — detects Codex CLI login changes in real time
 - **One-click account switching** — with automatic backup
-- **Dark-themed Popover GUI** — with color-coded quota cards
+- **Dark-themed Popover GUI** — Linear-inspired design with color-coded quota cards
+- **Debug window mode** — launch with `--window` for a standalone window (useful for screenshots & debugging)
 
 ## How It Works
 
@@ -84,6 +95,10 @@ if is_current:  score += 4                // small bonus for staying
 
 The profile with the highest score is recommended. When you switch, the current `auth.json` is automatically backed up.
 
+### Orphaned Snapshot Reconciliation
+
+On startup, the app scans the `auth-profiles/` directory for any `.json` files not tracked in `profiles.json`. These orphaned snapshots are automatically registered — deduplicated by SHA256 fingerprint — so you never lose an account even if the index gets out of sync.
+
 ## Prerequisites
 
 - **macOS 14** (Sonoma) or later
@@ -107,6 +122,14 @@ The built app bundle will be at `dist/Codex Rate Watcher Native.app`. Move it to
 swift run
 ```
 
+### Debug window mode
+
+```bash
+swift run CodexRateWatcherNative -- --window
+```
+
+This launches the app as a standalone window instead of a menu bar popover — useful for taking screenshots and debugging the UI.
+
 ## Usage
 
 1. **Log in to Codex CLI** — this creates `~/.codex/auth.json`:
@@ -117,15 +140,16 @@ swift run
 2. **Launch the app** — a speedometer icon appears in your menu bar
 
 3. **Click the icon** to see the popover:
-   - Current account plan and status
-   - Three rate-limit quota cards with percentages and reset countdowns
-   - Burn rate estimates ("At this pace, runs out in ~2h 15m")
+   - Current account plan (Plus/Team) and status
+   - Three rate-limit quota cards with percentages, burn estimates, and reset countdowns
+   - Burn rate estimates (e.g. "预计 1h32min 后耗尽，14:30 重置")
    - Account switch recommendations
 
 4. **Multi-account workflow**:
    - Log in with different Codex accounts — the app auto-captures each one
    - When your current account runs low, the app recommends the best alternative
    - Click "Switch" to swap `auth.json` instantly (with auto-backup)
+   - Blocked accounts show their reset time (e.g. "周额度耗尽，3月22日 重置")
 
 ## Data Storage
 
@@ -148,17 +172,19 @@ codex-rate-watcher/
 ├── Package.swift                       # Swift Package Manager manifest
 ├── scripts/
 │   └── build_app.sh                    # Build .app bundle
+├── docs/
+│   └── screenshot.jpg                  # App screenshot
 ├── Sources/CodexRateWatcherNative/
-│   ├── main.swift                      # Entry point
-│   ├── AppDelegate.swift               # Status bar + popover controller
-│   ├── Models.swift                    # Data models & types
-│   ├── AuthStore.swift                 # Auth file read/write
+│   ├── main.swift                      # Entry point (supports --window flag)
+│   ├── AppDelegate.swift               # Status bar + popover / window controller
+│   ├── Models.swift                    # Data models, reset time formatting
+│   ├── AuthStore.swift                 # Auth file read/write, JWT parsing
 │   ├── AuthFileWatcher.swift           # File system monitoring (kqueue)
 │   ├── UsageAPIClient.swift            # ChatGPT Usage API client
 │   ├── UsageMonitor.swift              # Core monitor + multi-account logic
 │   ├── UsageEstimator.swift            # Burn rate estimation
-│   ├── Persistence.swift               # Sample & profile storage
-│   └── PopoverViewController.swift     # Full AppKit GUI
+│   ├── Persistence.swift               # Sample & profile storage, orphan reconciliation
+│   └── PopoverViewController.swift     # Full AppKit GUI (Linear-inspired dark theme)
 ├── LICENSE
 └── README.md
 ```
