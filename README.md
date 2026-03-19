@@ -54,18 +54,61 @@ Codex Rate Watcher lives in your macOS menu bar and gives you **total visibility
 
 ## ✨ Key Features
 
+### 📊 Three-Dimensional Quota Tracking
+
+Most developers only discover they've hit the rate limit *after* Codex stops responding. Codex Rate Watcher tracks **all three quota dimensions simultaneously** — the 5-hour primary window, the weekly aggregate window, and the code review limit — in a single glance from your menu bar.
+
+### 🔥 Predictive Burn-Rate Engine
+
+The built-in estimator uses **linear regression** over real usage samples to tell you *exactly* when each quota will run out. No guessing, no mental math — just a precise countdown like *"1h32min until exhausted, resets at 14:30"*.
+
+### ⏰ Always-On Reset Countdown
+
+Reset times aren't just for when you're blocked. **Every quota card always shows its reset time**, even when you're actively coding. You'll always know how much runway you have and when the next window opens.
+
+### 👥 Multi-Account Management with Smart Switching
+
+Managing multiple ChatGPT Pro or Team accounts? The app auto-captures authentication snapshots and scores each profile using a **weighted availability algorithm** (primary headroom × 3.2 + weekly × 0.45 + review × 0.08, with low-balance penalties). One click to switch — your current auth is auto-backed up.
+
+### 🔄 Self-Healing Profile Store
+
+The **orphaned snapshot reconciliation** engine scans your profile directory on startup, automatically discovers untracked auth snapshots, and registers them (deduplicated by SHA256 fingerprint). Even if the index file gets corrupted, your accounts are never lost.
+
+### 🛡️ Privacy-First Architecture
+
+All data stays on your machine. The app only communicates with the official ChatGPT Usage API (`chatgpt.com/backend-api/wham/usage`). No analytics, no telemetry, no third-party services. Your auth tokens never leave localhost.
+
+### Additional Highlights
+
 - **Menu bar status** — remaining percentage always visible at a glance
-- **Three-dimensional tracking** — 5h primary window + weekly window + code review limits
-- **Burn-rate predictions** — linear regression over usage samples to project exhaustion time
-- **Reset time on every card** — "预计 1h32min 后耗尽，14:30 重置" even for active accounts
 - **5-tier availability sorting** — usable → running low → blocked → error → unvalidated
-- **One-click account switching** — auto-backup before swap
 - **Auth file watching** — detects `codex login` in real time via kqueue
-- **Orphaned snapshot reconciliation** — never lose a profile, even if the index breaks
+- **Plan badges** — clearly shows Plus vs. Team in the primary card header
 - **Debug window mode** — `--window` flag for standalone window (screenshots & debugging)
 - **Zero dependencies** — pure Apple system frameworks, no third-party packages
+- **Automated CI releases** — GitHub Actions builds universal `.app` bundles for both Apple Silicon and Intel on every tagged version
 
-## 🚀 Quick Start
+## 📥 Download
+
+Pre-built `.app` bundles are available on the [Releases](https://github.com/sinoon/codex-rate-watcher/releases) page — **no Xcode or Swift toolchain required**.
+
+| Chip | Download |
+|---|---|
+| **Apple Silicon** (M1 / M2 / M3 / M4) | [Latest release — Apple Silicon](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+| **Intel** (x86_64) | [Latest release — Intel](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+
+1. Download the `.zip` for your Mac's chip
+2. Unzip and drag **Codex Rate Watcher.app** to `/Applications`
+3. Launch — it appears in your menu bar (not the Dock)
+4. Make sure Codex CLI is logged in (`~/.codex/auth.json` must exist)
+
+> **First launch:** The app is not notarized. Right-click → **Open**, or go to System Settings → Privacy & Security → **Open Anyway**.
+
+---
+
+## 🚀 Build From Source
+
+If you prefer to build it yourself:
 
 ### Prerequisites
 
@@ -73,20 +116,20 @@ Codex Rate Watcher lives in your macOS menu bar and gives you **total visibility
 - **Codex CLI** installed and logged in (`~/.codex/auth.json`)
 - **Swift 6.2+** (Xcode 26 or [swift.org](https://swift.org) toolchain)
 
-### Install & Run
+### Build & Run
 
 ```bash
-# Clone the repo
+# Clone
 git clone https://github.com/sinoon/codex-rate-watcher.git
 cd codex-rate-watcher
 
-# Run directly
+# Run directly (debug mode)
 swift run
 
 # Or build a release .app bundle
 swift build -c release
-./scripts/build_app.sh
-# → dist/Codex Rate Watcher Native.app
+./scripts/build_app.sh 1.0.0
+# → dist/Codex Rate Watcher.app
 ```
 
 ### Debug Window Mode

@@ -1,0 +1,166 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }} .app
+    runs-on: macos-15
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            triple: arm64-apple-macosx
+            artifact_suffix: Apple-Silicon
+          - arch: x86_64
+            triple: x86_64-apple-macosx
+            artifact_suffix: Intel
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.0'
+
+      - name: Build release binary
+        run: |
+          swift build -c release --triple ${{ matrix.triple }}
+
+      - name: Package .app bundle
+        run: |
+          APP_NAME="Codex Rate Watcher"
+          EXECUTABLE_NAME="CodexRateWatcherNative"
+          APP_DIR="dist/${APP_NAME}.app"
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          rm -rf dist
+          mkdir -p "${APP_DIR}/Contents/MacOS"
+          mkdir -p "${APP_DIR}/Contents/Resources"
+
+          # Copy binary
+          cp ".build/${{ matrix.triple }}/release/${EXECUTABLE_NAME}" \
+             "${APP_DIR}/Contents/MacOS/${EXECUTABLE_NAME}"
+
+          # Generate Info.plist
+          cat > "${APP_DIR}/Contents/Info.plist" << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>${APP_NAME}</string>
+            <key>CFBundleDisplayName</key>
+            <string>${APP_NAME}</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.sinoon.codex-rate-watcher</string>
+            <key>CFBundleVersion</key>
+            <string>${VERSION}</string>
+            <key>CFBundleShortVersionString</key>
+            <string>${VERSION}</string>
+            <key>CFBundleExecutable</key>
+            <string>${EXECUTABLE_NAME}</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>14.0</string>
+            <key>LSUIElement</key>
+            <true/>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          echo "✅ Built ${APP_NAME}.app (${VERSION}) for ${{ matrix.arch }}"
+
+      - name: Create ZIP archive
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd dist
+          zip -r -y "../Codex-Rate-Watcher-${VERSION}-${{ matrix.artifact_suffix }}.zip" \
+            "Codex Rate Watcher.app"
+          cd ..
+          echo "ASSET_PATH=Codex-Rate-Watcher-${VERSION}-${{ matrix.artifact_suffix }}.zip" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.arch }}
+          path: ${{ env.ASSET_PATH }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (for changelog)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lhR artifacts/
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p' || echo "")
+
+          {
+            echo "body<<RELEASE_EOF"
+            echo "## ⚡ Codex Rate Watcher ${GITHUB_REF_NAME}"
+            echo ""
+            echo "### 📦 Downloads"
+            echo ""
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| **Apple Silicon** (M1/M2/M3/M4) | \`Codex-Rate-Watcher-${VERSION}-Apple-Silicon.zip\` |"
+            echo "| **Intel** (x86_64) | \`Codex-Rate-Watcher-${VERSION}-Intel.zip\` |"
+            echo ""
+            echo "### 🚀 Installation"
+            echo ""
+            echo "1. Download the ZIP for your Mac's chip"
+            echo "2. Unzip and drag **Codex Rate Watcher.app** to \`/Applications\`"
+            echo "3. Launch the app — it lives in your menu bar"
+            echo "4. Make sure Codex CLI is logged in (\`~/.codex/auth.json\` exists)"
+            echo ""
+            echo "> **Note:** The app is not notarized. On first launch, right-click → Open, or go to System Settings → Privacy & Security → Open Anyway."
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "### 📝 Changes since ${PREV_TAG}"
+              echo ""
+              git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD" -- || true
+            else
+              echo "### 📝 Changes"
+              echo ""
+              echo "🎉 Initial release!"
+            fi
+            echo ""
+            echo "RELEASE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Codex Rate Watcher ${{ github.ref_name }}"
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: false
+          files: artifacts/*.zip

@@ -54,18 +54,61 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 ## ✨ 功能亮点
 
-- **菜单栏状态** —— 剩余百分比始终可见
-- **三维度追踪** —— 5h 主窗口 + 周窗口 + 代码审查限制
-- **消耗速率预测** —— 基于用量样本的线性回归预测耗尽时间
-- **每张卡片显示重置时间** —— 活跃账号也能看到"预计 1h32min 后耗尽，14:30 重置"
-- **五级可用性排序** —— 可用 → 即将耗尽 → 已封锁 → 错误 → 未验证
-- **一键切换账号** —— 切换前自动备份
-- **认证文件监听** —— 通过 kqueue 实时检测 `codex login`
-- **孤儿快照整合** —— 即使索引损坏也不会丢失账号
-- **调试窗口模式** —— `--window` 标志启动独立窗口（方便截图和调试）
-- **零依赖** —— 纯 Apple 系统框架，无第三方包
+### 📊 三维度配额追踪
 
-## 🚀 快速开始
+大多数开发者只有在 Codex 停止响应*之后*才发现自己撞了限速墙。Codex Rate Watcher 能**同时追踪三个配额维度** —— 5 小时主窗口、周聚合窗口和代码审查限制 —— 在菜单栏一眼全览。
+
+### 🔥 智能消耗速率预测引擎
+
+内置预测器使用**线性回归**分析真实用量样本，精确告诉你每个配额*什么时候*会耗尽。不用猜，不用心算 —— 直接显示 *"预计 1h32min 后耗尽，14:30 重置"*。
+
+### ⏰ 全时段重置倒计时
+
+重置时间不只在你被封锁时才显示。**每张配额卡片始终显示重置时间**，即使你正在活跃编程中。你随时知道还有多少余量，以及下一个窗口何时开启。
+
+### 👥 多账号管理 + 智能切换
+
+管理多个 ChatGPT Pro 或 Team 账号？应用自动捕获认证快照，并通过**加权可用性算法**为每个配置文件评分（主配额 × 3.2 + 周配额 × 0.45 + 审查 × 0.08，低余额惩罚）。一键切换，当前认证自动备份。
+
+### 🔄 自愈式配置文件存储
+
+**孤儿快照自动整合引擎**在启动时扫描配置文件目录，自动发现未索引的认证快照并注册（SHA256 指纹去重）。即使索引文件损坏，你的账号也不会丢失。
+
+### 🛡️ 隐私优先架构
+
+所有数据保存在本地。应用仅与官方 ChatGPT Usage API 通信（`chatgpt.com/backend-api/wham/usage`）。无分析、无遥测、无第三方服务。你的认证令牌绝不离开本机。
+
+### 更多亮点
+
+- **菜单栏状态** —— 剩余百分比始终可见
+- **五级可用性排序** —— 可用 → 即将耗尽 → 已封锁 → 错误 → 未验证
+- **认证文件监听** —— 通过 kqueue 实时检测 `codex login`
+- **套餐标识** —— 主卡片标题清晰显示 Plus / Team
+- **调试窗口模式** —— `--window` 标志启动独立窗口
+- **零依赖** —— 纯 Apple 系统框架，无第三方包
+- **自动化 CI 发布** —— GitHub Actions 在每个版本标签自动构建 Apple Silicon 和 Intel 双架构 `.app` 包
+
+## 📥 下载安装
+
+在 [Releases](https://github.com/sinoon/codex-rate-watcher/releases) 页面下载预编译的 `.app` 包——**无需安装 Xcode 或 Swift 工具链**。
+
+| 芯片 | 下载 |
+|---|---|
+| **Apple Silicon**（M1 / M2 / M3 / M4） | [最新版 — Apple Silicon](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+| **Intel**（x86_64） | [最新版 — Intel](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+
+1. 下载对应芯片的 `.zip` 文件
+2. 解压后将 **Codex Rate Watcher.app** 拖入 `/Applications`
+3. 启动——它会出现在菜单栏（不在 Dock 中）
+4. 确保 Codex CLI 已登录（`~/.codex/auth.json` 必须存在）
+
+> **首次启动：** 应用未经公证。请右键 → **打开**，或前往系统设置 → 隐私与安全性 → **仍要打开**。
+
+---
+
+## 🚀 从源码构建
+
+如果你更喜欢自行编译：
 
 ### 前置条件
 
@@ -73,20 +116,20 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 - **Codex CLI** 已安装并登录（`~/.codex/auth.json`）
 - **Swift 6.2+**（Xcode 26 或 [swift.org](https://swift.org) 工具链）
 
-### 安装与运行
+### 构建与运行
 
 ```bash
 # 克隆仓库
 git clone https://github.com/sinoon/codex-rate-watcher.git
 cd codex-rate-watcher
 
-# 直接运行
+# 直接运行（调试模式）
 swift run
 
 # 或构建 release .app 包
 swift build -c release
-./scripts/build_app.sh
-# → dist/Codex Rate Watcher Native.app
+./scripts/build_app.sh 1.0.0
+# → dist/Codex Rate Watcher.app
 ```
 
 ### 调试窗口模式
