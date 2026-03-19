@@ -65,37 +65,39 @@ Codex Rate Watcher は macOS メニューバーに常駐し、OpenAI Codex / Cha
 - **デバッグウィンドウモード** —— `--window` フラグでスタンドアロンウィンドウ起動
 - **ゼロ依存** —— 純正 Apple システムフレームワークのみ
 
-## 🚀 クイックスタート
+## 📥 ダウンロード
+
+[Releases](https://github.com/sinoon/codex-rate-watcher/releases) ページからビルド済み `.app` をダウンロードできます — **Xcode や Swift ツールチェーンは不要**です。
+
+| チップ | ダウンロード |
+|---|---|
+| **Apple Silicon**（M1 / M2 / M3 / M4） | [最新版 — Apple Silicon](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+| **Intel**（x86_64） | [最新版 — Intel](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+
+1. お使いの Mac のチップに対応する `.zip` をダウンロード
+2. 解凍して **Codex Rate Watcher.app** を `/Applications` にドラッグ
+3. 起動 — メニューバーに表示されます（Dock には表示されません）
+4. Codex CLI がログイン済みであることを確認（`~/.codex/auth.json` が必要）
+
+> **初回起動時：** アプリは公証されていません。右クリック → **開く**、またはシステム設定 → プライバシーとセキュリティ → **このまま開く**。
+
+---
+
+## 🚀 ソースからビルド
 
 ### 前提条件
 
 - **macOS 14**（Sonoma）以降
-- **Codex CLI** インストール済み・ログイン済み（`~/.codex/auth.json`）
+- **Codex CLI** インストール・ログイン済み（`~/.codex/auth.json`）
 - **Swift 6.2+**（Xcode 26 または [swift.org](https://swift.org) ツールチェーン）
 
-### インストール・実行
+### ビルドと実行
 
 ```bash
-# リポジトリをクローン
 git clone https://github.com/sinoon/codex-rate-watcher.git
 cd codex-rate-watcher
-
-# 直接実行
 swift run
-
-# または release .app バンドルをビルド
-swift build -c release
-./scripts/build_app.sh
-# → dist/Codex Rate Watcher Native.app
 ```
-
-### デバッグウィンドウモード
-
-```bash
-swift run CodexRateWatcherNative -- --window
-```
-
-メニューバーポップオーバーの代わりにスタンドアロンウィンドウで起動——スクリーンショットや UI デバッグに最適。
 
 ## ⚙️ テックスタック
 

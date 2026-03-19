@@ -65,28 +65,38 @@ Codex Rate Watcher lebt in Ihrer macOS-Menüleiste und bietet Ihnen **vollständ
 - **Debug-Fenstermodus** — `--window`-Flag für eigenständiges Fenster
 - **Null Abhängigkeiten** — reine Apple-System-Frameworks
 
-## 🚀 Schnellstart
+## 📥 Download
+
+Laden Sie die vorgefertigten `.app`-Bundles von der [Releases](https://github.com/sinoon/codex-rate-watcher/releases)-Seite herunter — **kein Xcode oder Swift Toolchain erforderlich**.
+
+| Chip | Download |
+|---|---|
+| **Apple Silicon** (M1 / M2 / M3 / M4) | [Neueste Version — Apple Silicon](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+| **Intel** (x86_64) | [Neueste Version — Intel](https://github.com/sinoon/codex-rate-watcher/releases/latest) |
+
+1. Laden Sie die `.zip` für den Chip Ihres Macs herunter
+2. Entpacken und **Codex Rate Watcher.app** in `/Applications` ziehen
+3. Starten — die App erscheint in der Menüleiste (nicht im Dock)
+4. Stellen Sie sicher, dass Codex CLI angemeldet ist (`~/.codex/auth.json`)
+
+> **Erster Start:** Die App ist nicht notarisiert. Rechtsklick → **Öffnen**, oder Systemeinstellungen → Datenschutz & Sicherheit → **Trotzdem öffnen**.
+
+---
+
+## 🚀 Aus dem Quellcode bauen
 
 ### Voraussetzungen
 
 - **macOS 14** (Sonoma) oder neuer
-- **Codex CLI** installiert und angemeldet (`~/.codex/auth.json`)
-- **Swift 6.2+** (Xcode 26 oder [swift.org](https://swift.org) Toolchain)
+- **Codex CLI** installiert und angemeldet
+- **Swift 6.2+** (Xcode 26 oder [swift.org](https://swift.org))
 
-### Installation und Ausführung
+### Bauen und ausführen
 
 ```bash
-# Repository klonen
 git clone https://github.com/sinoon/codex-rate-watcher.git
 cd codex-rate-watcher
-
-# Direkt ausführen
 swift run
-
-# Oder Release .app-Bundle bauen
-swift build -c release
-./scripts/build_app.sh
-# → dist/Codex Rate Watcher Native.app
 ```
 
 ## ⚙️ Tech-Stack
