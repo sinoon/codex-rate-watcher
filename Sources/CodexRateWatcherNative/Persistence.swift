@@ -1,26 +1,5 @@
 import Foundation
-
-enum AppPaths {
-  static let rootDirectory: URL = {
-    let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    return appSupport.appending(path: "CodexRateWatcherNative")
-  }()
-
-  static let samplesFile = rootDirectory.appending(path: "samples.json")
-  static let profilesDirectory = rootDirectory.appending(path: "auth-profiles")
-  static let profileIndexFile = rootDirectory.appending(path: "profiles.json")
-  static let backupsDirectory = rootDirectory.appending(path: "auth-backups")
-}
-
-struct UsageSample: Codable {
-  let capturedAt: Date
-  let primaryUsedPercent: Double
-  let primaryResetAt: TimeInterval
-  let secondaryUsedPercent: Double?
-  let secondaryResetAt: TimeInterval?
-  let reviewUsedPercent: Double
-  let reviewResetAt: TimeInterval
-}
+import CodexRateKit
 
 actor SampleStore {
   private let fileManager = FileManager.default

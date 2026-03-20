@@ -1,10 +1,10 @@
 import Foundation
 
-enum UsageAPIError: LocalizedError {
+public enum UsageAPIError: LocalizedError {
   case invalidResponse
   case httpError(statusCode: Int, message: String)
 
-  var errorDescription: String? {
+  public var errorDescription: String? {
     switch self {
     case .invalidResponse:
       return "额度接口返回的数据格式不对。"
@@ -46,16 +46,16 @@ enum UsageAPIError: LocalizedError {
   }
 }
 
-struct UsageAPIClient {
+public struct UsageAPIClient: @unchecked Sendable {
   private let session: URLSession
   private let decoder = JSONDecoder()
   private let endpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
-  init(session: URLSession = .shared) {
+  public init(session: URLSession = .shared) {
     self.session = session
   }
 
-  func fetchUsage(auth: AuthSnapshot) async throws -> UsageSnapshot {
+  public func fetchUsage(auth: AuthSnapshot) async throws -> UsageSnapshot {
     var request = URLRequest(url: endpoint)
     request.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Accept")

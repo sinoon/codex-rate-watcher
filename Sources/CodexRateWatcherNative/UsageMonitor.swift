@@ -1,4 +1,5 @@
 import Foundation
+import CodexRateKit
 
 @MainActor
 final class UsageMonitor {

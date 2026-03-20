@@ -1,13 +1,19 @@
 import Foundation
 
-struct BurnEstimate {
-  let timeUntilExhausted: TimeInterval?
-  let percentPerHour: Double?
-  let statusText: String
+public struct BurnEstimate: Sendable {
+  public let timeUntilExhausted: TimeInterval?
+  public let percentPerHour: Double?
+  public let statusText: String
+
+  public init(timeUntilExhausted: TimeInterval?, percentPerHour: Double?, statusText: String) {
+    self.timeUntilExhausted = timeUntilExhausted
+    self.percentPerHour = percentPerHour
+    self.statusText = statusText
+  }
 }
 
-enum UsageEstimator {
-  static func estimatePrimary(from samples: [UsageSample], window: LimitWindow) -> BurnEstimate {
+public enum UsageEstimator {
+  public static func estimatePrimary(from samples: [UsageSample], window: LimitWindow) -> BurnEstimate {
     estimate(
       samples: samples,
       currentResetAt: window.resetAt,
@@ -18,7 +24,7 @@ enum UsageEstimator {
     )
   }
 
-  static func estimateSecondary(from samples: [UsageSample], window: LimitWindow) -> BurnEstimate {
+  public static func estimateSecondary(from samples: [UsageSample], window: LimitWindow) -> BurnEstimate {
     estimate(
       samples: samples,
       currentResetAt: window.resetAt,
@@ -29,7 +35,7 @@ enum UsageEstimator {
     )
   }
 
-  static func estimateReview(from samples: [UsageSample], window: LimitWindow) -> BurnEstimate {
+  public static func estimateReview(from samples: [UsageSample], window: LimitWindow) -> BurnEstimate {
     estimate(
       samples: samples,
       currentResetAt: window.resetAt,

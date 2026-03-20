@@ -1,4 +1,5 @@
 import AppKit
+import CodexRateKit
 
 // MARK: - Design Tokens (Linear-inspired)
 

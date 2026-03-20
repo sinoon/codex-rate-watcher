@@ -1,24 +1,24 @@
 import CryptoKit
 import Foundation
 
-struct AuthSnapshot {
-  let accessToken: String
-  let accountID: String?
-  let authMode: String?
-  let email: String?
+public struct AuthSnapshot: Sendable {
+  public let accessToken: String
+  public let accountID: String?
+  public let authMode: String?
+  public let email: String?
 }
 
-struct AuthEnvelope {
-  let rawData: Data
-  let snapshot: AuthSnapshot
-  let fingerprint: String
+public struct AuthEnvelope: Sendable {
+  public let rawData: Data
+  public let snapshot: AuthSnapshot
+  public let fingerprint: String
 }
 
-enum AuthStoreError: LocalizedError {
+public enum AuthStoreError: LocalizedError {
   case missingToken
   case invalidJWT
 
-  var errorDescription: String? {
+  public var errorDescription: String? {
     switch self {
     case .missingToken:
       return "我在 ~/.codex/auth.json 里没有找到可用的 access token。"
@@ -28,7 +28,7 @@ enum AuthStoreError: LocalizedError {
   }
 }
 
-struct AuthStore {
+public struct AuthStore: @unchecked Sendable {
   private struct Payload: Decodable {
     struct Tokens: Decodable {
       let accessToken: String?
@@ -52,28 +52,28 @@ struct AuthStore {
   private let fileURL: URL
   private let decoder = JSONDecoder()
 
-  init(fileURL: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codex/auth.json")) {
+  public init(fileURL: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".codex/auth.json")) {
     self.fileURL = fileURL
   }
 
-  var watchedDirectoryURL: URL {
+  public var watchedDirectoryURL: URL {
     fileURL.deletingLastPathComponent()
   }
 
-  func load() throws -> AuthSnapshot {
+  public func load() throws -> AuthSnapshot {
     try loadEnvelope().snapshot
   }
 
-  func loadEnvelope() throws -> AuthEnvelope {
+  public func loadEnvelope() throws -> AuthEnvelope {
     let data = try loadRawData()
     return try envelope(from: data)
   }
 
-  func loadRawData() throws -> Data {
+  public func loadRawData() throws -> Data {
     try Data(contentsOf: fileURL)
   }
 
-  func envelope(from data: Data) throws -> AuthEnvelope {
+  public func envelope(from data: Data) throws -> AuthEnvelope {
     let payload = try decoder.decode(Payload.self, from: data)
     guard let accessToken = payload.tokens.accessToken, !accessToken.isEmpty else {
       throw AuthStoreError.missingToken
@@ -94,7 +94,7 @@ struct AuthStore {
     )
   }
 
-  func writeRawData(_ data: Data) throws {
+  public func writeRawData(_ data: Data) throws {
     try data.write(to: fileURL, options: .atomic)
   }
 

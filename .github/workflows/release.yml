@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.label }} .app
+    name: Build ${{ matrix.label }}
     runs-on: macos-15
     strategy:
       matrix:
@@ -29,25 +29,28 @@ jobs:
       - name: Show Swift version
         run: swift --version
 
-      - name: Build release binary
+      - name: Build release binaries (GUI + CLI)
         run: |
           swift build -c release --arch ${{ matrix.arch }}
 
-      - name: Package .app bundle
+      - name: Package .app bundle + CLI binary
         env:
           VERSION: ${{ github.ref_name }}
         run: |
           VER="${VERSION#v}"
           APP_NAME="Codex Rate Watcher"
-          EXEC="CodexRateWatcherNative"
+          GUI_EXEC="CodexRateWatcherNative"
+          CLI_EXEC="codex-rate"
           APP_DIR="dist/${APP_NAME}.app"
+          BUILD_DIR=".build/${{ matrix.arch }}-apple-macosx/release"
 
           rm -rf dist
           mkdir -p "${APP_DIR}/Contents/MacOS"
           mkdir -p "${APP_DIR}/Contents/Resources"
 
-          cp ".build/${{ matrix.arch }}-apple-macosx/release/${EXEC}" \
-             "${APP_DIR}/Contents/MacOS/${EXEC}"
+          # --- GUI app bundle ---
+          cp "${BUILD_DIR}/${GUI_EXEC}" \
+             "${APP_DIR}/Contents/MacOS/${GUI_EXEC}"
 
           cat > "${APP_DIR}/Contents/Info.plist" << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
@@ -66,7 +69,7 @@ jobs:
             <key>CFBundleShortVersionString</key>
             <string>${VER}</string>
             <key>CFBundleExecutable</key>
-            <string>${EXEC}</string>
+            <string>${GUI_EXEC}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>LSMinimumSystemVersion</key>
@@ -79,7 +82,10 @@ jobs:
           </plist>
           PLIST
 
-          echo "Built ${APP_NAME}.app (${VER}) for ${{ matrix.arch }}"
+          # --- CLI binary alongside the .app ---
+          cp "${BUILD_DIR}/${CLI_EXEC}" "dist/${CLI_EXEC}"
+
+          echo "Built ${APP_NAME}.app + ${CLI_EXEC} (${VER}) for ${{ matrix.arch }}"
 
       - name: Create ZIP archive
         env:
@@ -88,7 +94,8 @@ jobs:
           VER="${VERSION#v}"
           cd dist
           zip -r -y "../Codex-Rate-Watcher-${VER}-${{ matrix.label }}.zip" \
-            "Codex Rate Watcher.app"
+            "Codex Rate Watcher.app" \
+            "codex-rate"
           cd ..
           echo "ASSET_PATH=Codex-Rate-Watcher-${VER}-${{ matrix.label }}.zip" >> $GITHUB_ENV
 
@@ -136,12 +143,19 @@ jobs:
             echo "| **Apple Silicon** (M1/M2/M3/M4) | \`Codex-Rate-Watcher-${VER}-Apple-Silicon.zip\` |"
             echo "| **Intel** (x86_64) | \`Codex-Rate-Watcher-${VER}-Intel.zip\` |"
             echo ""
+            echo "### What's Included"
+            echo ""
+            echo "Each ZIP contains:"
+            echo "- **Codex Rate Watcher.app** -- Menu bar GUI"
+            echo "- **codex-rate** -- CLI tool (copy to a directory on your PATH for terminal access)"
+            echo ""
             echo "### Installation"
             echo ""
             echo "1. Download the ZIP for your Mac chip"
-            echo "2. Unzip and drag **Codex Rate Watcher.app** to \`/Applications\`"
-            echo "3. Launch the app — it lives in your menu bar"
-            echo "4. Codex CLI must be logged in (\`~/.codex/auth.json\`)"
+            echo "2. Unzip and drag **Codex Rate Watcher.app** to Applications"
+            echo "3. Optionally copy codex-rate to a directory on your PATH for CLI usage"
+            echo "4. Launch the app -- it lives in your menu bar"
+            echo "5. Codex CLI must be logged in (~/.codex/auth.json)"
             echo ""
             echo "> **Note:** The app is not notarized. On first launch: right-click the app, select Open, or go to System Settings > Privacy & Security > Open Anyway."
             echo ""
@@ -154,7 +168,10 @@ jobs:
             echo "- Orphaned snapshot auto-reconciliation"
             echo "- Plus / Team plan badges"
             echo "- Dark-themed Linear-inspired UI"
-            echo "- Zero dependencies — pure Apple system frameworks"
+            echo "- **Global Hotkey** -- Toggle the popover from anywhere"
+            echo "- **codex-rate CLI** -- Terminal-first monitoring with JSON output"
+            echo "- **Raycast Extension** -- Native integration via CLI bridge"
+            echo "- Zero dependencies -- pure Apple system frameworks"
             echo ""
             if [ -n "$PREV_TAG" ]; then
               echo "### Changes since ${PREV_TAG}"

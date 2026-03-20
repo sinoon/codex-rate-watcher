@@ -1,10 +1,10 @@
 import Foundation
 
-struct UsageSnapshot: Decodable {
-  let planType: String
-  let rateLimit: UsageLimit
-  let codeReviewRateLimit: UsageLimit
-  let credits: Credits
+public struct UsageSnapshot: Decodable, Sendable {
+  public let planType: String
+  public let rateLimit: UsageLimit
+  public let codeReviewRateLimit: UsageLimit
+  public let credits: Credits
 
   enum CodingKeys: String, CodingKey {
     case planType = "plan_type"
@@ -12,13 +12,21 @@ struct UsageSnapshot: Decodable {
     case codeReviewRateLimit = "code_review_rate_limit"
     case credits
   }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    planType = try container.decode(String.self, forKey: .planType)
+    rateLimit = try container.decode(UsageLimit.self, forKey: .rateLimit)
+    codeReviewRateLimit = try container.decode(UsageLimit.self, forKey: .codeReviewRateLimit)
+    credits = try container.decode(Credits.self, forKey: .credits)
+  }
 }
 
-struct UsageLimit: Decodable {
-  let allowed: Bool
-  let limitReached: Bool
-  let primaryWindow: LimitWindow
-  let secondaryWindow: LimitWindow?
+public struct UsageLimit: Decodable, Sendable {
+  public let allowed: Bool
+  public let limitReached: Bool
+  public let primaryWindow: LimitWindow
+  public let secondaryWindow: LimitWindow?
 
   enum CodingKeys: String, CodingKey {
     case allowed
@@ -26,13 +34,21 @@ struct UsageLimit: Decodable {
     case primaryWindow = "primary_window"
     case secondaryWindow = "secondary_window"
   }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    allowed = try container.decode(Bool.self, forKey: .allowed)
+    limitReached = try container.decode(Bool.self, forKey: .limitReached)
+    primaryWindow = try container.decode(LimitWindow.self, forKey: .primaryWindow)
+    secondaryWindow = try container.decodeIfPresent(LimitWindow.self, forKey: .secondaryWindow)
+  }
 }
 
-struct LimitWindow: Decodable {
-  let usedPercent: Double
-  let limitWindowSeconds: Int
-  let resetAfterSeconds: Int
-  let resetAt: TimeInterval
+public struct LimitWindow: Decodable, Sendable {
+  public let usedPercent: Double
+  public let limitWindowSeconds: Int
+  public let resetAfterSeconds: Int
+  public let resetAt: TimeInterval
 
   enum CodingKeys: String, CodingKey {
     case usedPercent = "used_percent"
@@ -41,39 +57,53 @@ struct LimitWindow: Decodable {
     case resetAt = "reset_at"
   }
 
-  var remainingPercent: Double {
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    usedPercent = try container.decode(Double.self, forKey: .usedPercent)
+    limitWindowSeconds = try container.decode(Int.self, forKey: .limitWindowSeconds)
+    resetAfterSeconds = try container.decode(Int.self, forKey: .resetAfterSeconds)
+    resetAt = try container.decode(TimeInterval.self, forKey: .resetAt)
+  }
+
+  public var remainingPercent: Double {
     max(0, 100 - usedPercent)
   }
 
-  var usedPercentLabel: String {
+  public var usedPercentLabel: String {
     "\(Int(usedPercent.rounded()))%"
   }
 
-  var remainingPercentLabel: String {
+  public var remainingPercentLabel: String {
     "\(Int(remainingPercent.rounded()))%"
   }
 }
 
-struct Credits: Decodable {
-  let hasCredits: Bool
-  let unlimited: Bool
+public struct Credits: Decodable, Sendable {
+  public let hasCredits: Bool
+  public let unlimited: Bool
 
   enum CodingKeys: String, CodingKey {
     case hasCredits = "has_credits"
     case unlimited
   }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    hasCredits = try container.decode(Bool.self, forKey: .hasCredits)
+    unlimited = try container.decode(Bool.self, forKey: .unlimited)
+  }
 }
 
-struct AuthProfileUsageSummary: Codable {
-  let planType: String
-  let isAllowed: Bool
-  let limitReached: Bool
-  let primaryUsedPercent: Double
-  let primaryResetAt: TimeInterval
-  let secondaryUsedPercent: Double?
-  let secondaryResetAt: TimeInterval?
-  let reviewUsedPercent: Double
-  let reviewResetAt: TimeInterval
+public struct AuthProfileUsageSummary: Codable, Sendable {
+  public let planType: String
+  public let isAllowed: Bool
+  public let limitReached: Bool
+  public let primaryUsedPercent: Double
+  public let primaryResetAt: TimeInterval
+  public let secondaryUsedPercent: Double?
+  public let secondaryResetAt: TimeInterval?
+  public let reviewUsedPercent: Double
+  public let reviewResetAt: TimeInterval
 
   enum CodingKeys: String, CodingKey {
     case planType
@@ -87,7 +117,7 @@ struct AuthProfileUsageSummary: Codable {
     case reviewResetAt
   }
 
-  init(snapshot: UsageSnapshot) {
+  public init(snapshot: UsageSnapshot) {
     planType = snapshot.planType
     isAllowed = snapshot.rateLimit.allowed
     limitReached = snapshot.rateLimit.limitReached
@@ -99,7 +129,7 @@ struct AuthProfileUsageSummary: Codable {
     reviewResetAt = snapshot.codeReviewRateLimit.primaryWindow.resetAt
   }
 
-  init(from decoder: Decoder) throws {
+  public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     planType = try container.decode(String.self, forKey: .planType)
     isAllowed = try container.decodeIfPresent(Bool.self, forKey: .isAllowed) ?? true
@@ -113,33 +143,59 @@ struct AuthProfileUsageSummary: Codable {
   }
 }
 
-struct AuthProfileRecord: Codable, Identifiable {
-  let id: UUID
-  let fingerprint: String
-  let snapshotFileName: String
-  var authMode: String?
-  var accountID: String?
-  var email: String?
-  let createdAt: Date
-  var lastSeenAt: Date
-  var lastValidatedAt: Date?
-  var latestUsage: AuthProfileUsageSummary?
-  var validationError: String?
+public struct AuthProfileRecord: Codable, Identifiable, Sendable {
+  public let id: UUID
+  public let fingerprint: String
+  public let snapshotFileName: String
+  public var authMode: String?
+  public var accountID: String?
+  public var email: String?
+  public let createdAt: Date
+  public var lastSeenAt: Date
+  public var lastValidatedAt: Date?
+  public var latestUsage: AuthProfileUsageSummary?
+  public var validationError: String?
+
+  public init(
+    id: UUID,
+    fingerprint: String,
+    snapshotFileName: String,
+    authMode: String? = nil,
+    accountID: String? = nil,
+    email: String? = nil,
+    createdAt: Date,
+    lastSeenAt: Date,
+    lastValidatedAt: Date? = nil,
+    latestUsage: AuthProfileUsageSummary? = nil,
+    validationError: String? = nil
+  ) {
+    self.id = id
+    self.fingerprint = fingerprint
+    self.snapshotFileName = snapshotFileName
+    self.authMode = authMode
+    self.accountID = accountID
+    self.email = email
+    self.createdAt = createdAt
+    self.lastSeenAt = lastSeenAt
+    self.lastValidatedAt = lastValidatedAt
+    self.latestUsage = latestUsage
+    self.validationError = validationError
+  }
 }
 
 extension AuthProfileRecord {
-  var isValid: Bool {
+  public var isValid: Bool {
     validationError == nil && latestUsage != nil
   }
 
   /// Whether the subscription check failed (e.g. 402 Payment Required).
   /// These profiles should be hidden from the UI by default.
-  var isSubscriptionFailed: Bool {
+  public var isSubscriptionFailed: Bool {
     validationError != nil
   }
 
   /// Short account identifier: email prefix if exists, else account ID suffix
-  var accountIdentifier: String {
+  public var accountIdentifier: String {
     if let email, !email.isEmpty {
       // Take part before @, e.g. "sinoon1218" from "sinoon1218@gmail.com"
       return email.components(separatedBy: "@").first ?? email
@@ -149,7 +205,7 @@ extension AuthProfileRecord {
   }
 
   /// Plan badge text: "Plus" or "Team"
-  var planBadge: String {
+  public var planBadge: String {
     if let usage = latestUsage {
       return usage.planDisplayName
     }
@@ -160,12 +216,12 @@ extension AuthProfileRecord {
   /// Display name for UI.
   /// Plus accounts: "Plus · sinoon1218"
   /// Team accounts: "Team · sinoon1218"
-  var displayName: String {
+  public var displayName: String {
     let plan = planBadge
     return "\(plan) · \(accountIdentifier)"
   }
 
-  var statusText: String {
+  public var statusText: String {
     if let validationError {
       return validationError
     }
@@ -185,7 +241,7 @@ extension AuthProfileRecord {
     return "可用"
   }
 
-  var detailText: String {
+  public var detailText: String {
     var parts: [String] = []
 
     if let latestUsage {
@@ -204,7 +260,7 @@ extension AuthProfileRecord {
 }
 
 extension AuthProfileUsageSummary {
-  var planDisplayName: String {
+  public var planDisplayName: String {
     switch planType.lowercased() {
     case "team":
       return "Team"
@@ -215,27 +271,27 @@ extension AuthProfileUsageSummary {
     }
   }
 
-  var isWeeklyExhausted: Bool {
+  public var isWeeklyExhausted: Bool {
     guard let secondaryUsedPercent else { return false }
     return secondaryUsedPercent >= 100
   }
 
-  var isPrimaryExhausted: Bool {
+  public var isPrimaryExhausted: Bool {
     primaryUsedPercent >= 100
   }
 
-  var isBlocked: Bool {
+  public var isBlocked: Bool {
     isWeeklyExhausted || isPrimaryExhausted || !isAllowed || limitReached
   }
 
   /// Effective overall availability percent (considering all quotas)
   /// When any quota is exhausted, this becomes 0
-  var effectiveAvailablePercent: Double {
+  public var effectiveAvailablePercent: Double {
     if isBlocked { return 0 }
     return min(primaryRemainingPercent, secondaryRemainingPercent ?? 100)
   }
 
-  var isRunningLow: Bool {
+  public var isRunningLow: Bool {
     if primaryRemainingPercent <= 15 {
       return true
     }
@@ -247,7 +303,7 @@ extension AuthProfileUsageSummary {
     return false
   }
 
-  var blockingLabel: String? {
+  public var blockingLabel: String? {
     if isWeeklyExhausted {
       if let resetLabel = nextResetLabel(for: secondaryResetAt) {
         return "周额度耗尽，\(resetLabel) 重置"
@@ -265,7 +321,7 @@ extension AuthProfileUsageSummary {
     return nil
   }
 
-  var usageSummaryText: String {
+  public var usageSummaryText: String {
     let primaryText = "5h \(primaryRemainingPercentLabel)"
     let weeklyText: String
     if let secondaryRemainingPercentLabel {
@@ -276,28 +332,28 @@ extension AuthProfileUsageSummary {
     return "\(primaryText) · \(weeklyText)"
   }
 
-  var primaryRemainingPercent: Double {
+  public var primaryRemainingPercent: Double {
     max(0, 100 - primaryUsedPercent)
   }
 
-  var primaryRemainingPercentLabel: String {
+  public var primaryRemainingPercentLabel: String {
     "\(Int(primaryRemainingPercent.rounded()))%"
   }
 
-  var secondaryRemainingPercent: Double? {
+  public var secondaryRemainingPercent: Double? {
     secondaryUsedPercent.map { max(0, 100 - $0) }
   }
 
-  var secondaryRemainingPercentLabel: String? {
+  public var secondaryRemainingPercentLabel: String? {
     guard let secondaryRemainingPercent else { return nil }
     return "\(Int(secondaryRemainingPercent.rounded()))%"
   }
 
-  var effectiveRemainingPercent: Double {
+  public var effectiveRemainingPercent: Double {
     min(primaryRemainingPercent, secondaryRemainingPercent ?? 100)
   }
 
-  var switchSummaryText: String {
+  public var switchSummaryText: String {
     if isBlocked, let resetText = nextBlockingResetLabel {
       return "\(resetText) 重置"
     }
@@ -311,7 +367,7 @@ extension AuthProfileUsageSummary {
 
   /// The most relevant next reset label when blocked.
   /// Weekly exhausted → weekly reset; primary exhausted → primary reset.
-  var nextBlockingResetLabel: String? {
+  public var nextBlockingResetLabel: String? {
     if isWeeklyExhausted {
       return nextResetLabel(for: secondaryResetAt)
     }
@@ -351,7 +407,7 @@ extension AuthProfileUsageSummary {
 }
 
 extension Date {
-  var relativeDescription: String {
+  public var relativeDescription: String {
     let formatter = RelativeDateTimeFormatter()
     formatter.locale = Locale(identifier: "zh_Hans_CN")
     return formatter.localizedString(for: self, relativeTo: .now)

@@ -1,6 +1,6 @@
 import Foundation
 import UserNotifications
-
+import CodexRateKit
 /// Manages alert notifications when quota drops below configured thresholds.
 /// Tracks which alerts have already fired per reset-window to avoid spam.
 @MainActor

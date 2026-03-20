@@ -1,4 +1,5 @@
 import AppKit
+import CodexRateKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -10,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let windowMode: Bool
   private var debugWindow: NSWindow?
   private var currentTier: StatusBarIcon.Tier = .unknown
+  private var hotkeyManager: HotkeyManager?
 
   init(windowMode: Bool = false) {
     self.windowMode = windowMode
@@ -68,6 +70,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     monitor.start()
+
+    // Set up global hotkey (⌘⇧K by default)
+    if !windowMode {
+      let hk = HotkeyManager()
+      hk.onToggle = { [weak self] in
+        self?.togglePopover()
+      }
+      hotkeyManager = hk
+    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {
@@ -82,6 +93,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return windowMode
   }
 
+  // MARK: - Popover Toggle
+
+  private func togglePopover() {
+    guard let button = statusItem?.button else { return }
+    if popover.isShown {
+      popover.performClose(nil)
+    } else {
+      popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+      popover.contentViewController?.view.window?.makeKey()
+      NSApp.activate(ignoringOtherApps: true)
+    }
+  }
+
   // MARK: - Status Item Click
 
   @objc private func handleStatusItemClick(_ sender: AnyObject?) {
@@ -94,12 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       statusItem.button?.performClick(nil)
       statusItem.menu = nil
     } else {
-      if popover.isShown {
-        popover.performClose(sender)
-      } else {
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        popover.contentViewController?.view.window?.makeKey()
-      }
+      togglePopover()
     }
   }
 
@@ -129,6 +148,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(soundToggle)
 
     menu.addItem(NSMenuItem.separator())
+
+    let hotkeyLabel = hotkeyManager?.config.enabled == true
+      ? "⌨️ 快捷键：\(hotkeyManager?.config.displayString ?? "⌘⇧K")"
+      : "⌨️ 快捷键：已关闭"
+    let hotkeyToggle = NSMenuItem(title: hotkeyLabel, action: #selector(toggleHotkey), keyEquivalent: "")
+    hotkeyToggle.target = self
+    menu.addItem(hotkeyToggle)
 
     let aboutItem = NSMenuItem(title: "关于 Codex Rate Watcher", action: #selector(showAbout), keyEquivalent: "")
     aboutItem.target = self
@@ -165,6 +191,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var config = alertManager.config
     config.playSound.toggle()
     alertManager.updateConfig(config)
+  }
+
+  @objc private func toggleHotkey() {
+    guard let hk = hotkeyManager else { return }
+    var config = hk.config
+    config.enabled.toggle()
+    hk.updateConfig(config)
   }
 
   @objc private func showAbout() {

@@ -2,27 +2,44 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." \&\& pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="Codex Rate Watcher"
 APP_DIR="$ROOT_DIR/dist/$APP_NAME.app"
-EXECUTABLE_NAME="CodexRateWatcherNative"
+GUI_EXECUTABLE="CodexRateWatcherNative"
+CLI_EXECUTABLE="codex-rate"
 VERSION="${1:-0.0.0}"
 
-echo "Building Codex Rate Watcher v${VERSION}..."
+echo "========================================"
+echo " Building Codex Rate Watcher v${VERSION}"
+echo "========================================"
 ARCH="$(uname -m)"
 echo "   Architecture: $ARCH"
 
-if [[ ! -f "$ROOT_DIR/.build/release/$EXECUTABLE_NAME" ]]; then
-  echo "   Building release..."
-  cd "$ROOT_DIR"
-  swift build -c release
+# Build all targets (GUI + CLI)
+echo ""
+echo "-- Building release (all targets)..."
+cd "$ROOT_DIR"
+swift build -c release
+
+BUILD_DIR="$ROOT_DIR/.build/release"
+
+# Verify both binaries exist
+if [[ ! -f "$BUILD_DIR/$GUI_EXECUTABLE" ]]; then
+  echo "ERROR: GUI binary not found at $BUILD_DIR/$GUI_EXECUTABLE"
+  exit 1
+fi
+if [[ ! -f "$BUILD_DIR/$CLI_EXECUTABLE" ]]; then
+  echo "ERROR: CLI binary not found at $BUILD_DIR/$CLI_EXECUTABLE"
+  exit 1
 fi
 
+# Package .app bundle
+echo ""
+echo "-- Packaging .app bundle..."
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
-cp "$ROOT_DIR/.build/release/$EXECUTABLE_NAME" "$APP_DIR/Contents/MacOS/$EXECUTABLE_NAME"
-
+cp "$BUILD_DIR/$GUI_EXECUTABLE" "$APP_DIR/Contents/MacOS/$GUI_EXECUTABLE"
 
 # Generate Info.plist
 cat > "$APP_DIR/Contents/Info.plist" << PLIST
@@ -53,4 +70,19 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
 </plist>
 PLIST
 
-echo "Built: $APP_DIR (v$VERSION)"
+# Copy CLI binary alongside .app
+echo ""
+echo "-- Copying CLI binary..."
+cp "$BUILD_DIR/$CLI_EXECUTABLE" "$ROOT_DIR/dist/$CLI_EXECUTABLE"
+
+# Summary
+echo ""
+echo "========================================"
+echo " Build complete!"
+echo "========================================"
+echo "   .app  : $APP_DIR"
+echo "   CLI   : $ROOT_DIR/dist/$CLI_EXECUTABLE"
+echo "   Version: $VERSION"
+echo ""
+echo " dist/ contents:"
+ls -lh "$ROOT_DIR/dist/"

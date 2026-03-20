@@ -53,6 +53,9 @@ Codex Rate Watcher lives in your macOS menu bar and gives you **total visibility
 | **🔔 Smart alert system** | Configurable threshold notifications (50%, 30%, 15%, 5%) with macOS native alerts |
 | **🎨 Dynamic status bar icon** | Color-coded menu bar icon changes based on quota health (green → yellow → orange → red) |
 | **🎨 Dark-themed UI** | Linear-inspired design with color-coded quota cards |
+| **⌨️ Global hotkey** | Toggle the popover from anywhere with ⌘⇧K (customizable) |
+| **🖥️ CLI tool (`codex-rate`)** | Terminal-first monitoring with `status`, `watch`, `profiles`, `history` + JSON output for scripting |
+| **🔍 Raycast extension** | Native Raycast integration — search "Codex" for instant quota checks |
 
 ## ✨ Key Features
 
@@ -84,6 +87,13 @@ Stay ahead of rate limits with **configurable threshold notifications** at 50%, 
 
 The menu bar icon is no longer static. It **changes color in real time** based on your quota health — **green** when you're comfortable, **yellow** when usage is climbing, **orange** when you should slow down, and **red** when you're critically low. This gives you **instant visual feedback** without ever opening the app, so you always know your quota status at a glance.
 
+### ⌨️ Global Hotkey
+
+Press **⌘⇧K** from anywhere to toggle the quota popover. The shortcut is:
+- Customizable (right-click the status bar icon → Hotkey settings)
+- Persisted across launches
+- Works with both global and in-app contexts
+
 ### 🛡️ Privacy-First Architecture
 
 All data stays on your machine. The app only communicates with the official ChatGPT Usage API (`chatgpt.com/backend-api/wham/usage`). No analytics, no telemetry, no third-party services. Your auth tokens never leave localhost.
@@ -97,6 +107,71 @@ All data stays on your machine. The app only communicates with the official Chat
 - **Debug window mode** — `--window` flag for standalone window (screenshots & debugging)
 - **Zero dependencies** — pure Apple system frameworks, no third-party packages
 - **Automated CI releases** — GitHub Actions builds universal `.app` bundles for both Apple Silicon and Intel on every tagged version
+- **Global hotkey** — ⌘⇧K toggles the popover from any app (customizable)
+- **CLI tool** — `codex-rate` for terminal monitoring, JSON output, and scripting
+- **Raycast extension** — native Raycast integration for instant quota checks
+- **Multi-target architecture** — shared CodexRateKit library for code reuse
+
+## 🖥️ CLI Tool
+
+v1.4.0 introduces `codex-rate`, a companion CLI tool for terminal-first monitoring.
+
+### Install
+
+```bash
+# Build from source
+swift build -c release --target codex-rate
+cp .build/release/codex-rate /usr/local/bin/
+
+# Or download from Releases (included in the zip alongside the .app)
+```
+
+### Usage
+
+```bash
+# Show current usage (beautiful Unicode table)
+codex-rate status
+
+# JSON output (for scripts, Raycast, piping)
+codex-rate status --json
+
+# List all saved auth profiles
+codex-rate profiles
+
+# Continuous watch mode (refreshes every 30s)
+codex-rate watch
+codex-rate watch --interval 15
+
+# Usage history with sparklines
+codex-rate history
+codex-rate history --hours 6
+
+# Help
+codex-rate help
+```
+
+All commands support `--json` for machine-readable output. Color output respects `NO_COLOR` and auto-detects non-TTY environments.
+
+## 🔍 Raycast Extension
+
+A native [Raycast](https://raycast.com) extension for instant quota checks without leaving your keyboard.
+
+### Commands
+
+| Command | Description |
+|---|---|
+| **Codex Usage Status** | Real-time quota overview with progress bars |
+| **Codex Profiles** | Browse and filter auth profiles |
+| **Codex Usage History** | Sparkline trends with statistics |
+
+### Setup
+
+1. Build and install the `codex-rate` CLI (see above)
+2. Open Raycast → Extensions → `+` → Import Extension
+3. Select the `raycast-extension/` directory
+4. Search "Codex" in Raycast to use
+
+The extension calls `codex-rate --json` under the hood — no separate API keys or configuration needed.
 
 ## 📥 Download
 
@@ -111,6 +186,8 @@ Pre-built `.app` bundles are available on the [Releases](https://github.com/sino
 2. Unzip and drag **Codex Rate Watcher.app** to `/Applications`
 3. Launch — it appears in your menu bar (not the Dock)
 4. Make sure Codex CLI is logged in (`~/.codex/auth.json` must exist)
+
+The release zip also includes the `codex-rate` CLI binary — copy it to `/usr/local/bin/` to use from your terminal.
 
 > **First launch:** The app is not notarized. Right-click → **Open**, or go to System Settings → Privacy & Security → **Open Anyway**.
 
@@ -133,12 +210,21 @@ If you prefer to build it yourself:
 git clone https://github.com/sinoon/codex-rate-watcher.git
 cd codex-rate-watcher
 
-# Run directly (debug mode)
+# Build everything (GUI + CLI)
+swift build -c release
+
+# Build .app bundle + CLI binary
+./scripts/build_app.sh 1.4.0
+
+# Run CLI directly
+swift run codex-rate status
+
+# Run GUI directly (debug mode)
 swift run
 
 # Or build a release .app bundle
 swift build -c release
-./scripts/build_app.sh 1.0.0
+./scripts/build_app.sh 1.4.0
 # → dist/Codex Rate Watcher.app
 ```
 
@@ -223,21 +309,37 @@ All data stays local. Nothing leaves your machine except calls to the official C
 
 ```
 codex-rate-watcher/
-├── Package.swift                       # Swift Package Manager manifest
-├── scripts/build_app.sh                # Build .app bundle
-├── docs/screenshot.jpg                 # App screenshot
-├── Sources/CodexRateWatcherNative/
-│   ├── main.swift                      # Entry point (--window flag)
-│   ├── AppDelegate.swift               # Status bar + popover / window
-│   ├── Models.swift                    # Data models, reset formatting
-│   ├── AuthStore.swift                 # Auth file I/O, JWT parsing
-│   ├── AuthFileWatcher.swift           # kqueue file monitoring
-│   ├── UsageAPIClient.swift            # ChatGPT Usage API client
-│   ├── UsageMonitor.swift              # Core monitor + multi-account
-│   ├── UsageEstimator.swift            # Burn-rate estimation
-│   ├── Persistence.swift               # Storage, orphan reconciliation
-│   └── PopoverViewController.swift     # AppKit GUI (dark theme)
-├── LICENSE
+├── Package.swift                       # Multi-target SPM manifest
+├── Sources/
+│   ├── CodexRateKit/                   # Shared library
+│   │   ├── Models.swift
+│   │   ├── AuthStore.swift
+│   │   ├── UsageAPIClient.swift
+│   │   ├── UsageEstimator.swift
+│   │   └── AppPaths.swift
+│   ├── CodexRateWatcherNative/         # GUI app
+│   │   ├── main.swift
+│   │   ├── AppDelegate.swift
+│   │   ├── HotkeyManager.swift         # ⌘⇧K global hotkey
+│   │   ├── AlertManager.swift
+│   │   ├── AuthFileWatcher.swift
+│   │   ├── StatusBarIconManager.swift
+│   │   ├── UsageMonitor.swift
+│   │   ├── Persistence.swift
+│   │   └── PopoverViewController.swift
+│   └── codex-rate/                     # CLI tool
+│       └── main.swift
+├── raycast-extension/                  # Raycast integration
+│   ├── package.json
+│   └── src/
+│       ├── utils.ts
+│       ├── status.tsx
+│       ├── profiles.tsx
+│       └── history.tsx
+├── scripts/build_app.sh
+├── docs/
+│   ├── screenshot.jpg
+│   └── v1.4.0-design.md
 └── README.md
 ```
 

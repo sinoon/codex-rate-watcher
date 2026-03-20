@@ -1,4 +1,5 @@
 import AppKit
+import CodexRateKit
 
 /// Manages dynamic menu-bar icon tinting based on quota health.
 @MainActor

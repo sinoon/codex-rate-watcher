@@ -1,0 +1,49 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "codex-rate-watcher",
+  "title": "Codex Rate Watcher",
+  "description": "Monitor your Codex CLI usage quotas directly from Raycast",
+  "icon": "extension-icon.png",
+  "author": "patchwork-body",
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "status",
+      "title": "Codex Usage Status",
+      "subtitle": "View current quota usage",
+      "description": "Shows current Codex CLI usage across all quota windows",
+      "mode": "view"
+    },
+    {
+      "name": "profiles",
+      "title": "Codex Profiles",
+      "subtitle": "Manage auth profiles",
+      "description": "List and view all saved Codex authentication profiles",
+      "mode": "view"
+    },
+    {
+      "name": "history",
+      "title": "Codex Usage History",
+      "subtitle": "View usage trends",
+      "description": "Shows usage history with sparkline visualization",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.83.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.11",
+    "@types/node": "20.8.10",
+    "@types/react": "18.3.3",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.4.5"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "fix-lint": "ray lint --fix",
+    "lint": "ray lint"
+  }
+}
