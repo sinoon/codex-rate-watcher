@@ -1,4 +1,5 @@
 import AppKit
+import UserNotifications
 import CodexRateKit
 
 @MainActor
@@ -12,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var debugWindow: NSWindow?
   private var currentTier: StatusBarIcon.Tier = .unknown
   private var hotkeyManager: HotkeyManager?
+  private var autoSwitchMenuItem: NSMenuItem?
 
   init(windowMode: Bool = false) {
     self.windowMode = windowMode
@@ -21,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Lifecycle
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    UNUserNotificationCenter.current().delegate = self
     buildMainMenu()
 
     let viewController = PopoverViewController(monitor: monitor)
@@ -69,6 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.alertManager.evaluate(state: state)
       }
     }
+    // Wire auto-switch notification
+    monitor.onAutoSwitch = { [weak self] fromName, toName, reason in
+      self?.alertManager.sendAutoSwitchNotification(fromName: fromName, toName: toName, reason: reason)
+    }
+
     monitor.start()
 
     // Set up global hotkey (⇧⌃⌥K by default)
@@ -197,6 +205,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     alertManager.updateConfig(config)
   }
 
+  @objc private func toggleAutoSwitch() {
+    monitor.setAutoSwitch(enabled: !monitor.autoSwitchConfig.enabled)
+    // Update menu item title
+    autoSwitchMenuItem?.title = "\(Copy.autoSwitchMenuLabel)：\(monitor.autoSwitchConfig.enabled ? "已开启" : "已关闭")"
+  }
+
   @objc private func toggleHotkey() {
     guard let hk = hotkeyManager else { return }
     var config = hk.config
@@ -287,5 +301,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let primary = snapshot.rateLimit.primaryWindow
     button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
+  }
+}
+
+
+// MARK: - UNUserNotificationCenterDelegate
+
+extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    if response.actionIdentifier == "UNDO_SWITCH" {
+      Task { @MainActor in
+        await self.monitor.undoLastAutoSwitch()
+      }
+    }
+    completionHandler()
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    // Show notification banner even when app is in foreground
+    completionHandler([.banner, .sound])
   }
 }

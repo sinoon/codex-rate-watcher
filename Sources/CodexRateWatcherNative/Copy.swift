@@ -203,4 +203,20 @@ enum Copy {
     }
     return label
   }
+
+  // MARK: - Auto-Switch
+
+  static let autoSwitchEnabled = "自动切换已开启"
+  static let autoSwitchDisabled = "自动切换已关闭"
+
+  static func autoSwitchNotifyTitle(to name: String) -> String {
+    "已自动切换到 \(name)"
+  }
+  static func autoSwitchNotifyBody(from: String, to: String, reason: String) -> String {
+    "\(from) → \(to) · \(reason)"
+  }
+  static let autoSwitchUndoAction = "撤销切换"
+  static let autoSwitchMenuLabel = "自动切换账号"
+  static let autoSwitchCooldown = "冷却中，稍后再试"
+
 }
