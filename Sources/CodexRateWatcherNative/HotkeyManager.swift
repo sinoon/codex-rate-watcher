@@ -5,14 +5,13 @@ import Foundation
 
 /// Manages a global keyboard shortcut for toggling the popover.
 ///
-/// Uses the standard NSEvent global + local monitors approach.
-/// After registration, performs a **conflict probe** — posts a synthetic
-/// keyDown and checks whether the monitor receives it within a timeout.
-/// If not, it means another app intercepted the shortcut first.
+/// Uses standard NSEvent global + local monitors (no special permissions).
+/// Default shortcut: ⌃⌥U (Control + Option + R).
 ///
-/// When a conflict is detected, enumerates running apps to guess which
-/// known shortcut-grabbing apps (Raycast, Alfred, Karabiner, etc.) might
-/// be responsible, and notifies via `onConflict`.
+/// After registration, performs a **static conflict check** by scanning
+/// running applications against a database of known shortcut mappings.
+/// If a likely conflict is found, notifies via `onConflict` with the
+/// suspected app name, so the user can decide what to do.
 @MainActor
 final class HotkeyManager {
 
@@ -20,10 +19,10 @@ final class HotkeyManager {
 
   struct Config: Codable, Equatable, Sendable {
     var enabled: Bool = true
-    var keyCode: UInt16 = 0x28  // kVK_ANSI_K
+    var keyCode: UInt16 = 0x20  // kVK_ANSI_U
     var modifiers: UInt = 0     // stored as raw NSEvent.ModifierFlags
-    // Default: .command + .shift
-    static let defaultModifiers: NSEvent.ModifierFlags = [.command, .shift]
+    // Default: .control + .option
+    static let defaultModifiers: NSEvent.ModifierFlags = [.control, .option]
 
     var effectiveModifiers: NSEvent.ModifierFlags {
       modifiers == 0 ? Self.defaultModifiers : NSEvent.ModifierFlags(rawValue: modifiers)
@@ -68,59 +67,69 @@ final class HotkeyManager {
     let message: String
   }
 
-  /// Well-known apps that register global shortcuts and may conflict
+  /// Known global shortcuts registered by popular apps.
+  /// Key: "bundleID", Value: list of (keyCode, modifierFlags) combos the app is known to use.
+  /// This is a best-effort heuristic — apps can be reconfigured by users.
+  private struct KnownShortcut {
+    let bundleID: String
+    let appName: String
+    let keyCode: UInt16
+    let modifiers: NSEvent.ModifierFlags
+  }
+
+  private static let knownShortcuts: [KnownShortcut] = [
+    // Raycast defaults
+    KnownShortcut(bundleID: "com.raycast.macos", appName: "Raycast", keyCode: 0x31, modifiers: [.option]),  // ⌥Space
+    KnownShortcut(bundleID: "com.raycast.macos", appName: "Raycast", keyCode: 0x28, modifiers: [.command, .shift]),  // ⌘⇧K (snippets)
+    // Alfred defaults
+    KnownShortcut(bundleID: "com.runningwithcrayons.Alfred", appName: "Alfred", keyCode: 0x31, modifiers: [.option]),  // ⌥Space
+    KnownShortcut(bundleID: "com.alfredapp.Alfred", appName: "Alfred", keyCode: 0x31, modifiers: [.option]),
+    // Spotlight
+    KnownShortcut(bundleID: "com.apple.Spotlight", appName: "Spotlight", keyCode: 0x31, modifiers: [.command]),  // ⌘Space
+    // BetterTouchTool — varies, but common
+    KnownShortcut(bundleID: "com.hegenberg.BetterTouchTool", appName: "BetterTouchTool", keyCode: 0x28, modifiers: [.command, .shift]),
+    // VS Code — ⌘⇧K is delete line
+    KnownShortcut(bundleID: "com.microsoft.VSCode", appName: "VS Code", keyCode: 0x28, modifiers: [.command, .shift]),
+    // iTerm2 — ⌘⇧K is clear buffer (local, not global)
+    // Magnet window manager
+    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x0F, modifiers: [.control, .option]),  // ⌃⌥R (right half)
+    // Rectangle window manager
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x0F, modifiers: [.control, .option]),  // ⌃⌥R
+    // Moom
+    KnownShortcut(bundleID: "com.manytricks.Moom", appName: "Moom", keyCode: 0x0F, modifiers: [.control, .option]),
+    // Spectacle
+    KnownShortcut(bundleID: "com.divisiblebyzero.Spectacle", appName: "Spectacle", keyCode: 0x0F, modifiers: [.option, .command]),  // ⌘⌥R
+  ]
+
+  /// Well-known apps that are heavy shortcut users (for general warning)
   private static let knownHotkeyApps: [String: String] = [
     "com.raycast.macos": "Raycast",
     "com.runningwithcrayons.Alfred": "Alfred",
     "com.alfredapp.Alfred": "Alfred",
-    "io.pock.pock": "Pock",
     "com.hegenberg.BetterTouchTool": "BetterTouchTool",
     "org.pqrs.Karabiner-Elements": "Karabiner-Elements",
-    "com.googlecode.iterm2": "iTerm2",
-    "com.sublimetext.4": "Sublime Text",
-    "com.microsoft.VSCode": "VS Code",
-    "com.jetbrains.intellij": "IntelliJ IDEA",
-    "com.apple.Safari": "Safari",
     "org.hammerspoon.Hammerspoon": "Hammerspoon",
-    "com.surteesstudios.Bartender": "Bartender",
-    "com.lwouis.alt-tab-macos": "AltTab",
-    "at.obdev.LaunchBar": "LaunchBar",
-    "com.spotify.client": "Spotify",
-    "org.sbarex.SourceCodeSyntaxHighlight": "SyntaxHighlight",
-    "com.toggl.danern": "Toggl Track",
-    "com.todoist.mac.Todoist": "Todoist",
-    "com.hnc.Discord": "Discord",
-    "com.tinyspeck.slackmacgap": "Slack",
-    "us.zoom.xos": "Zoom",
-    "com.linear": "Linear",
-    "com.figma.Desktop": "Figma",
-    "com.pop.pop.app": "Pop",
     "com.crowdcafe.windowmagnet": "Magnet",
+    "com.knollsoft.Rectangle": "Rectangle",
     "com.manytricks.Moom": "Moom",
     "com.divisiblebyzero.Spectacle": "Spectacle",
-    "com.mathew-kurian.Sip": "Sip",
-    "com.if.Paste": "Paste",
-    "com.clipy-app.Clipy": "Clipy",
-    "net.shinyfrog.bear": "Bear",
-    "com.flexibits.fantastical2.mac": "Fantastical",
+    "at.obdev.LaunchBar": "LaunchBar",
+    "com.lwouis.alt-tab-macos": "AltTab",
+    "com.surteesstudios.Bartender": "Bartender",
   ]
 
   // MARK: - Properties
 
   private(set) var config: Config
   var onToggle: (() -> Void)?
-  /// Called when conflict is detected after registration
+  /// Called when a potential conflict is detected
   var onConflict: ((ConflictInfo) -> Void)?
 
-  /// Current conflict status (nil = no conflict or not yet probed)
+  /// Current conflict status (nil = no conflict detected)
   private(set) var currentConflict: ConflictInfo?
 
   private var globalMonitor: Any?
   private var localMonitor: Any?
-
-  /// Flag used during conflict probe
-  private var probeReceived: Bool = false
-  private var isProbing: Bool = false
 
   private static let configURL: URL = {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -135,10 +144,7 @@ final class HotkeyManager {
     config = Self.loadConfig()
     if config.enabled {
       startMonitoring()
-      // Delay probe slightly to let the app settle after launch
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-        self?.probeForConflict()
-      }
+      checkForConflicts()
     }
   }
 
@@ -152,19 +158,17 @@ final class HotkeyManager {
     saveConfig()
     if config.enabled {
       startMonitoring()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        self?.probeForConflict()
-      }
+      checkForConflicts()
     }
   }
 
   /// Manually re-run conflict detection
-  func recheckConflict() {
+  func recheckConflicts() {
     currentConflict = nil
-    probeForConflict()
+    checkForConflicts()
   }
 
-  /// Human-readable status line
+  /// Human-readable status for the right-click menu
   var statusLine: String {
     if !config.enabled { return "快捷键已关闭" }
     if let conflict = currentConflict {
@@ -186,12 +190,7 @@ final class HotkeyManager {
       let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
       if event.keyCode == targetKeyCode && eventMods == targetMods {
         Task { @MainActor [weak self] in
-          guard let self else { return }
-          if self.isProbing {
-            self.probeReceived = true
-          } else {
-            self.onToggle?()
-          }
+          self?.onToggle?()
         }
       }
     }
@@ -201,19 +200,14 @@ final class HotkeyManager {
       let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
       if event.keyCode == targetKeyCode && eventMods == targetMods {
         Task { @MainActor [weak self] in
-          guard let self else { return }
-          if self.isProbing {
-            self.probeReceived = true
-          } else {
-            self.onToggle?()
-          }
+          self?.onToggle?()
         }
         return nil  // consume the event
       }
       return event
     }
 
-    NSLog("[HotkeyManager] Registered NSEvent monitors for \(config.displayString)")
+    NSLog("[HotkeyManager] Registered \(config.displayString)")
   }
 
   private func stopMonitoring() {
@@ -227,83 +221,60 @@ final class HotkeyManager {
     }
   }
 
-  // MARK: - Conflict Probe
+  // MARK: - Static Conflict Detection
 
-  /// Posts a synthetic keyDown event with our shortcut and checks
-  /// if the global monitor receives it. If it doesn't within a timeout,
-  /// another app is likely intercepting the combo.
-  private func probeForConflict() {
-    guard config.enabled else { return }
+  /// Check running apps against known shortcut database to detect
+  /// likely conflicts. This is a heuristic — it checks default shortcuts
+  /// of popular apps, not actual runtime registrations.
+  private func checkForConflicts() {
+    let runningBundleIDs = Set(
+      NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier }
+    )
 
-    isProbing = true
-    probeReceived = false
+    let myKeyCode = config.keyCode
+    let myMods = config.effectiveModifiers.intersection([.command, .shift, .option, .control])
 
-    // Build CGEventFlags from our config
-    var cgFlags: CGEventFlags = []
-    let m = config.effectiveModifiers
-    if m.contains(.command) { cgFlags.insert(.maskCommand) }
-    if m.contains(.shift)   { cgFlags.insert(.maskShift) }
-    if m.contains(.option)  { cgFlags.insert(.maskAlternate) }
-    if m.contains(.control) { cgFlags.insert(.maskControl) }
-
-    // Post a synthetic key event
-    if let event = CGEvent(keyboardEventSource: nil, virtualKey: config.keyCode, keyDown: true) {
-      event.flags = cgFlags
-      event.post(tap: .cgAnnotatedSessionEventTap)
-
-      // Also post keyUp to clean up
-      if let upEvent = CGEvent(keyboardEventSource: nil, virtualKey: config.keyCode, keyDown: false) {
-        upEvent.flags = cgFlags
-        upEvent.post(tap: .cgAnnotatedSessionEventTap)
-      }
-    }
-
-    // Check after a short delay if we received it
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-      guard let self, self.isProbing else { return }
-      self.isProbing = false
-
-      if self.probeReceived {
-        NSLog("[HotkeyManager] ✅ Probe OK — \(self.config.displayString) is working")
-        self.currentConflict = nil
-      } else {
-        // Conflict detected — find who might be grabbing it
-        let suspects = self.detectSuspectedApps()
-        let suspectNames = suspects.isEmpty ? ["未知应用"] : suspects
-
-        let message: String
-        if suspects.isEmpty {
-          message = "可能被其他应用抢占"
-        } else {
-          message = "可能被 \(suspects.joined(separator: "、")) 抢占"
+    // Check for exact match in known shortcuts database
+    var exactConflicts: [String] = []
+    for known in Self.knownShortcuts {
+      guard runningBundleIDs.contains(known.bundleID) else { continue }
+      let knownMods = known.modifiers.intersection([.command, .shift, .option, .control])
+      if known.keyCode == myKeyCode && knownMods == myMods {
+        if !exactConflicts.contains(known.appName) {
+          exactConflicts.append(known.appName)
         }
-
-        let info = ConflictInfo(
-          shortcut: self.config.displayString,
-          suspectedApps: suspectNames,
-          message: message
-        )
-        self.currentConflict = info
-        self.onConflict?(info)
-
-        NSLog("[HotkeyManager] ⚠️ Conflict detected for \(self.config.displayString) — \(message)")
-      }
-    }
-  }
-
-  /// Scan running apps for known hotkey-heavy applications
-  private func detectSuspectedApps() -> [String] {
-    let runningApps = NSWorkspace.shared.runningApplications
-    var suspects: [String] = []
-
-    for app in runningApps {
-      guard let bundleID = app.bundleIdentifier else { continue }
-      if let name = Self.knownHotkeyApps[bundleID] {
-        suspects.append(name)
       }
     }
 
-    return suspects
+    if !exactConflicts.isEmpty {
+      let names = exactConflicts.joined(separator: "、")
+      let info = ConflictInfo(
+        shortcut: config.displayString,
+        suspectedApps: exactConflicts,
+        message: "\(names) 默认也使用 \(config.displayString)"
+      )
+      currentConflict = info
+      onConflict?(info)
+      NSLog("[HotkeyManager] ⚠️ Potential conflict: \(config.displayString) — \(info.message)")
+      NSLog("[HotkeyManager] 💡 Tip: check \(names) settings, or change shortcut in right-click menu")
+      return
+    }
+
+    // No exact match — check if any heavy-shortcut apps are running (informational only)
+    var hotkeyAppsRunning: [String] = []
+    for (bundleID, name) in Self.knownHotkeyApps {
+      if runningBundleIDs.contains(bundleID) {
+        hotkeyAppsRunning.append(name)
+      }
+    }
+
+    if !hotkeyAppsRunning.isEmpty {
+      NSLog("[HotkeyManager] ℹ️ \(config.displayString) registered. Note: \(hotkeyAppsRunning.joined(separator: ", ")) running (no known conflict)")
+    } else {
+      NSLog("[HotkeyManager] ✅ \(config.displayString) registered — no conflicts detected")
+    }
+
+    currentConflict = nil
   }
 
   // MARK: - Persistence

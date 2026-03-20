@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     monitor.start()
 
-    // Set up global hotkey (⌘⇧K by default)
+    // Set up global hotkey (⌃⌥U by default)
     if !windowMode {
       let hk = HotkeyManager()
       hk.onToggle = { [weak self] in
@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(NSMenuItem.separator())
 
     let hotkeyLabel = hotkeyManager?.config.enabled == true
-      ? "⌨️ 快捷键：\(hotkeyManager?.statusLine ?? "⌘⇧K")"
+      ? "⌨️ 快捷键：\(hotkeyManager?.statusLine ?? "⌃⌥U")"
       : "⌨️ 快捷键：已关闭"
     let hotkeyToggle = NSMenuItem(title: hotkeyLabel, action: #selector(toggleHotkey), keyEquivalent: "")
     hotkeyToggle.target = self
