@@ -66,7 +66,7 @@ Don't just monitor — predict. The burn-rate engine uses linear regression over
 
 ### 🌐 Work Anywhere
 
-v1.4.0 brings Codex rate monitoring to every surface you work on.
+Codex rate monitoring available on to every surface you work on.
 
 - **⌨️ Global Hotkey** — `⇧⌃⌥K` toggles the popover from any app (customizable)
 - **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
@@ -81,6 +81,17 @@ Managing multiple ChatGPT Pro or Team accounts? Covered.
 - **One-click switch** — current auth is auto-backed up before swapping
 - **Plan badges** — Plus vs. Team clearly labeled in the UI
 - **Self-healing store** — orphaned snapshots are auto-discovered and registered on startup (SHA256-deduplicated)
+
+
+### 🔄 Auto-Switch
+
+v1.5.0 introduces automatic account switching — the app detects when your current account is running low and seamlessly switches to the best available profile.
+
+- **Smart trigger** — only switches when the best profile's score leads by 20+ points (conservative threshold)
+- **5-minute cooldown** — prevents flip-flopping between accounts
+- **Undo via notification** — every auto-switch sends a macOS notification with an "Undo" action button
+- **Off by default** — enable via right-click menu → "自动切换账号"
+- **Persisted config** — your preference survives app restarts
 
 ---
 
@@ -123,7 +134,7 @@ codex-rate history --hours 6
 
 ```
 ╭─────────────────────────────────────────╮
-│         Codex Rate Watcher v1.4.1       │
+│         Codex Rate Watcher v1.5.0       │
 ╰─────────────────────────────────────────╯
 
   Account: user@example.com (Pro)
@@ -173,6 +184,7 @@ Press **⇧⌃⌥K** from any app to toggle the quota popover. No need to click,
 - Persisted across launches
 - Works in both global and in-app contexts
 - Smart conflict detection — warns if your shortcut overlaps with Rectangle, Raycast, etc.
+- **CGEventTap-based** — reliable even when other apps (Rectangle, Raycast, AltTab) intercept key events
 
 ---
 
@@ -215,7 +227,7 @@ cd codex-rate-watcher
 swift build -c release
 
 # Build .app bundle + CLI binary
-./scripts/build_app.sh 1.4.1
+./scripts/build_app.sh 1.5.0
 
 # Run CLI directly
 swift run codex-rate status
