@@ -402,7 +402,7 @@ final class PopoverViewController: NSViewController {
     card.addSubview(reviewDetail)
 
     let cPad = LN.cardPad
-    let trackW: CGFloat = 100
+    let trackW: CGFloat = 70
 
     NSLayoutConstraint.activate([
       sectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
@@ -411,11 +411,11 @@ final class PopoverViewController: NSViewController {
       // Weekly row
       weeklyLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       weeklyLabel.topAnchor.constraint(equalTo: sectionLabel.bottomAnchor, constant: 8),
-      weeklyLabel.widthAnchor.constraint(equalToConstant: 56),
+      weeklyLabel.widthAnchor.constraint(equalToConstant: 50),
 
       weeklyPct.leadingAnchor.constraint(equalTo: weeklyLabel.trailingAnchor, constant: 4),
       weeklyPct.centerYAnchor.constraint(equalTo: weeklyLabel.centerYAnchor),
-      weeklyPct.widthAnchor.constraint(equalToConstant: 40),
+      weeklyPct.widthAnchor.constraint(equalToConstant: 36),
 
       weeklyTrack.leadingAnchor.constraint(equalTo: weeklyPct.trailingAnchor, constant: 6),
       weeklyTrack.centerYAnchor.constraint(equalTo: weeklyLabel.centerYAnchor),
@@ -424,22 +424,23 @@ final class PopoverViewController: NSViewController {
 
       weeklyDetail.leadingAnchor.constraint(equalTo: weeklyTrack.trailingAnchor, constant: 8),
       weeklyDetail.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      weeklyDetail.centerYAnchor.constraint(equalTo: weeklyLabel.centerYAnchor),
+      weeklyDetail.firstBaselineAnchor.constraint(equalTo: weeklyLabel.firstBaselineAnchor),
 
       // Divider
       divider.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       divider.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      divider.topAnchor.constraint(equalTo: weeklyLabel.bottomAnchor, constant: 6),
+      divider.topAnchor.constraint(greaterThanOrEqualTo: weeklyDetail.bottomAnchor, constant: 4),
+      divider.topAnchor.constraint(greaterThanOrEqualTo: weeklyLabel.bottomAnchor, constant: 6),
       divider.heightAnchor.constraint(equalToConstant: 1),
 
       // Review row
       reviewLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       reviewLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 6),
-      reviewLabel.widthAnchor.constraint(equalToConstant: 56),
+      reviewLabel.widthAnchor.constraint(equalToConstant: 50),
 
       reviewPct.leadingAnchor.constraint(equalTo: reviewLabel.trailingAnchor, constant: 4),
       reviewPct.centerYAnchor.constraint(equalTo: reviewLabel.centerYAnchor),
-      reviewPct.widthAnchor.constraint(equalToConstant: 40),
+      reviewPct.widthAnchor.constraint(equalToConstant: 36),
 
       reviewTrack.leadingAnchor.constraint(equalTo: reviewPct.trailingAnchor, constant: 6),
       reviewTrack.centerYAnchor.constraint(equalTo: reviewLabel.centerYAnchor),
@@ -448,7 +449,7 @@ final class PopoverViewController: NSViewController {
 
       reviewDetail.leadingAnchor.constraint(equalTo: reviewTrack.trailingAnchor, constant: 8),
       reviewDetail.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      reviewDetail.centerYAnchor.constraint(equalTo: reviewLabel.centerYAnchor),
+      reviewDetail.firstBaselineAnchor.constraint(equalTo: reviewLabel.firstBaselineAnchor),
 
       reviewLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
     ])
@@ -500,8 +501,9 @@ final class PopoverViewController: NSViewController {
   private func configureDetailLabel(_ label: NSTextField) {
     label.font = .systemFont(ofSize: LN.fontMicro, weight: .regular)
     label.textColor = LN.textMuted
-    label.lineBreakMode = .byTruncatingTail
-    label.maximumNumberOfLines = 1
+    label.lineBreakMode = .byWordWrapping
+    label.maximumNumberOfLines = 2
+    label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     label.translatesAutoresizingMaskIntoConstraints = false
   }
 
@@ -725,7 +727,7 @@ final class PopoverViewController: NSViewController {
   }
 
   private func renderQuotas(snapshot: UsageSnapshot, state: UsageMonitor.State) {
-    let trackW: CGFloat = 100
+    let trackW: CGFloat = 70
 
     if let w = snapshot.rateLimit.secondaryWindow {
       weeklyLabel.isHidden = false
