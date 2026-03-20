@@ -6,7 +6,7 @@ import Foundation
 /// Manages a global keyboard shortcut for toggling the popover.
 ///
 /// Uses standard NSEvent global + local monitors (no special permissions).
-/// Default shortcut: ⌃⌥U (Control + Option + R).
+/// Default shortcut: ⇧⌃⌥K (Shift + Control + Option + K).
 ///
 /// After registration, performs a **static conflict check** by scanning
 /// running applications against a database of known shortcut mappings.
@@ -19,10 +19,10 @@ final class HotkeyManager {
 
   struct Config: Codable, Equatable, Sendable {
     var enabled: Bool = true
-    var keyCode: UInt16 = 0x20  // kVK_ANSI_U
+    var keyCode: UInt16 = 0x28  // kVK_ANSI_K
     var modifiers: UInt = 0     // stored as raw NSEvent.ModifierFlags
     // Default: .control + .option
-    static let defaultModifiers: NSEvent.ModifierFlags = [.control, .option]
+    static let defaultModifiers: NSEvent.ModifierFlags = [.shift, .control, .option]
 
     var effectiveModifiers: NSEvent.ModifierFlags {
       modifiers == 0 ? Self.defaultModifiers : NSEvent.ModifierFlags(rawValue: modifiers)
@@ -78,27 +78,57 @@ final class HotkeyManager {
   }
 
   private static let knownShortcuts: [KnownShortcut] = [
-    // Raycast defaults
-    KnownShortcut(bundleID: "com.raycast.macos", appName: "Raycast", keyCode: 0x31, modifiers: [.option]),  // ⌥Space
-    KnownShortcut(bundleID: "com.raycast.macos", appName: "Raycast", keyCode: 0x28, modifiers: [.command, .shift]),  // ⌘⇧K (snippets)
-    // Alfred defaults
-    KnownShortcut(bundleID: "com.runningwithcrayons.Alfred", appName: "Alfred", keyCode: 0x31, modifiers: [.option]),  // ⌥Space
+    // ── Raycast ──
+    KnownShortcut(bundleID: "com.raycast.macos", appName: "Raycast", keyCode: 0x31, modifiers: [.option]),           // ⌥Space
+    KnownShortcut(bundleID: "com.raycast.macos", appName: "Raycast", keyCode: 0x28, modifiers: [.command, .shift]),   // ⌘⇧K snippets
+
+    // ── Alfred ──
+    KnownShortcut(bundleID: "com.runningwithcrayons.Alfred", appName: "Alfred", keyCode: 0x31, modifiers: [.option]),
     KnownShortcut(bundleID: "com.alfredapp.Alfred", appName: "Alfred", keyCode: 0x31, modifiers: [.option]),
-    // Spotlight
-    KnownShortcut(bundleID: "com.apple.Spotlight", appName: "Spotlight", keyCode: 0x31, modifiers: [.command]),  // ⌘Space
-    // BetterTouchTool — varies, but common
+
+    // ── Spotlight ──
+    KnownShortcut(bundleID: "com.apple.Spotlight", appName: "Spotlight", keyCode: 0x31, modifiers: [.command]),
+
+    // ── BetterTouchTool ──
     KnownShortcut(bundleID: "com.hegenberg.BetterTouchTool", appName: "BetterTouchTool", keyCode: 0x28, modifiers: [.command, .shift]),
-    // VS Code — ⌘⇧K is delete line
+
+    // ── VS Code ──
     KnownShortcut(bundleID: "com.microsoft.VSCode", appName: "VS Code", keyCode: 0x28, modifiers: [.command, .shift]),
-    // iTerm2 — ⌘⇧K is clear buffer (local, not global)
-    // Magnet window manager
-    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x0F, modifiers: [.control, .option]),  // ⌃⌥R (right half)
-    // Rectangle window manager
-    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x0F, modifiers: [.control, .option]),  // ⌃⌥R
-    // Moom
+
+    // ── Rectangle — uses ⌃⌥ + many keys for window management ──
+    // Halves
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x7B, modifiers: [.control, .option]),  // ⌃⌥← left half
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x7C, modifiers: [.control, .option]),  // ⌃⌥→ right half
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x7E, modifiers: [.control, .option]),  // ⌃⌥↑ top half
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x7D, modifiers: [.control, .option]),  // ⌃⌥↓ bottom half
+    // Maximize / Center / Restore
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x24, modifiers: [.control, .option]),  // ⌃⌥↩ maximize
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x08, modifiers: [.control, .option]),  // ⌃⌥C center
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x33, modifiers: [.control, .option]),  // ⌃⌥⌫ restore
+    // Corners
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x20, modifiers: [.control, .option]),  // ⌃⌥U top-left
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x22, modifiers: [.control, .option]),  // ⌃⌥I top-right
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x26, modifiers: [.control, .option]),  // ⌃⌥J bottom-left
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x28, modifiers: [.control, .option]),  // ⌃⌥K bottom-right
+    // Thirds
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x02, modifiers: [.control, .option]),  // ⌃⌥D first third
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x03, modifiers: [.control, .option]),  // ⌃⌥F center third
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x05, modifiers: [.control, .option]),  // ⌃⌥G last third
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x0E, modifiers: [.control, .option]),  // ⌃⌥E first two-thirds
+    KnownShortcut(bundleID: "com.knollsoft.Rectangle", appName: "Rectangle", keyCode: 0x11, modifiers: [.control, .option]),  // ⌃⌥T last two-thirds
+
+    // ── Magnet ──
+    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x7B, modifiers: [.control, .option]),
+    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x7C, modifiers: [.control, .option]),
+    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x7E, modifiers: [.control, .option]),
+    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x7D, modifiers: [.control, .option]),
+    KnownShortcut(bundleID: "com.crowdcafe.windowmagnet", appName: "Magnet", keyCode: 0x24, modifiers: [.control, .option]),
+
+    // ── Moom ──
     KnownShortcut(bundleID: "com.manytricks.Moom", appName: "Moom", keyCode: 0x0F, modifiers: [.control, .option]),
-    // Spectacle
-    KnownShortcut(bundleID: "com.divisiblebyzero.Spectacle", appName: "Spectacle", keyCode: 0x0F, modifiers: [.option, .command]),  // ⌘⌥R
+
+    // ── Spectacle ──
+    KnownShortcut(bundleID: "com.divisiblebyzero.Spectacle", appName: "Spectacle", keyCode: 0x0F, modifiers: [.option, .command]),
   ]
 
   /// Well-known apps that are heavy shortcut users (for general warning)
