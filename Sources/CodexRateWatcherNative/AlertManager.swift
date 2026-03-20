@@ -87,7 +87,7 @@ final class AlertManager {
         firedAlerts[key] = 0
         sendNotification(
           title: "\(windowLabel) 已耗尽",
-          body: "配额已用完，等待重置或切换账号",
+          body: Copy.alertExhaustedBody,
           urgency: .critical
         )
       }
@@ -116,15 +116,15 @@ final class AlertManager {
 
   private func urgencyBody(remaining: Int, windowLabel: String) -> String {
     if remaining <= 5 {
-      return "配额即将耗尽，建议立即切换账号"
+      return "即将耗尽，建议切换账号"
     }
     if remaining <= 15 {
-      return "配额较低，注意控制用量"
+      return "较低，注意控制用量"
     }
     if remaining <= 30 {
-      return "\(windowLabel)已消耗过半，请关注剩余额度"
+      return "\(windowLabel)已消耗过半，关注余量"
     }
-    return "\(windowLabel)剩余 \(remaining)%，继续关注用量"
+    return "\(windowLabel)剩余 \(remaining)%"
   }
 
   private enum NotificationUrgency {

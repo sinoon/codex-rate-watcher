@@ -64,7 +64,7 @@ public enum UsageEstimator {
       .sorted { $0.capturedAt < $1.capturedAt }
 
     guard !sameWindow.isEmpty else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "采样中")
     }
 
     let cutoff = Date().addingTimeInterval(-sampleWindow)
@@ -76,22 +76,22 @@ public enum UsageEstimator {
           let firstPercent = usedPercent(first),
           let lastPercent = usedPercent(last)
     else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "采样中")
     }
 
     let elapsed = last.capturedAt.timeIntervalSince(first.capturedAt)
     guard elapsed >= 5 * 60 else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "样本不足，稍后估算")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "估算中")
     }
 
     let delta = lastPercent - firstPercent
     guard delta > 0.2 else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: 0, statusText: "消耗平稳")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: 0, statusText: "平稳")
     }
 
     let percentPerHour = delta / elapsed * 3600
     guard percentPerHour > 0 else {
-      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "消耗平稳")
+      return BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "平稳")
     }
 
     let timeUntilExhausted = currentRemainingPercent / percentPerHour * 3600
@@ -100,7 +100,7 @@ public enum UsageEstimator {
       return BurnEstimate(
         timeUntilExhausted: nil,
         percentPerHour: percentPerHour,
-        statusText: "按当前速率，重置前不会耗尽"
+        statusText: "充足"
       )
     }
 

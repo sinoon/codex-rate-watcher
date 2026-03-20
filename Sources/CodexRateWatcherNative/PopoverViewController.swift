@@ -791,10 +791,10 @@ final class PopoverViewController: NSViewController {
     profileStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
     let others = state.profiles.filter { $0.id != state.activeProfileID && $0.validationError?.contains("402") != true }
     let availCount = others.filter { $0.validationError == nil && $0.latestUsage?.isBlocked != true }.count
-    profileHeader.stringValue = "Other Profiles  \u{00B7}  \(availCount) available"
+    profileHeader.stringValue = Copy.profileHeader(available: availCount)
 
     if others.isEmpty {
-      profileHeader.stringValue = "No other profiles"
+      profileHeader.stringValue = Copy.profileHeader(available: 0)
       return
     }
 

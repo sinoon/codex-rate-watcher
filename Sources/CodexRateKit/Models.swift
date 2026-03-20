@@ -306,16 +306,16 @@ extension AuthProfileUsageSummary {
   public var blockingLabel: String? {
     if isWeeklyExhausted {
       if let resetLabel = nextResetLabel(for: secondaryResetAt) {
-        return "周额度耗尽，\(resetLabel) 重置"
+        return "周额度耗尽 · \(resetLabel) 重置"
       }
-      return "周额度已耗尽"
+      return "周额度耗尽"
     }
     if isPrimaryExhausted {
       let resetLabel = nextResetLabel(for: primaryResetAt)
       if let resetLabel {
-        return "5h 耗尽，\(resetLabel) 重置"
+        return "5h耗尽 · \(resetLabel) 重置"
       }
-      return "5h 额度已耗尽"
+      return "5h耗尽"
     }
     if !isAllowed || limitReached { return "不可用" }
     return nil

@@ -34,7 +34,7 @@ final class UsageMonitor {
 
     var lastUpdatedLabel: String {
       guard let lastUpdatedAt else {
-        return "等待首次同步"
+        return "等待首次同步"  // Keep — only shown once
       }
       return "更新于 \(RelativeDateTimeFormatter().localizedString(for: lastUpdatedAt, relativeTo: .now))"
     }
@@ -43,22 +43,22 @@ final class UsageMonitor {
       guard let snapshot else { return nil }
 
       if let weeklyWindow = snapshot.rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "本周额度耗尽，\(resetLabel(for: weeklyWindow)) 重置"
+        return Copy.footerExhausted(label: "周额度", resetAt: weeklyWindow.resetAt)
       }
 
       if snapshot.rateLimit.primaryWindow.remainingPercent <= 0 {
-        return "5h 额度耗尽，\(resetLabel(for: snapshot.rateLimit.primaryWindow)) 重置"
+        return Copy.footerExhausted(label: "5h额度", resetAt: snapshot.rateLimit.primaryWindow.resetAt)
       }
 
       if !snapshot.rateLimit.allowed || snapshot.rateLimit.limitReached {
-        return "当前账号被限流，建议切换"
+        return Copy.footerThrottled
       }
 
       if snapshot.credits.hasCredits {
-        return "有 credits 兜底"
+        return Copy.footerHasCredits
       }
 
-      return "每分钟自动刷新"
+      return Copy.footerAutoRefresh
     }
 
     func availabilityLabel(for rateLimit: UsageLimit) -> String {
@@ -85,13 +85,13 @@ final class UsageMonitor {
       _ = rateLimit.secondaryWindow?.remainingPercentLabel
 
       if let weeklyWindow = rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "本周额度已耗尽，\(resetLabel(for: weeklyWindow)) 重置"
+        return "周额度耗尽 · \(Copy.resetDate(weeklyWindow.resetAt)) 重置"
       }
       if rateLimit.primaryWindow.remainingPercent <= 0 {
-        return "5h 额度已耗尽，\(resetLabel(for: rateLimit.primaryWindow)) 重置"
+        return "已耗尽 · \(Copy.resetDate(rateLimit.primaryWindow.resetAt)) 重置"
       }
       if !rateLimit.allowed || rateLimit.limitReached {
-        return "账号被限流，建议切换其他账号"
+        return Copy.footerThrottled
       }
       if let weeklyWindow = rateLimit.secondaryWindow {
         return "5h 剩 \(primaryLeft) · 周 剩 \(weeklyWindow.remainingPercentLabel)"
@@ -100,9 +100,9 @@ final class UsageMonitor {
     }
 
     func statusLine(for window: LimitWindow) -> String {
-      if window.remainingPercent <= 0 { return "已耗尽" }
-      if window.remainingPercent <= 15 { return "即将耗尽" }
-      return "正常"
+      if window.remainingPercent <= 0 { return Copy.exhausted }
+      if window.remainingPercent <= 15 { return Copy.runningLow }
+      return Copy.available
     }
 
     func remainingLabel(for window: LimitWindow) -> String {
@@ -111,14 +111,14 @@ final class UsageMonitor {
 
     func resetLine(for window: LimitWindow) -> String {
       let countdown = Date(timeIntervalSince1970: window.resetAt).timeIntervalSinceNow
-      if countdown <= 0 { return "重置中" }
-      return "\(countdown.condensedDuration) 后重置 · \(resetLabel(for: window))"
+      if countdown <= 0 { return Copy.resetting }
+      return "\(Copy.duration(countdown)) 后重置 · \(resetLabel(for: window))"
     }
 
     func primaryBurnLabel(for rateLimit: UsageLimit) -> String {
       let reset = resetLabel(for: rateLimit.primaryWindow)
       if let weeklyWindow = rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
-        return "本周额度耗尽，\(resetLabel(for: weeklyWindow)) 重置"
+        return Copy.footerExhausted(label: "周额度", resetAt: weeklyWindow.resetAt)
       }
       if rateLimit.primaryWindow.remainingPercent <= 0 {
         return "\(reset) 重置"
@@ -133,27 +133,19 @@ final class UsageMonitor {
       guard let weeklyWindow = rateLimit.secondaryWindow else {
         return secondaryEstimate.statusText
       }
-      let reset = resetLabel(for: weeklyWindow)
       if weeklyWindow.remainingPercent <= 0 {
-        return "\(reset) 重置"
+        return Copy.heroExhausted(resetAt: weeklyWindow.resetAt)
       }
-      if let t = secondaryEstimate.timeUntilExhausted {
-        return "预计 \(t.condensedDuration) 后耗尽，\(reset) 重置"
-      }
-      return "\(reset) 重置 · \(secondaryEstimate.statusText)"
+      return Copy.quotaBurn(timeLeft: secondaryEstimate.timeUntilExhausted, resetAt: weeklyWindow.resetAt)
     }
 
     func resetLabel(for window: LimitWindow) -> String {
-      let date = Date(timeIntervalSince1970: window.resetAt)
-      let formatter = DateFormatter()
-      formatter.locale = Locale(identifier: "zh_Hans_CN")
-      formatter.dateFormat = Calendar.current.isDate(date, equalTo: .now, toGranularity: .day) ? "HH:mm" : "M月d日"
-      return formatter.string(from: date)
+      Copy.resetDate(window.resetAt)
     }
 
     func burnLabel(from estimate: BurnEstimate) -> String {
-      if let timeUntilExhausted = estimate.timeUntilExhausted {
-        return "预计 \(timeUntilExhausted.condensedDuration) 后耗尽"
+      if let t = estimate.timeUntilExhausted {
+        return Copy.reviewBurn(timeLeft: t)
       }
       return estimate.statusText
     }
@@ -175,8 +167,8 @@ final class UsageMonitor {
       guard snapshot != nil else {
         return SwitchRecommendation(
           kind: .syncing,
-          headline: "正在计算",
-          detail: "首轮校验完成后给出建议",
+          headline: Copy.recComputing,
+          detail: Copy.recComputingDetail,
           recommendedProfileID: nil
         )
       }
@@ -184,14 +176,14 @@ final class UsageMonitor {
       guard let bestProfile = rankedProfiles.first else {
         let fallbackDetail: String
         if let currentProfile, let currentUsage = currentProfile.latestUsage {
-          fallbackDetail = "\(currentProfile.displayName) 不可用（\(currentUsage.switchSummaryText)），等重置"
+          fallbackDetail = "\(currentProfile.displayName) \(Copy.unavailable) (\(currentUsage.switchSummaryText))"
         } else {
-          fallbackDetail = "无可切账号，等额度重置"
+          fallbackDetail = "无可切账号，等重置"
         }
 
         return SwitchRecommendation(
           kind: .noAvailable,
-          headline: "无更优账号",
+          headline: Copy.recNoAvailable,
           detail: fallbackDetail,
           recommendedProfileID: nil
         )
@@ -207,7 +199,7 @@ final class UsageMonitor {
          !currentUsage.isBlocked {
         return SwitchRecommendation(
           kind: .stay,
-          headline: currentUsage.isRunningLow ? "当前最优，准备下一跳" : "继续用当前账号",
+          headline: currentUsage.isRunningLow ? Copy.recStayLow : Copy.recStay,
           detail: stayDetail(for: currentProfile, backupProfile: backupProfile),
           recommendedProfileID: nil
         )
@@ -222,7 +214,7 @@ final class UsageMonitor {
          !currentUsage.isRunningLow {
         return SwitchRecommendation(
           kind: .stay,
-          headline: "暂不需要切换",
+          headline: Copy.recNoSwitch,
           detail: stayDetail(for: currentProfile, backupProfile: bestProfile),
           recommendedProfileID: nil
         )
@@ -230,7 +222,7 @@ final class UsageMonitor {
 
       return SwitchRecommendation(
         kind: .switchNow,
-        headline: "建议切到 \(bestProfile.displayName)",
+        headline: Copy.recSwitch(to: bestProfile.displayName),
         detail: switchDetail(recommendedProfile: bestProfile, currentProfile: currentProfile, backupProfile: backupProfile),
         recommendedProfileID: bestProfile.id
       )
@@ -281,18 +273,16 @@ final class UsageMonitor {
 
     private func stayDetail(for currentProfile: AuthProfileRecord, backupProfile: AuthProfileRecord?) -> String {
       guard let currentUsage = currentProfile.latestUsage else {
-        return "当前账号同步中"
+        return Copy.syncing
       }
-
-      if currentUsage.isRunningLow, let backupProfile, let backupUsage = backupProfile.latestUsage {
-        return "余量低但仍最优，用完后切 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）"
+      let backup: (name: String, summary: String)? = backupProfile.flatMap { bp in
+        bp.latestUsage.map { (bp.displayName, $0.switchSummaryText) }
       }
-
-      if let backupProfile, let backupUsage = backupProfile.latestUsage {
-        return "余量最优，备选 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）"
-      }
-
-      return "余量最优，\(currentUsage.switchSummaryText)"
+      return Copy.stayDetail(
+        current: currentUsage.switchSummaryText,
+        backup: backup,
+        isLow: currentUsage.isRunningLow
+      )
     }
 
     private func switchDetail(
@@ -300,23 +290,24 @@ final class UsageMonitor {
       currentProfile: AuthProfileRecord?,
       backupProfile: AuthProfileRecord?
     ) -> String {
-      let recommendedUsageText = recommendedProfile.latestUsage?.switchSummaryText ?? "同步中"
-      let currentText: String
-
-      if let currentProfile, let currentUsage = currentProfile.latestUsage {
-        currentText = "当前 \(currentProfile.displayName) 仅 \(currentUsage.switchSummaryText)"
+      let recSummary = recommendedProfile.latestUsage?.switchSummaryText ?? Copy.syncing
+      let current: (String, String)?
+      if let cp = currentProfile, let cu = cp.latestUsage {
+        current = (cp.displayName, cu.switchSummaryText)
       } else {
-        currentText = "当前账号信息不完整"
+        current = nil
       }
-
-      let backupText: String
-      if let backupProfile, backupProfile.id != recommendedProfile.id, let backupUsage = backupProfile.latestUsage {
-        backupText = " · 备选 \(backupProfile.displayName)（\(backupUsage.switchSummaryText)）"
+      let backup: (name: String, summary: String)?
+      if let bp = backupProfile, bp.id != recommendedProfile.id, let bu = bp.latestUsage {
+        backup = (bp.displayName, bu.switchSummaryText)
       } else {
-        backupText = ""
+        backup = nil
       }
-
-      return "\(recommendedProfile.displayName) 余量最多（\(recommendedUsageText)）· \(currentText)\(backupText)"
+      return Copy.switchDetail(
+        recommended: recommendedProfile.displayName, recommendedSummary: recSummary,
+        current: current?.0, currentSummary: current?.1,
+        backup: backup
+      )
     }
   }
 
@@ -335,9 +326,9 @@ final class UsageMonitor {
   private var lastProfilesValidationAt: Date?
   private var isRefreshing = false
   private var samples: [UsageSample] = []
-  private var primaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
-  private var secondaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
-  private var reviewEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "收集样本中")
+  private var primaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
+  private var secondaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
+  private var reviewEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
   private var observers: [UUID: (State) -> Void] = [:]
 
   init(
@@ -549,25 +540,6 @@ final class UsageMonitor {
 
 extension TimeInterval {
   var condensedDuration: String {
-    let totalMinutes = max(0, Int(self / 60))
-    let days = totalMinutes / (60 * 24)
-    let hours = (totalMinutes % (60 * 24)) / 60
-    let minutes = totalMinutes % 60
-
-    if days > 0 {
-      if hours > 0 {
-        return "\(days)天\(hours)小时"
-      }
-      return "\(days)天"
-    }
-
-    if hours > 0 {
-      if minutes > 0 {
-        return "\(hours)h\(minutes)min"
-      }
-      return "\(hours)h"
-    }
-
-    return "\(max(1, minutes))min"
+    Copy.duration(self)
   }
 }

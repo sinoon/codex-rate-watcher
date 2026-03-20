@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       if let button = statusItem.button {
         button.image = StatusBarIcon.icon(for: .unknown)
         button.imagePosition = .imageLeading
-        button.title = "Codex 额度"
+        button.title = Copy.menuBarDefault
         button.font = .systemFont(ofSize: 13, weight: .semibold)
         button.target = self
         button.action = #selector(handleStatusItemClick(_:))
@@ -269,23 +269,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     guard let snapshot = state.snapshot else {
-      button.title = "Codex 额度"
+      button.title = Copy.menuBarDefault
       return
     }
 
     if let weeklyWindow = snapshot.rateLimit.secondaryWindow,
        weeklyWindow.remainingPercent <= 0 {
-      button.title = "不可用 · \(state.availableProfileCount) 个可切"
+      button.title = Copy.menuBarUnavailable(altCount: state.availableProfileCount)
       return
     }
 
     if !snapshot.rateLimit.allowed || snapshot.rateLimit.limitReached
         || snapshot.rateLimit.primaryWindow.remainingPercent <= 0 {
-      button.title = "不可用 · \(state.availableProfileCount) 个可切"
+      button.title = Copy.menuBarUnavailable(altCount: state.availableProfileCount)
       return
     }
 
     let primary = snapshot.rateLimit.primaryWindow
-    button.title = "还剩 \(Int(primary.remainingPercent.rounded()))% · \(state.availableProfileCount) 个可切"
+    button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
   }
 }

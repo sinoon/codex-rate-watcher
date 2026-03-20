@@ -44,7 +44,7 @@ final class UsageEstimatorTests: XCTestCase {
     let result = UsageEstimator.estimatePrimary(from: [], window: window)
     XCTAssertNil(result.timeUntilExhausted)
     XCTAssertNil(result.percentPerHour)
-    XCTAssertEqual(result.statusText, "收集样本中")
+    XCTAssertEqual(result.statusText, "采样中")
   }
 
   // MARK: - Insufficient Time Delta
@@ -63,7 +63,7 @@ final class UsageEstimatorTests: XCTestCase {
     let result = UsageEstimator.estimatePrimary(from: samples, window: window)
     XCTAssertNil(result.timeUntilExhausted)
     XCTAssertNil(result.percentPerHour)
-    XCTAssertEqual(result.statusText, "样本不足，稍后估算")
+    XCTAssertEqual(result.statusText, "估算中")
   }
 
   // MARK: - Stable Burn Rate
@@ -82,7 +82,7 @@ final class UsageEstimatorTests: XCTestCase {
     let result = UsageEstimator.estimatePrimary(from: samples, window: window)
     XCTAssertNil(result.timeUntilExhausted)
     XCTAssertEqual(result.percentPerHour, 0)
-    XCTAssertEqual(result.statusText, "消耗平稳")
+    XCTAssertEqual(result.statusText, "平稳")
   }
 
   // MARK: - Active Burn Rate
@@ -134,7 +134,7 @@ final class UsageEstimatorTests: XCTestCase {
 
     XCTAssertNil(result.timeUntilExhausted)
     XCTAssertNotNil(result.percentPerHour)
-    XCTAssertEqual(result.statusText, "按当前速率，重置前不会耗尽")
+    XCTAssertEqual(result.statusText, "充足")
   }
 
   // MARK: - Filter Same Window
@@ -155,7 +155,7 @@ final class UsageEstimatorTests: XCTestCase {
     let result = UsageEstimator.estimatePrimary(from: samples, window: window)
 
     // Only the two current-window samples are used; delta = 0.1 < 0.2 => stable
-    XCTAssertEqual(result.statusText, "消耗平稳")
+    XCTAssertEqual(result.statusText, "平稳")
   }
 
   // MARK: - Secondary Window Estimation
@@ -248,7 +248,7 @@ final class UsageEstimatorTests: XCTestCase {
     let result = UsageEstimator.estimateSecondary(from: samples, window: window)
 
     // Only one valid sample, not enough for estimation
-    XCTAssertEqual(result.statusText, "样本不足，稍后估算")
+    XCTAssertEqual(result.statusText, "估算中")
   }
 
   // MARK: - BurnEstimate struct
