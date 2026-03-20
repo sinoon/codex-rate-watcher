@@ -2,16 +2,18 @@
 
 # ⚡ Codex Rate Watcher
 
-### Never get throttled mid-session again.
+### You're deep in flow. Codex is on fire. Then — `429`.
 
-A blazing-fast macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/codex/) (ChatGPT Pro / Team) rate-limit usage in real time — with multi-account management, burn-rate predictions, and smart switching.
+**That never has to happen again.**
+
+A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/codex/) (ChatGPT Pro / Team) rate-limit usage in real time — with burn-rate predictions, multi-account switching, a CLI tool, and Raycast integration.
 
 [![en](https://img.shields.io/badge/lang-English-blue.svg)](README.md)
-[![zh-CN](https://img.shields.io/badge/lang-简体中文-red.svg)](README.zh-CN.md)
-[![ja](https://img.shields.io/badge/lang-日本語-green.svg)](README.ja.md)
-[![ko](https://img.shields.io/badge/lang-한국어-yellow.svg)](README.ko.md)
-[![es](https://img.shields.io/badge/lang-Español-orange.svg)](README.es.md)
-[![fr](https://img.shields.io/badge/lang-Français-purple.svg)](README.fr.md)
+[![zh-CN](https://img.shields.io/badge/lang-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-red.svg)](README.zh-CN.md)
+[![ja](https://img.shields.io/badge/lang-%E6%97%A5%E6%9C%AC%E8%AA%9E-green.svg)](README.ja.md)
+[![ko](https://img.shields.io/badge/lang-%ED%95%9C%EA%B5%AD%EC%96%B4-yellow.svg)](README.ko.md)
+[![es](https://img.shields.io/badge/lang-Espa%C3%B1ol-orange.svg)](README.es.md)
+[![fr](https://img.shields.io/badge/lang-Fran%C3%A7ais-purple.svg)](README.fr.md)
 [![de](https://img.shields.io/badge/lang-Deutsch-black.svg)](README.de.md)
 
 ![macOS](https://img.shields.io/badge/platform-macOS%2014%2B-blue)
@@ -23,7 +25,7 @@ A blazing-fast macOS menu bar app that monitors your [OpenAI Codex](https://open
   <img src="docs/screenshot.jpg" width="440" alt="Codex Rate Watcher — macOS menu bar app monitoring OpenAI Codex ChatGPT rate limits in real time" />
 </p>
 
-*Real-time quota monitoring · Burn-rate estimation · Multi-account switching · Reset countdown*
+**Real-time quota monitoring · Burn-rate prediction · Multi-account switching · CLI + Raycast**
 
 </div>
 
@@ -31,97 +33,67 @@ A blazing-fast macOS menu bar app that monitors your [OpenAI Codex](https://open
 
 ## 🤯 The Problem
 
-You're deep in a flow state, pair-programming with Codex, refactoring a critical module — and suddenly **the rate limit wall hits**. No warning. No countdown. Just a cold `429 Too Many Requests`.
+You're pair-programming with Codex, refactoring a critical module, deep in flow state — and the rate limit wall hits. No warning. No countdown. Just a cold `429 Too Many Requests`.
 
 You wait. You refresh. You have no idea when your quota resets or how fast you burned through it.
 
-**Codex Rate Watcher** fixes this. Permanently.
+OpenAI gives you **zero visibility** into your Codex rate limits. No dashboard. No API. Just a hard stop when you least expect it.
 
-## 🎯 What It Does
+**Codex Rate Watcher fixes this.**
 
-Codex Rate Watcher lives in your macOS menu bar and gives you **total visibility** into your OpenAI Codex / ChatGPT rate-limit usage:
+---
 
-| Capability | Description |
-|---|---|
-| **📊 Real-time quota tracking** | Monitor 5-hour primary, weekly, and code review limits simultaneously |
-| **🔥 Burn-rate estimation** | Predicts *exactly* when your quota runs out (e.g., "1h32min until exhausted, resets 14:30") |
-| **⏰ Reset countdown** | Every quota card shows its reset time — not just when you're blocked |
-| **👥 Multi-account profiles** | Auto-captures account snapshots; manage Plus & Team accounts side by side |
-| **🧠 Smart switching** | Weighted scoring algorithm recommends the best account to switch to |
-| **🔄 Auto-reconciliation** | Orphaned auth snapshots are auto-discovered and registered on startup |
-| **🏷️ Plan badges** | Clearly labels Plus vs. Team in the UI |
-| **🔔 Smart alert system** | Configurable threshold notifications (50%, 30%, 15%, 5%) with macOS native alerts |
-| **🎨 Dynamic status bar icon** | Color-coded menu bar icon changes based on quota health (green → yellow → orange → red) |
-| **🎨 Dark-themed UI** | Linear-inspired design with color-coded quota cards |
-| **⌨️ Global hotkey** | Toggle the popover from anywhere with ⌘⇧K (customizable) |
-| **🖥️ CLI tool (`codex-rate`)** | Terminal-first monitoring with `status`, `watch`, `profiles`, `history` + JSON output for scripting |
-| **🔍 Raycast extension** | Native Raycast integration — search "Codex" for instant quota checks |
+## 🎯 Features
 
-## ✨ Key Features
+### 📊 See Everything
 
-### 📊 Three-Dimensional Quota Tracking
+Track all three quota dimensions in a single glance from your menu bar — no more flying blind.
 
-Most developers only discover they've hit the rate limit *after* Codex stops responding. Codex Rate Watcher tracks **all three quota dimensions simultaneously** — the 5-hour primary window, the weekly aggregate window, and the code review limit — in a single glance from your menu bar.
+- **5-hour primary window** — the limit that hits you mid-session
+- **Weekly aggregate window** — the slow burn that locks you out on Friday
+- **Code review limit** — tracked separately so it never sneaks up on you
+- **Always-on reset countdown** — every quota card shows its reset time, even when you're not blocked
+- **Dynamic status bar icon** — green → yellow → orange → red based on quota health
 
-### 🔥 Predictive Burn-Rate Engine
+### 🔥 Stay Ahead
 
-The built-in estimator uses **linear regression** over real usage samples to tell you *exactly* when each quota will run out. No guessing, no mental math — just a precise countdown like *"1h32min until exhausted, resets at 14:30"*.
+Don't just monitor — predict. The burn-rate engine uses linear regression over real usage samples to tell you *exactly* when each quota runs out.
 
-### ⏰ Always-On Reset Countdown
+- **Precise countdown** — "1h32min until exhausted, resets 14:30"
+- **Smart alerts** — configurable thresholds (50%, 30%, 15%, 5%) with native macOS notifications
+- **Escalating urgency** — low-threshold alerts include sound to grab your attention in flow state
+- **Per-window dedup** — you never get spammed by the same warning twice
 
-Reset times aren't just for when you're blocked. **Every quota card always shows its reset time**, even when you're actively coding. You'll always know how much runway you have and when the next window opens.
+### 🌐 Work Anywhere
 
-### 👥 Multi-Account Management with Smart Switching
+v1.4.0 brings Codex rate monitoring to every surface you work on.
 
-Managing multiple ChatGPT Pro or Team accounts? The app auto-captures authentication snapshots and scores each profile using a **weighted availability algorithm** (primary headroom × 3.2 + weekly × 0.45 + review × 0.08, with low-balance penalties). One click to switch — your current auth is auto-backed up.
+- **⌨️ Global Hotkey** — `⌘⇧K` toggles the popover from any app (customizable)
+- **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
+- **🔍 Raycast extension** — search "Codex" for instant quota checks without leaving your keyboard
 
-### 🔄 Self-Healing Profile Store
+### 👥 Multiple Accounts
 
-The **orphaned snapshot reconciliation** engine scans your profile directory on startup, automatically discovers untracked auth snapshots, and registers them (deduplicated by SHA256 fingerprint). Even if the index file gets corrupted, your accounts are never lost.
+Managing multiple ChatGPT Pro or Team accounts? Covered.
 
-### 🔔 Smart Alert System
+- **Auto-capture** — auth snapshots are saved automatically on detection
+- **Smart scoring** — weighted algorithm recommends the best account to switch to
+- **One-click switch** — current auth is auto-backed up before swapping
+- **Plan badges** — Plus vs. Team clearly labeled in the UI
+- **Self-healing store** — orphaned snapshots are auto-discovered and registered on startup (SHA256-deduplicated)
 
-Stay ahead of rate limits with **configurable threshold notifications** at 50%, 30%, 15%, and 5% remaining quota. Alerts are delivered through **macOS native notifications**, with per-reset-window deduplication so you never get spammed by the same warning twice. As your quota drops, the urgency escalates — low-threshold alerts include **sound notifications** to grab your attention even when you're deep in flow.
-
-### 🎨 Dynamic Status Bar Icon
-
-The menu bar icon is no longer static. It **changes color in real time** based on your quota health — **green** when you're comfortable, **yellow** when usage is climbing, **orange** when you should slow down, and **red** when you're critically low. This gives you **instant visual feedback** without ever opening the app, so you always know your quota status at a glance.
-
-### ⌨️ Global Hotkey
-
-Press **⌘⇧K** from anywhere to toggle the quota popover. The shortcut is:
-- Customizable (right-click the status bar icon → Hotkey settings)
-- Persisted across launches
-- Works with both global and in-app contexts
-
-### 🛡️ Privacy-First Architecture
-
-All data stays on your machine. The app only communicates with the official ChatGPT Usage API (`chatgpt.com/backend-api/wham/usage`). No analytics, no telemetry, no third-party services. Your auth tokens never leave localhost.
-
-### Additional Highlights
-
-- **Menu bar status** — remaining percentage always visible at a glance
-- **5-tier availability sorting** — usable → running low → blocked → error → unvalidated
-- **Auth file watching** — detects `codex login` in real time via kqueue
-- **Plan badges** — clearly shows Plus vs. Team in the primary card header
-- **Debug window mode** — `--window` flag for standalone window (screenshots & debugging)
-- **Zero dependencies** — pure Apple system frameworks, no third-party packages
-- **Automated CI releases** — GitHub Actions builds universal `.app` bundles for both Apple Silicon and Intel on every tagged version
-- **Global hotkey** — ⌘⇧K toggles the popover from any app (customizable)
-- **CLI tool** — `codex-rate` for terminal monitoring, JSON output, and scripting
-- **Raycast extension** — native Raycast integration for instant quota checks
-- **Multi-target architecture** — shared CodexRateKit library for code reuse
+---
 
 ## 🖥️ CLI Tool
 
-v1.4.0 introduces `codex-rate`, a companion CLI tool for terminal-first monitoring.
+v1.4.0 introduces `codex-rate` — a companion CLI for terminal-first monitoring.
 
 ### Install
 
 ```bash
 # Build from source
 swift build -c release --target codex-rate
-cp .build/release/codex-rate /usr/local/bin/
+cp .build/release/codex-rate ~/bin/
 
 # Or download from Releases (included in the zip alongside the .app)
 ```
@@ -129,7 +101,7 @@ cp .build/release/codex-rate /usr/local/bin/
 ### Usage
 
 ```bash
-# Show current usage (beautiful Unicode table)
+# Show current usage
 codex-rate status
 
 # JSON output (for scripts, Raycast, piping)
@@ -145,18 +117,36 @@ codex-rate watch --interval 15
 # Usage history with sparklines
 codex-rate history
 codex-rate history --hours 6
+```
 
-# Help
-codex-rate help
+### Example Output
+
+```
+╭─────────────────────────────────────────╮
+│         Codex Rate Watcher v1.4.0       │
+╰─────────────────────────────────────────╯
+
+  Account: user@example.com (Pro)
+
+  ┌──────────────┬───────┬────────────────┐
+  │ Quota        │ Used  │ Status         │
+  ├──────────────┼───────┼────────────────┤
+  │ Primary (5h) │  62%  │ ██████░░░░ OK  │
+  │ Weekly       │  34%  │ ███░░░░░░░ OK  │
+  │ Code Review  │  11%  │ █░░░░░░░░░ OK  │
+  └──────────────┴───────┴────────────────┘
+
+  🔥 Burn rate: ~18%/hr → exhausted in 2h07min
+  ⏰ Primary resets in 3h14min (at 17:30)
 ```
 
 All commands support `--json` for machine-readable output. Color output respects `NO_COLOR` and auto-detects non-TTY environments.
 
+---
+
 ## 🔍 Raycast Extension
 
 A native [Raycast](https://raycast.com) extension for instant quota checks without leaving your keyboard.
-
-### Commands
 
 | Command | Description |
 |---|---|
@@ -169,9 +159,21 @@ A native [Raycast](https://raycast.com) extension for instant quota checks witho
 1. Build and install the `codex-rate` CLI (see above)
 2. Open Raycast → Extensions → `+` → Import Extension
 3. Select the `raycast-extension/` directory
-4. Search "Codex" in Raycast to use
+4. Search "Codex" in Raycast
 
 The extension calls `codex-rate --json` under the hood — no separate API keys or configuration needed.
+
+---
+
+## ⌨️ Global Hotkey
+
+Press **⌘⇧K** from any app to toggle the quota popover. No need to click, no need to switch windows.
+
+- Customizable — right-click the status bar icon → 热键设置
+- Persisted across launches
+- Works in both global and in-app contexts
+
+---
 
 ## 📥 Download
 
@@ -187,15 +189,13 @@ Pre-built `.app` bundles are available on the [Releases](https://github.com/sino
 3. Launch — it appears in your menu bar (not the Dock)
 4. Make sure Codex CLI is logged in (`~/.codex/auth.json` must exist)
 
-The release zip also includes the `codex-rate` CLI binary — copy it to `/usr/local/bin/` to use from your terminal.
+The release zip also includes the `codex-rate` CLI binary — copy it to a directory on your `PATH` to use from your terminal.
 
 > **First launch:** The app is not notarized. Right-click → **Open**, or go to System Settings → Privacy & Security → **Open Anyway**.
 
 ---
 
 ## 🚀 Build From Source
-
-If you prefer to build it yourself:
 
 ### Prerequisites
 
@@ -221,11 +221,6 @@ swift run codex-rate status
 
 # Run GUI directly (debug mode)
 swift run
-
-# Or build a release .app bundle
-swift build -c release
-./scripts/build_app.sh 1.4.0
-# → dist/Codex Rate Watcher.app
 ```
 
 ### Debug Window Mode
@@ -234,7 +229,20 @@ swift build -c release
 swift run CodexRateWatcherNative -- --window
 ```
 
-Launches as a standalone window instead of a menu bar popover — great for screenshots & UI debugging.
+Launches as a standalone window instead of a menu bar popover — useful for screenshots and UI debugging.
+
+---
+
+## 💡 Why Developers Use This
+
+- **Zero context switching** — quota info lives in the menu bar, always one glance away
+- **No more guessing games** — burn-rate prediction replaces "I think I have some quota left"
+- **Multi-account workflows** — heavy Codex users run multiple accounts; smart switching makes it seamless
+- **Terminal-native** — the CLI fits into existing workflows, scripts, and automation
+- **Privacy-first** — all data stays on your machine. No analytics, no telemetry, no third-party services. Auth tokens never leave localhost
+- **Zero dependencies** — pure Apple system frameworks. No `node_modules`, no Electron, no bloat
+
+---
 
 ## 🔬 How It Works
 
@@ -291,7 +299,9 @@ The highest-scoring profile is recommended. Switching auto-backs up your current
 
 ### Orphaned Snapshot Reconciliation
 
-On startup, the app scans `auth-profiles/` for `.json` files not tracked in `profiles.json`. These orphaned snapshots are automatically registered (deduplicated by SHA256 fingerprint) — so you never lose an account even if the index gets out of sync.
+On startup, the app scans `auth-profiles/` for `.json` files not tracked in `profiles.json`. Orphaned snapshots are automatically registered (deduplicated by SHA256 fingerprint) — so you never lose an account even if the index gets out of sync.
+
+---
 
 ## 📂 Data Storage
 
@@ -304,6 +314,8 @@ All data stays local. Nothing leaves your machine except calls to the official C
 ├── auth-profiles/       # Saved auth.json snapshots (SHA256-fingerprinted)
 └── auth-backups/        # Pre-switch auth.json backups
 ```
+
+---
 
 ## 🏗️ Project Structure
 
@@ -343,6 +355,8 @@ codex-rate-watcher/
 └── README.md
 ```
 
+---
+
 ## ⚙️ Tech Stack
 
 | Component | Technology |
@@ -356,13 +370,20 @@ codex-rate-watcher/
 | File Watching | GCD DispatchSource (kqueue) |
 | Dependencies | **None** — pure system frameworks |
 
+---
+
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to:
+Contributions are welcome. Here's how you can help:
 
-- Open an issue for bugs or feature requests
-- Submit a pull request
-- Share your multi-account workflow tips
+- **Report bugs** — issues with reproduction steps
+- **Request features** — describe your use case
+- **Submit a PR** — code, docs, or translations
+- **Share your workflow** — how do you manage multiple Codex accounts?
+
+If this project saved you from a `429`, consider giving it a ⭐ — it helps other developers find it.
+
+---
 
 ## 📄 License
 

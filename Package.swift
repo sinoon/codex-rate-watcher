@@ -27,5 +27,10 @@ let package = Package(
       dependencies: ["CodexRateKit"],
       path: "Sources/codex-rate"
     ),
+    // Tests for the shared library
+    .testTarget(
+      name: "CodexRateKitTests",
+      dependencies: ["CodexRateKit"]
+    ),
   ]
 )
