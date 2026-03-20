@@ -22,7 +22,7 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
 ![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-success)
 
 <p>
-  <img src="docs/screenshot.jpg" width="440" alt="Codex Rate Watcher — macOS menu bar app monitoring OpenAI Codex ChatGPT rate limits in real time" />
+  <img src="docs/screenshot-window.png" width="440" alt="Codex Rate Watcher — macOS menu bar app monitoring OpenAI Codex ChatGPT rate limits in real time" />
 </p>
 
 **Real-time quota monitoring · Burn-rate prediction · Multi-account switching · CLI + Raycast**
@@ -68,7 +68,7 @@ Don't just monitor — predict. The burn-rate engine uses linear regression over
 
 v1.4.0 brings Codex rate monitoring to every surface you work on.
 
-- **⌨️ Global Hotkey** — `⌘⇧K` toggles the popover from any app (customizable)
+- **⌨️ Global Hotkey** — `⇧⌃⌥K` toggles the popover from any app (customizable)
 - **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
 - **🔍 Raycast extension** — search "Codex" for instant quota checks without leaving your keyboard
 
@@ -123,7 +123,7 @@ codex-rate history --hours 6
 
 ```
 ╭─────────────────────────────────────────╮
-│         Codex Rate Watcher v1.4.0       │
+│         Codex Rate Watcher v1.4.1       │
 ╰─────────────────────────────────────────╯
 
   Account: user@example.com (Pro)
@@ -167,11 +167,12 @@ The extension calls `codex-rate --json` under the hood — no separate API keys 
 
 ## ⌨️ Global Hotkey
 
-Press **⌘⇧K** from any app to toggle the quota popover. No need to click, no need to switch windows.
+Press **⇧⌃⌥K** from any app to toggle the quota popover. No need to click, no need to switch windows.
 
-- Customizable — right-click the status bar icon → 热键设置
+- Customizable — right-click the status bar icon → Hotkey Settings
 - Persisted across launches
 - Works in both global and in-app contexts
+- Smart conflict detection — warns if your shortcut overlaps with Rectangle, Raycast, etc.
 
 ---
 
@@ -214,7 +215,7 @@ cd codex-rate-watcher
 swift build -c release
 
 # Build .app bundle + CLI binary
-./scripts/build_app.sh 1.4.0
+./scripts/build_app.sh 1.4.1
 
 # Run CLI directly
 swift run codex-rate status
@@ -332,11 +333,12 @@ codex-rate-watcher/
 │   ├── CodexRateWatcherNative/         # GUI app
 │   │   ├── main.swift
 │   │   ├── AppDelegate.swift
-│   │   ├── HotkeyManager.swift         # ⌘⇧K global hotkey
+│   │   ├── HotkeyManager.swift         # ⇧⌃⌥K global hotkey
 │   │   ├── AlertManager.swift
 │   │   ├── AuthFileWatcher.swift
 │   │   ├── StatusBarIconManager.swift
 │   │   ├── UsageMonitor.swift
+│   │   ├── Copy.swift                    # Centralized user-facing strings
 │   │   ├── Persistence.swift
 │   │   └── PopoverViewController.swift
 │   └── codex-rate/                     # CLI tool
