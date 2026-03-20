@@ -71,13 +71,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     monitor.start()
 
-    // Set up global hotkey (⌘⇧K by default)
+    // Set up global hotkey (⌘⇧K by default, with CGEvent Tap priority)
     if !windowMode {
       let hk = HotkeyManager()
       hk.onToggle = { [weak self] in
         self?.togglePopover()
       }
+      hk.onConflict = { info in
+        NSLog("[Hotkey] \(info.message)")
+        // Show a transient notification to user
+        let notification = NSUserNotification()
+        notification.title = "快捷键冲突"
+        notification.informativeText = info.message
+        NSUserNotificationCenter.default.deliver(notification)
+      }
       hotkeyManager = hk
+      NSLog("[AppDelegate] Hotkey ready: \(hk.diagnosticInfo)")
     }
   }
 
@@ -149,8 +158,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     menu.addItem(NSMenuItem.separator())
 
+    let hotkeyMethod = hotkeyManager?.usingCGEventTap == true ? "Tap" : "Monitor"
     let hotkeyLabel = hotkeyManager?.config.enabled == true
-      ? "⌨️ 快捷键：\(hotkeyManager?.config.displayString ?? "⌘⇧K")"
+      ? "⌨️ 快捷键：\(hotkeyManager?.config.displayString ?? "⌘⇧K") [\(hotkeyMethod)]"
       : "⌨️ 快捷键：已关闭"
     let hotkeyToggle = NSMenuItem(title: hotkeyLabel, action: #selector(toggleHotkey), keyEquivalent: "")
     hotkeyToggle.target = self
