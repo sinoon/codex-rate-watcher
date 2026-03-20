@@ -5,16 +5,14 @@ import Foundation
 
 /// Manages a global keyboard shortcut for toggling the popover.
 ///
-/// **Strategy (priority order)**:
-/// 1. **CGEvent Tap** — intercepts events at the HID level before any app sees them.
-///    Requires Accessibility permission. This is the most reliable approach.
-/// 2. **NSEvent global monitor** — fallback if CGEvent Tap cannot be created
-///    (permission denied). Less reliable if another app consumes the combo.
+/// Uses the standard NSEvent global + local monitors approach.
+/// After registration, performs a **conflict probe** — posts a synthetic
+/// keyDown and checks whether the monitor receives it within a timeout.
+/// If not, it means another app intercepted the shortcut first.
 ///
-/// **Conflict detection**: On startup and after each config change, a probe timer
-/// verifies the hotkey is reachable. If the primary shortcut is blocked (no callback
-/// within 0.5 s of a synthetic key-down), the manager automatically tries fallback
-/// combos and notifies via `onConflict`.
+/// When a conflict is detected, enumerates running apps to guess which
+/// known shortcut-grabbing apps (Raycast, Alfred, Karabiner, etc.) might
+/// be responsible, and notifies via `onConflict`.
 @MainActor
 final class HotkeyManager {
 
@@ -29,16 +27,6 @@ final class HotkeyManager {
 
     var effectiveModifiers: NSEvent.ModifierFlags {
       modifiers == 0 ? Self.defaultModifiers : NSEvent.ModifierFlags(rawValue: modifiers)
-    }
-
-    var cgEventFlags: CGEventFlags {
-      var flags: CGEventFlags = []
-      let m = effectiveModifiers
-      if m.contains(.command) { flags.insert(.maskCommand) }
-      if m.contains(.shift)   { flags.insert(.maskShift) }
-      if m.contains(.option)  { flags.insert(.maskAlternate) }
-      if m.contains(.control) { flags.insert(.maskControl) }
-      return flags
     }
 
     var displayString: String {
@@ -72,34 +60,67 @@ final class HotkeyManager {
     }
   }
 
-  // MARK: - Conflict Info
+  // MARK: - Conflict Detection
 
   struct ConflictInfo: Sendable {
-    let originalShortcut: String
-    let activeShortcut: String
+    let shortcut: String
+    let suspectedApps: [String]
     let message: String
   }
 
-  /// Fallback shortcuts to try when the primary is blocked
-  private static let fallbackConfigs: [(keyCode: UInt16, modifiers: NSEvent.ModifierFlags)] = [
-    (0x28, [.command, .option]),          // ⌘⌥K
-    (0x28, [.control, .shift]),           // ⌃⇧K
-    (0x28, [.command, .option, .shift]),   // ⌘⌥⇧K
-    (0x28, [.control, .option]),           // ⌃⌥K
+  /// Well-known apps that register global shortcuts and may conflict
+  private static let knownHotkeyApps: [String: String] = [
+    "com.raycast.macos": "Raycast",
+    "com.runningwithcrayons.Alfred": "Alfred",
+    "com.alfredapp.Alfred": "Alfred",
+    "io.pock.pock": "Pock",
+    "com.hegenberg.BetterTouchTool": "BetterTouchTool",
+    "org.pqrs.Karabiner-Elements": "Karabiner-Elements",
+    "com.googlecode.iterm2": "iTerm2",
+    "com.sublimetext.4": "Sublime Text",
+    "com.microsoft.VSCode": "VS Code",
+    "com.jetbrains.intellij": "IntelliJ IDEA",
+    "com.apple.Safari": "Safari",
+    "org.hammerspoon.Hammerspoon": "Hammerspoon",
+    "com.surteesstudios.Bartender": "Bartender",
+    "com.lwouis.alt-tab-macos": "AltTab",
+    "at.obdev.LaunchBar": "LaunchBar",
+    "com.spotify.client": "Spotify",
+    "org.sbarex.SourceCodeSyntaxHighlight": "SyntaxHighlight",
+    "com.toggl.danern": "Toggl Track",
+    "com.todoist.mac.Todoist": "Todoist",
+    "com.hnc.Discord": "Discord",
+    "com.tinyspeck.slackmacgap": "Slack",
+    "us.zoom.xos": "Zoom",
+    "com.linear": "Linear",
+    "com.figma.Desktop": "Figma",
+    "com.pop.pop.app": "Pop",
+    "com.crowdcafe.windowmagnet": "Magnet",
+    "com.manytricks.Moom": "Moom",
+    "com.divisiblebyzero.Spectacle": "Spectacle",
+    "com.mathew-kurian.Sip": "Sip",
+    "com.if.Paste": "Paste",
+    "com.clipy-app.Clipy": "Clipy",
+    "net.shinyfrog.bear": "Bear",
+    "com.flexibits.fantastical2.mac": "Fantastical",
   ]
 
   // MARK: - Properties
 
   private(set) var config: Config
   var onToggle: (() -> Void)?
-  /// Called when the shortcut was changed due to conflict detection
+  /// Called when conflict is detected after registration
   var onConflict: ((ConflictInfo) -> Void)?
+
+  /// Current conflict status (nil = no conflict or not yet probed)
+  private(set) var currentConflict: ConflictInfo?
 
   private var globalMonitor: Any?
   private var localMonitor: Any?
-  private var eventTap: CFMachPort?
-  private var runLoopSource: CFRunLoopSource?
-  private(set) var usingCGEventTap: Bool = false
+
+  /// Flag used during conflict probe
+  private var probeReceived: Bool = false
+  private var isProbing: Bool = false
 
   private static let configURL: URL = {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -114,6 +135,10 @@ final class HotkeyManager {
     config = Self.loadConfig()
     if config.enabled {
       startMonitoring()
+      // Delay probe slightly to let the app settle after launch
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        self?.probeForConflict()
+      }
     }
   }
 
@@ -123,140 +148,75 @@ final class HotkeyManager {
     guard newConfig != config else { return }
     stopMonitoring()
     config = newConfig
+    currentConflict = nil
     saveConfig()
     if config.enabled {
       startMonitoring()
-    }
-  }
-
-  /// Check if Accessibility permissions are granted (needed for CGEvent Tap)
-  static var hasAccessibilityPermission: Bool {
-    AXIsProcessTrusted()
-  }
-
-  /// Prompt user for Accessibility permission
-  static func requestAccessibilityPermission() {
-    // Use @preconcurrency-safe workaround for kAXTrustedCheckOptionPrompt
-    let prompt = "AXTrustedCheckOptionPrompt" as CFString
-    let options = [prompt: true] as CFDictionary
-    AXIsProcessTrustedWithOptions(options)
-  }
-  // MARK: - CGEvent Tap (Primary Strategy)
-
-  private func startCGEventTap() -> Bool {
-    // Store config values for the C callback closure
-    let targetKeyCode = Int64(config.keyCode)
-    let targetFlags = config.cgEventFlags
-
-    // We need to pass context to the C callback
-    let context = UnsafeMutablePointer<HotkeyContext>.allocate(capacity: 1)
-    context.initialize(to: HotkeyContext(
-      keyCode: targetKeyCode,
-      flags: targetFlags,
-      fired: false
-    ))
-
-    let tap = CGEvent.tapCreate(
-      tap: .cgSessionEventTap,
-      place: .headInsertEventTap,
-      options: .defaultTap,  // active tap — can consume events
-      eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
-      callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
-        guard type == .keyDown, let ctx = refcon?.assumingMemoryBound(to: HotkeyContext.self) else {
-          return Unmanaged.passRetained(event)
-        }
-
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let eventFlags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
-        let targetFlags = ctx.pointee.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
-
-        if keyCode == ctx.pointee.keyCode && eventFlags == targetFlags {
-          ctx.pointee.fired = true
-          // Post notification to main thread
-          DistributedNotificationCenter.default().post(
-            name: .hotkeyFired,
-            object: nil
-          )
-          return nil  // consume the event — no other app sees it
-        }
-
-        return Unmanaged.passRetained(event)
-      },
-      userInfo: context
-    )
-
-    guard let tap else {
-      context.deallocate()
-      return false
-    }
-
-    let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-    CGEvent.tapEnable(tap: tap, enable: true)
-
-    eventTap = tap
-    runLoopSource = source
-
-    // Listen for the distributed notification
-    DistributedNotificationCenter.default().addObserver(
-      self,
-      selector: #selector(handleHotkeyNotification),
-      name: .hotkeyFired,
-      object: nil
-    )
-
-    return true
-  }
-
-  @objc private func handleHotkeyNotification() {
-    Task { @MainActor in
-      self.onToggle?()
-    }
-  }
-
-  private func stopCGEventTap() {
-    if let tap = eventTap {
-      CGEvent.tapEnable(tap: tap, enable: false)
-      if let source = runLoopSource {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        self?.probeForConflict()
       }
-      // Note: CFMachPort is managed by CF, we just nil our references
-      eventTap = nil
-      runLoopSource = nil
     }
-    DistributedNotificationCenter.default().removeObserver(
-      self, name: .hotkeyFired, object: nil
-    )
   }
 
-  // MARK: - NSEvent Monitor (Fallback Strategy)
+  /// Manually re-run conflict detection
+  func recheckConflict() {
+    currentConflict = nil
+    probeForConflict()
+  }
 
-  private func startNSEventMonitor() {
+  /// Human-readable status line
+  var statusLine: String {
+    if !config.enabled { return "快捷键已关闭" }
+    if let conflict = currentConflict {
+      return "\(config.displayString) ⚠️ \(conflict.message)"
+    }
+    return "\(config.displayString) ✓"
+  }
+
+  // MARK: - Event Monitoring
+
+  private func startMonitoring() {
+    stopMonitoring()
+
     let targetKeyCode = config.keyCode
     let targetMods = config.effectiveModifiers.intersection([.command, .shift, .option, .control])
 
+    // Global monitor — fires when app is NOT focused
     globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
       let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
       if event.keyCode == targetKeyCode && eventMods == targetMods {
         Task { @MainActor [weak self] in
-          self?.onToggle?()
+          guard let self else { return }
+          if self.isProbing {
+            self.probeReceived = true
+          } else {
+            self.onToggle?()
+          }
         }
       }
     }
 
+    // Local monitor — fires when app IS focused
     localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
       if event.keyCode == targetKeyCode && eventMods == targetMods {
         Task { @MainActor [weak self] in
-          self?.onToggle?()
+          guard let self else { return }
+          if self.isProbing {
+            self.probeReceived = true
+          } else {
+            self.onToggle?()
+          }
         }
-        return nil
+        return nil  // consume the event
       }
       return event
     }
+
+    NSLog("[HotkeyManager] Registered NSEvent monitors for \(config.displayString)")
   }
 
-  private func stopNSEventMonitor() {
+  private func stopMonitoring() {
     if let m = globalMonitor {
       NSEvent.removeMonitor(m)
       globalMonitor = nil
@@ -267,54 +227,83 @@ final class HotkeyManager {
     }
   }
 
-  // MARK: - Combined Start/Stop
+  // MARK: - Conflict Probe
 
-  private func startMonitoring() {
-    stopMonitoring()
+  /// Posts a synthetic keyDown event with our shortcut and checks
+  /// if the global monitor receives it. If it doesn't within a timeout,
+  /// another app is likely intercepting the combo.
+  private func probeForConflict() {
+    guard config.enabled else { return }
 
-    // Try CGEvent Tap first (most reliable)
-    if startCGEventTap() {
-      usingCGEventTap = true
-      // Also add local monitor for when our own window is focused
-      let targetKeyCode = config.keyCode
-      let targetMods = config.effectiveModifiers.intersection([.command, .shift, .option, .control])
-      localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if event.keyCode == targetKeyCode && eventMods == targetMods {
-          Task { @MainActor [weak self] in
-            self?.onToggle?()
-          }
-          return nil
-        }
-        return event
+    isProbing = true
+    probeReceived = false
+
+    // Build CGEventFlags from our config
+    var cgFlags: CGEventFlags = []
+    let m = config.effectiveModifiers
+    if m.contains(.command) { cgFlags.insert(.maskCommand) }
+    if m.contains(.shift)   { cgFlags.insert(.maskShift) }
+    if m.contains(.option)  { cgFlags.insert(.maskAlternate) }
+    if m.contains(.control) { cgFlags.insert(.maskControl) }
+
+    // Post a synthetic key event
+    if let event = CGEvent(keyboardEventSource: nil, virtualKey: config.keyCode, keyDown: true) {
+      event.flags = cgFlags
+      event.post(tap: .cgAnnotatedSessionEventTap)
+
+      // Also post keyUp to clean up
+      if let upEvent = CGEvent(keyboardEventSource: nil, virtualKey: config.keyCode, keyDown: false) {
+        upEvent.flags = cgFlags
+        upEvent.post(tap: .cgAnnotatedSessionEventTap)
       }
-      NSLog("[HotkeyManager] ✅ Using CGEvent Tap for \(config.displayString) — highest priority")
-    } else {
-      usingCGEventTap = false
-      startNSEventMonitor()
-      NSLog("[HotkeyManager] ⚠️ CGEvent Tap unavailable, using NSEvent monitor for \(config.displayString)")
+    }
 
-      // Request Accessibility permission if not granted
-      if !Self.hasAccessibilityPermission {
-        NSLog("[HotkeyManager] 🔐 Requesting Accessibility permission for reliable hotkeys")
-        Self.requestAccessibilityPermission()
+    // Check after a short delay if we received it
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+      guard let self, self.isProbing else { return }
+      self.isProbing = false
+
+      if self.probeReceived {
+        NSLog("[HotkeyManager] ✅ Probe OK — \(self.config.displayString) is working")
+        self.currentConflict = nil
+      } else {
+        // Conflict detected — find who might be grabbing it
+        let suspects = self.detectSuspectedApps()
+        let suspectNames = suspects.isEmpty ? ["未知应用"] : suspects
+
+        let message: String
+        if suspects.isEmpty {
+          message = "可能被其他应用抢占"
+        } else {
+          message = "可能被 \(suspects.joined(separator: "、")) 抢占"
+        }
+
+        let info = ConflictInfo(
+          shortcut: self.config.displayString,
+          suspectedApps: suspectNames,
+          message: message
+        )
+        self.currentConflict = info
+        self.onConflict?(info)
+
+        NSLog("[HotkeyManager] ⚠️ Conflict detected for \(self.config.displayString) — \(message)")
       }
     }
   }
 
-  private func stopMonitoring() {
-    stopCGEventTap()
-    stopNSEventMonitor()
-    usingCGEventTap = false
-  }
+  /// Scan running apps for known hotkey-heavy applications
+  private func detectSuspectedApps() -> [String] {
+    let runningApps = NSWorkspace.shared.runningApplications
+    var suspects: [String] = []
 
-  /// Returns a diagnostic summary of the hotkey state
-  var diagnosticInfo: String {
-    var lines: [String] = []
-    lines.append("Hotkey: \(config.enabled ? config.displayString : "disabled")")
-    lines.append("Method: \(usingCGEventTap ? "CGEvent Tap (high priority)" : "NSEvent Monitor (normal)")")
-    lines.append("Accessibility: \(Self.hasAccessibilityPermission ? "granted" : "NOT granted")")
-    return lines.joined(separator: "\n")
+    for app in runningApps {
+      guard let bundleID = app.bundleIdentifier else { continue }
+      if let name = Self.knownHotkeyApps[bundleID] {
+        suspects.append(name)
+      }
+    }
+
+    return suspects
   }
 
   // MARK: - Persistence
@@ -333,18 +322,4 @@ final class HotkeyManager {
     }
     return config
   }
-}
-
-// MARK: - CGEvent Tap Context
-
-private struct HotkeyContext {
-  let keyCode: Int64
-  let flags: CGEventFlags
-  var fired: Bool
-}
-
-// MARK: - Notification Name
-
-extension Notification.Name {
-  static let hotkeyFired = Notification.Name("com.codexratewatcher.hotkeyFired")
 }
