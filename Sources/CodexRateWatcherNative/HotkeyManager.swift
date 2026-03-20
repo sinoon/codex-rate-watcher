@@ -158,8 +158,10 @@ final class HotkeyManager {
   /// Current conflict status (nil = no conflict detected)
   private(set) var currentConflict: ConflictInfo?
 
-  private var globalMonitor: Any?
+  private var eventTap: CFMachPort?
+  private var runLoopSource: CFRunLoopSource?
   private var localMonitor: Any?
+  private var globalFallbackMonitor: Any?
 
   private static let configURL: URL = {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -215,17 +217,100 @@ final class HotkeyManager {
     let targetKeyCode = config.keyCode
     let targetMods = config.effectiveModifiers.intersection([.command, .shift, .option, .control])
 
-    // Global monitor — fires when app is NOT focused
-    globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-      if event.keyCode == targetKeyCode && eventMods == targetMods {
-        Task { @MainActor [weak self] in
-          self?.onToggle?()
-        }
-      }
+    // ── CGEventTap — reliable global hotkey (fires before other apps) ──
+
+    // Store config values for the C callback (no captures allowed)
+    let keyCode = UInt16(targetKeyCode)
+    let modRaw = targetMods.rawValue
+
+    // We use a struct to pass context through the void pointer
+    struct TapContext {
+      var keyCode: UInt16
+      var modRaw: UInt
+      var onToggle: (() -> Void)?
     }
 
-    // Local monitor — fires when app IS focused
+    // Allocate context on the heap so it survives the callback
+    let ctx = UnsafeMutablePointer<TapContext>.allocate(capacity: 1)
+    ctx.initialize(to: TapContext(keyCode: keyCode, modRaw: modRaw, onToggle: { [weak self] in
+      Task { @MainActor in
+        self?.onToggle?()
+      }
+    }))
+
+    // Check accessibility status and prompt if needed
+    let trusted: Bool = {
+      // Use the string literal directly to avoid concurrency issues with kAXTrustedCheckOptionPrompt
+      let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+      return AXIsProcessTrustedWithOptions(opts)
+    }()
+    NSLog("[HotkeyManager] AXIsProcessTrusted = \(trusted)")
+
+    if !trusted {
+      NSLog("[HotkeyManager] ⚠️ Accessibility not granted — will prompt user and use NSEvent fallback")
+    }
+
+    let tap = CGEvent.tapCreate(
+      tap: .cgSessionEventTap,
+      place: .headInsertEventTap,
+      options: .listenOnly,     // passive — don't consume events
+      eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
+      callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
+        // If the tap gets disabled by the system, re-enable it
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+          return Unmanaged.passRetained(event)
+        }
+
+        guard type == .keyDown, let refcon = refcon else {
+          return Unmanaged.passRetained(event)
+        }
+
+        let ctx = refcon.assumingMemoryBound(to: TapContext.self)
+        let flags = event.flags.intersection([.maskCommand, .maskShift, .maskAlternate, .maskControl])
+
+        // Convert CGEventFlags to NSEvent.ModifierFlags for comparison
+        var nsMods: NSEvent.ModifierFlags = []
+        if flags.contains(.maskCommand) { nsMods.insert(.command) }
+        if flags.contains(.maskShift) { nsMods.insert(.shift) }
+        if flags.contains(.maskAlternate) { nsMods.insert(.option) }
+        if flags.contains(.maskControl) { nsMods.insert(.control) }
+
+        let eventKeyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+
+        if eventKeyCode == ctx.pointee.keyCode &&
+           nsMods.rawValue == ctx.pointee.modRaw {
+          ctx.pointee.onToggle?()
+        }
+
+        return Unmanaged.passRetained(event)
+      },
+      userInfo: ctx
+    )
+
+    if let tap = tap {
+      self.eventTap = tap
+      let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+      self.runLoopSource = source
+      CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+      CGEvent.tapEnable(tap: tap, enable: true)
+      NSLog("[HotkeyManager] CGEventTap registered for \(config.displayString)")
+    } else {
+      NSLog("[HotkeyManager] ⚠️ CGEventTap creation failed — falling back to NSEvent monitor")
+      // Fallback: use NSEvent global monitor (less reliable but works without Accessibility)
+      globalFallbackMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if event.keyCode == targetKeyCode && eventMods == targetMods {
+          Task { @MainActor [weak self] in
+            self?.onToggle?()
+          }
+        }
+      }
+      NSLog("[HotkeyManager] NSEvent fallback registered for \(config.displayString)")
+      ctx.deinitialize(count: 1)
+      ctx.deallocate()
+    }
+
+    // Local monitor — fires when our app IS focused (CGEventTap doesn't cover this)
     localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       let eventMods = event.modifierFlags.intersection([.command, .shift, .option, .control])
       if event.keyCode == targetKeyCode && eventMods == targetMods {
@@ -241,10 +326,25 @@ final class HotkeyManager {
   }
 
   private func stopMonitoring() {
-    if let m = globalMonitor {
-      NSEvent.removeMonitor(m)
-      globalMonitor = nil
+    // Remove CGEventTap
+    if let tap = eventTap {
+      CGEvent.tapEnable(tap: tap, enable: false)
+      if let source = runLoopSource {
+        CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+      }
+      // Note: the TapContext pointer is intentionally leaked for simplicity;
+      // in practice it's a tiny allocation that lives for the app's lifetime.
+      eventTap = nil
+      runLoopSource = nil
     }
+
+    // Remove NSEvent fallback monitor
+    if let m = globalFallbackMonitor {
+      NSEvent.removeMonitor(m)
+      globalFallbackMonitor = nil
+    }
+
+    // Remove local monitor
     if let m = localMonitor {
       NSEvent.removeMonitor(m)
       localMonitor = nil
