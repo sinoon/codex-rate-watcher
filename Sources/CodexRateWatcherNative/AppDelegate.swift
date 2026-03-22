@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var currentTier: StatusBarIcon.Tier = .unknown
   private var hotkeyManager: HotkeyManager?
   private var autoSwitchMenuItem: NSMenuItem?
+  private var deviceCodeLoginTask: Task<Void, Never>?
 
   init(windowMode: Bool = false) {
     self.windowMode = windowMode
@@ -99,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self.observerID = nil
     }
     monitor.stop()
+    deviceCodeLoginTask?.cancel()
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -168,6 +170,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     hotkeyToggle.target = self
     menu.addItem(hotkeyToggle)
 
+    let addAccountItem = NSMenuItem(title: Copy.addAccount, action: #selector(startDeviceCodeLogin), keyEquivalent: "")
+    addAccountItem.target = self
+    menu.addItem(addAccountItem)
+
+    menu.addItem(NSMenuItem.separator())
+
     let aboutItem = NSMenuItem(title: "关于 Codex Rate Watcher", action: #selector(showAbout), keyEquivalent: "")
     aboutItem.target = self
     menu.addItem(aboutItem)
@@ -233,7 +241,109 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.terminate(nil)
   }
 
+
+  // MARK: - Device Code Login
+
+  @objc private func startDeviceCodeLogin() {
+    deviceCodeLoginTask?.cancel()
+
+    deviceCodeLoginTask = Task {
+      do {
+        let auth = DeviceCodeAuth()
+
+        // Step 1: Request device code
+        let deviceCode = try await auth.requestDeviceCode()
+
+        // Step 2: Show alert with user code
+        if !windowMode {
+          NSApp.setActivationPolicy(.regular)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = Copy.deviceCodeTitle
+        alert.informativeText = Copy.deviceCodeMessage(code: deviceCode.userCode)
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: Copy.deviceCodeCopyAndOpen)
+        alert.addButton(withTitle: Copy.deviceCodeCancel)
+
+        let response = alert.runModal()
+
+        if !windowMode {
+          NSApp.setActivationPolicy(.accessory)
+        }
+
+        guard response == .alertFirstButtonReturn else { return }
+
+        // Copy code to clipboard
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(deviceCode.userCode, forType: .string)
+
+        // Open verification URL in browser
+        if let url = URL(string: DeviceCodeAuth.verificationURL) {
+          NSWorkspace.shared.open(url)
+        }
+
+        // Step 3: Poll for authorization & exchange tokens
+        NSLog("[DeviceCodeLogin] Polling for authorization...")
+        let tokens = try await auth.pollAndExchange(
+          deviceAuthID: deviceCode.deviceAuthID,
+          userCode: deviceCode.userCode,
+          interval: deviceCode.interval
+        )
+        NSLog("[DeviceCodeLogin] Token exchange complete")
+
+        // Step 4: Build and write auth.json
+        let authData = try DeviceCodeAuth.buildAuthJSON(tokens: tokens)
+        let authStore = AuthStore()
+        try authStore.writeRawData(authData)
+        NSLog("[DeviceCodeLogin] auth.json written")
+
+        // Parse email for notification
+        let envelope = try authStore.envelope(from: authData)
+
+        // Step 5: Send success notification
+        let notifContent = UNMutableNotificationContent()
+        notifContent.title = Copy.deviceCodeSuccess
+        notifContent.body = Copy.deviceCodeSuccessBody(email: envelope.snapshot.email)
+        notifContent.sound = .default
+
+        let notifRequest = UNNotificationRequest(
+          identifier: "device-code-login-success",
+          content: notifContent,
+          trigger: nil
+        )
+        try? await UNUserNotificationCenter.current().add(notifRequest)
+
+        // Force refresh to pick up the new account
+        await monitor.refresh(manual: true)
+
+      } catch is CancellationError {
+        // User cancelled or task was replaced — do nothing
+      } catch {
+        NSLog("[DeviceCodeLogin] Error: \(error.localizedDescription)")
+
+        if !windowMode {
+          NSApp.setActivationPolicy(.regular)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let errorAlert = NSAlert()
+        errorAlert.messageText = Copy.deviceCodeFailed
+        errorAlert.informativeText = error.localizedDescription
+        errorAlert.alertStyle = .warning
+        errorAlert.addButton(withTitle: "好")
+        errorAlert.runModal()
+
+        if !windowMode {
+          NSApp.setActivationPolicy(.accessory)
+        }
+      }
+    }
+  }
+
   // MARK: - Main Menu
+
 
   private func buildMainMenu() {
     let mainMenu = NSMenu()

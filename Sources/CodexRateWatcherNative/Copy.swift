@@ -219,4 +219,22 @@ enum Copy {
   static let autoSwitchMenuLabel = "自动切换账号"
   static let autoSwitchCooldown = "冷却中，稍后再试"
 
+
+  // MARK: - Device Code Login
+
+  static let addAccount = "添加账号"
+  static let deviceCodeTitle = "登录 Codex 账号"
+  static func deviceCodeMessage(code: String) -> String {
+    "请在浏览器中输入以下验证码完成登录：\n\n\(code)\n\n点击下方按钮自动复制验证码并打开浏览器。"
+  }
+  static let deviceCodeCopyAndOpen = "复制验证码并打开浏览器"
+  static let deviceCodeCancel = "取消"
+  static let deviceCodeSuccess = "新账号登录成功"
+  static func deviceCodeSuccessBody(email: String?) -> String {
+    if let e = email { return "\(e) 已登录并自动注册到账号列表" }
+    return "新账号已登录并注册到账号列表"
+  }
+  static let deviceCodeFailed = "登录失败"
+  static let deviceCodeRequestingCode = "正在获取验证码…"
+
 }
