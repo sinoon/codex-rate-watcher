@@ -86,6 +86,13 @@ final class PopoverViewController: NSViewController {
   private let recBtn         = NSButton()
   private var recProfileID: UUID?
 
+  // Relay card
+  private var relayWrapper: NSView!
+  private let relaySectionLabel = NSTextField(labelWithString: "")
+  private let relaySummaryLabel = NSTextField(labelWithString: "")
+  private let relayLegStack = NSStackView()
+  private let relayStatusLabel = NSTextField(labelWithString: "")
+
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
   private let profileStack    = NSStackView()
@@ -142,6 +149,7 @@ final class PopoverViewController: NSViewController {
     let headerView = makeHeader()
     let primaryCard = makePrimaryCard()
     let quotaCard = makeQuotaCard()
+    let relayCard = makeRelayCard()
     let recView = makeRecBanner()
     let profileSection = makeProfileSection()
     let footer = makeFooter()
@@ -149,13 +157,15 @@ final class PopoverViewController: NSViewController {
     root.addArrangedSubview(headerView)
     root.addArrangedSubview(primaryCard)
     root.addArrangedSubview(quotaCard)
+    root.addArrangedSubview(relayCard)
     root.addArrangedSubview(recView)
     root.addArrangedSubview(profileSection)
     root.addArrangedSubview(footer)
 
     root.setCustomSpacing(LN.gap, after: headerView)
     root.setCustomSpacing(LN.gapSm, after: primaryCard)
-    root.setCustomSpacing(LN.gap, after: quotaCard)
+    root.setCustomSpacing(LN.gapSm, after: quotaCard)
+    root.setCustomSpacing(LN.gap, after: relayCard)
     root.setCustomSpacing(LN.gap, after: recView)
     root.setCustomSpacing(LN.gapSm, after: profileSection)
   }
@@ -507,6 +517,80 @@ final class PopoverViewController: NSViewController {
     label.translatesAutoresizingMaskIntoConstraints = false
   }
 
+  // MARK: - Relay Card
+
+  private func makeRelayCard() -> NSView {
+    let wrapper = NSView()
+    wrapper.translatesAutoresizingMaskIntoConstraints = false
+    relayWrapper = wrapper
+
+    let card = NSView()
+    card.wantsLayer = true
+    card.layer?.backgroundColor = LN.surface.cgColor
+    card.layer?.cornerRadius = LN.radius
+    card.layer?.borderWidth = 1
+    card.layer?.borderColor = LN.borderSubtle.cgColor
+    card.translatesAutoresizingMaskIntoConstraints = false
+
+    relaySectionLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    relaySectionLabel.textColor = LN.textMuted
+    relaySectionLabel.stringValue = Copy.relaySectionTitle
+    relaySectionLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    relaySummaryLabel.font = .systemFont(ofSize: LN.fontSmall, weight: .medium)
+    relaySummaryLabel.textColor = LN.textSecondary
+    relaySummaryLabel.lineBreakMode = .byTruncatingTail
+    relaySummaryLabel.maximumNumberOfLines = 1
+    relaySummaryLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    relayLegStack.orientation = .vertical
+    relayLegStack.spacing = LN.gapXs
+    relayLegStack.translatesAutoresizingMaskIntoConstraints = false
+
+    relayStatusLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    relayStatusLabel.textColor = LN.textTertiary
+    relayStatusLabel.lineBreakMode = .byTruncatingTail
+    relayStatusLabel.maximumNumberOfLines = 2
+    relayStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    card.addSubview(relaySectionLabel)
+    card.addSubview(relaySummaryLabel)
+    card.addSubview(relayLegStack)
+    card.addSubview(relayStatusLabel)
+
+    let cPad = LN.cardPad
+
+    NSLayoutConstraint.activate([
+      relaySectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      relaySectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
+
+      relaySummaryLabel.leadingAnchor.constraint(equalTo: relaySectionLabel.trailingAnchor, constant: 6),
+      relaySummaryLabel.trailingAnchor.constraint(lessThanOrEqualTo: card.trailingAnchor, constant: -cPad),
+      relaySummaryLabel.centerYAnchor.constraint(equalTo: relaySectionLabel.centerYAnchor),
+
+      relayLegStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      relayLegStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      relayLegStack.topAnchor.constraint(equalTo: relaySectionLabel.bottomAnchor, constant: 8),
+
+      relayStatusLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      relayStatusLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      relayStatusLabel.topAnchor.constraint(equalTo: relayLegStack.bottomAnchor, constant: 6),
+      relayStatusLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+    ])
+
+    wrapper.addSubview(card)
+    NSLayoutConstraint.activate([
+      wrapper.widthAnchor.constraint(equalToConstant: LN.popoverW),
+      card.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: LN.pad),
+      card.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -LN.pad),
+      card.topAnchor.constraint(equalTo: wrapper.topAnchor),
+      card.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+    ])
+
+    return wrapper
+  }
+
+
   // MARK: - Recommendation Banner
 
   private func makeRecBanner() -> NSView {
@@ -674,6 +758,7 @@ final class PopoverViewController: NSViewController {
 
     renderPrimary(snapshot: snapshot, state: state, activeProfile: activeProfile)
     renderQuotas(snapshot: snapshot, state: state)
+    renderRelay(state: state)
     renderRec(state: state)
     renderProfiles(state: state)
   }
@@ -759,6 +844,159 @@ final class PopoverViewController: NSViewController {
     reviewFill.layer?.backgroundColor = rAccent.cgColor
     reviewDetail.stringValue = state.burnLabel(from: state.reviewEstimate)
   }
+
+  private func renderRelay(state: UsageMonitor.State) {
+    let plan = state.relayPlan
+
+    // Hide relay card if only one or zero accounts
+    guard plan.legs.count > 1 else {
+      relayWrapper?.isHidden = true
+      return
+    }
+    relayWrapper?.isHidden = false
+
+    // Summary label
+    relaySummaryLabel.stringValue = "\(plan.legCount) 账号 · \(plan.coverageSummary)"
+
+    // Clear old leg bars
+    relayLegStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+    // Build a horizontal stacked bar showing all legs proportionally
+    let barContainer = NSView()
+    barContainer.translatesAutoresizingMaskIntoConstraints = false
+    barContainer.wantsLayer = true
+    barContainer.layer?.cornerRadius = LN.progressR
+    barContainer.layer?.backgroundColor = LN.elevated.cgColor
+
+    let barHeight: CGFloat = 18
+    let totalWidth: CGFloat = LN.popoverW - LN.pad * 2 - LN.cardPad * 2
+
+    NSLayoutConstraint.activate([
+      barContainer.heightAnchor.constraint(equalToConstant: barHeight),
+      barContainer.widthAnchor.constraint(equalToConstant: totalWidth),
+    ])
+
+    let totalCoverage = plan.totalCoverageSeconds
+    guard totalCoverage > 0 else {
+      relayLegStack.addArrangedSubview(barContainer)
+      relayStatusLabel.stringValue = Copy.relayAllExhausted
+      return
+    }
+
+    let legColors: [NSColor] = [LN.blue, LN.green, LN.yellow, LN.red,
+      NSColor(srgbRed: 0.6, green: 0.4, blue: 0.8, alpha: 1)]
+    var xOffset: CGFloat = 0
+
+    for (idx, leg) in plan.legs.enumerated() {
+      let fraction = CGFloat(leg.durationSeconds / totalCoverage)
+      let segWidth = max(2, totalWidth * fraction)
+      let color = legColors[idx % legColors.count]
+
+      let seg = NSView()
+      seg.wantsLayer = true
+      seg.layer?.backgroundColor = color.cgColor
+      seg.translatesAutoresizingMaskIntoConstraints = false
+      // Round corners on first/last segments
+      if idx == 0 {
+        seg.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+        seg.layer?.cornerRadius = LN.progressR
+      }
+      if idx == plan.legs.count - 1 {
+        seg.layer?.maskedCorners = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        seg.layer?.cornerRadius = LN.progressR
+      }
+
+      barContainer.addSubview(seg)
+      NSLayoutConstraint.activate([
+        seg.leadingAnchor.constraint(equalTo: barContainer.leadingAnchor, constant: xOffset),
+        seg.topAnchor.constraint(equalTo: barContainer.topAnchor),
+        seg.bottomAnchor.constraint(equalTo: barContainer.bottomAnchor),
+        seg.widthAnchor.constraint(equalToConstant: segWidth),
+      ])
+      xOffset += segWidth
+    }
+
+    relayLegStack.addArrangedSubview(barContainer)
+
+    // Add legend rows below the bar
+    for (idx, leg) in plan.legs.enumerated() {
+      let color = legColors[idx % legColors.count]
+      let row = makeRelayLegendRow(
+        color: color,
+        name: leg.displayName,
+        remaining: Int(leg.startingRemainPercent.rounded()),
+        duration: Copy.duration(leg.durationSeconds),
+        isCurrent: idx == 0
+      )
+      relayLegStack.addArrangedSubview(row)
+    }
+
+    // Status line
+    if plan.canSurviveUntilReset {
+      let resetLabel = plan.earliestPrimaryReset.map { Copy.resetDate($0.timeIntervalSince1970) } ?? "--"
+      relayStatusLabel.stringValue = Copy.relaySurvive(resetTime: resetLabel)
+      relayStatusLabel.textColor = LN.green
+    } else if let exhaustAt = plan.allExhaustedAt {
+      let exhaustLabel = Copy.resetDate(exhaustAt.timeIntervalSince1970)
+      let resetLabel = plan.earliestPrimaryReset.map { Copy.resetDate($0.timeIntervalSince1970) } ?? "--"
+      if let gapSecs = plan.gapToResetSeconds {
+        let gapLabel = Copy.duration(abs(gapSecs))
+        relayStatusLabel.stringValue = Copy.relayGap(exhaustTime: exhaustLabel, resetTime: resetLabel, gap: gapLabel)
+      } else {
+        relayStatusLabel.stringValue = "全部耗尽于 \(exhaustLabel)"
+      }
+      relayStatusLabel.textColor = LN.yellow
+    }
+  }
+
+  private func makeRelayLegendRow(color: NSColor, name: String, remaining: Int,
+                                   duration: String, isCurrent: Bool) -> NSView {
+    let row = NSView()
+    row.translatesAutoresizingMaskIntoConstraints = false
+
+    let dot = NSView()
+    dot.wantsLayer = true
+    dot.layer?.cornerRadius = 3
+    dot.layer?.backgroundColor = color.cgColor
+    dot.translatesAutoresizingMaskIntoConstraints = false
+
+    let label = NSTextField(labelWithString: "")
+    label.font = .systemFont(ofSize: LN.fontMicro, weight: isCurrent ? .semibold : .regular)
+    label.textColor = isCurrent ? LN.textPrimary : LN.textTertiary
+    label.lineBreakMode = .byTruncatingTail
+    label.maximumNumberOfLines = 1
+    label.stringValue = Copy.relayLegLabel(name: name, duration: duration, remaining: remaining)
+    label.translatesAutoresizingMaskIntoConstraints = false
+
+    let tag = NSTextField(labelWithString: "")
+    tag.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    tag.textColor = LN.textMuted
+    tag.stringValue = isCurrent ? "当前" : ""
+    tag.translatesAutoresizingMaskIntoConstraints = false
+
+    row.addSubview(dot)
+    row.addSubview(label)
+    row.addSubview(tag)
+
+    NSLayoutConstraint.activate([
+      row.heightAnchor.constraint(equalToConstant: 16),
+
+      dot.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+      dot.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+      dot.widthAnchor.constraint(equalToConstant: 6),
+      dot.heightAnchor.constraint(equalToConstant: 6),
+
+      label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 5),
+      label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+      label.trailingAnchor.constraint(lessThanOrEqualTo: tag.leadingAnchor, constant: -4),
+
+      tag.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+      tag.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+    ])
+
+    return row
+  }
+
 
   private func renderRec(state: UsageMonitor.State) {
     let rec = state.switchRecommendation

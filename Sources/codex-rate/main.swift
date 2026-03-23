@@ -187,10 +187,12 @@ private struct CLIOptions {
     case profiles
     case watch
     case history
+    case relay
     case help
   }
   var command: Command = .status
   var jsonOutput: Bool = false
+  var relayStrategy: String = "reset-aware"
   var watchInterval: Int = 30
   var historyHours: Int = 24
 }
@@ -214,12 +216,14 @@ private func parseArguments() -> CLIOptions {
     opts.command = .watch; idx = 1
   case "history":
     opts.command = .history; idx = 1
+  case "relay":
+    opts.command = .relay; idx = 1
   case "help", "-h", "--help":
     opts.command = .help; return opts
   case "--json":
     opts.command = .status; opts.jsonOutput = true; idx = 1
   case "--version", "-v":
-    print("codex-rate 1.4.0")
+    print("codex-rate 1.6.0")
     exit(0)
   default:
     fputs(ANSI.c(ANSI.red, "Unknown command: \(first)") + "\n", stderr)
@@ -245,6 +249,12 @@ private func parseArguments() -> CLIOptions {
         exitWithError("--hours requires a positive integer")
       }
       opts.historyHours = val
+    case "--strategy":
+      idx += 1
+      guard idx < args.count else {
+        exitWithError("--strategy requires a value: reset-aware, greedy, or max-runway")
+      }
+      opts.relayStrategy = args[idx]
     case "-h", "--help":
       opts.command = .help; return opts
     default:
@@ -635,6 +645,136 @@ private func runHistory(hours: Int, json: Bool) {
   print()
 }
 
+
+// MARK: - Subcommand: Relay
+
+private func runRelay(strategyName: String, json: Bool) async {
+  let url = AppPaths.profileIndexFile
+  guard FileManager.default.fileExists(atPath: url.path) else {
+    if json {
+      print("{\"legs\":[], \"error\": \"no profiles\"}")
+    } else {
+      print(ANSI.c(ANSI.yellow, "No profiles found."))
+      print(ANSI.c(ANSI.dim, "Profiles are created by the menu bar app."))
+    }
+    return
+  }
+
+  let records: [AuthProfileRecord]
+  do {
+    let data = try Data(contentsOf: url)
+    records = try JSONDecoder().decode([AuthProfileRecord].self, from: data)
+  } catch {
+    exitWithError("Failed to read profiles: \(error.localizedDescription)")
+  }
+
+  let strategy: RelayStrategy
+  switch strategyName {
+  case "greedy": strategy = .greedy
+  case "max-runway": strategy = .maxRunway
+  default: strategy = .resetAware
+  }
+
+  // Determine active profile
+  let authStore = AuthStore()
+  var activeProfileID: UUID? = nil
+  if let auth = try? authStore.load() {
+    activeProfileID = records.first(where: { $0.email == auth.email })?.id
+  }
+
+  let inputs = RelayPlanner.inputs(from: records, activeProfileID: activeProfileID)
+  let plan = RelayPlanner.plan(profiles: inputs, currentBurnRate: nil, strategy: strategy)
+
+  if json {
+    var dict: [String: Any] = [
+      "strategy": strategy.rawValue,
+      "leg_count": plan.legCount,
+      "total_coverage_seconds": plan.totalCoverageSeconds,
+      "coverage_summary": plan.coverageSummary,
+      "can_survive_until_reset": plan.canSurviveUntilReset,
+    ]
+    if let exhaustAt = plan.allExhaustedAt {
+      dict["all_exhausted_at"] = ISO8601DateFormatter().string(from: exhaustAt)
+    }
+    if let reset = plan.earliestPrimaryReset {
+      dict["earliest_primary_reset"] = ISO8601DateFormatter().string(from: reset)
+    }
+    if let gap = plan.gapToResetSeconds {
+      dict["gap_to_reset_seconds"] = gap
+    }
+    var legsArr: [[String: Any]] = []
+    for leg in plan.legs {
+      legsArr.append([
+        "profile_id": leg.profileID.uuidString,
+        "display_name": leg.displayName,
+        "start_at": ISO8601DateFormatter().string(from: leg.startAt),
+        "estimated_exhaust_at": ISO8601DateFormatter().string(from: leg.estimatedExhaustAt),
+        "duration_seconds": leg.durationSeconds,
+        "starting_remain_percent": leg.startingRemainPercent,
+        "burn_rate_per_hour": leg.burnRatePerHour,
+      ])
+    }
+    dict["legs"] = legsArr
+    if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
+       let str = String(data: data, encoding: .utf8) {
+      print(str)
+    }
+    return
+  }
+
+  // Pretty output
+  guard !plan.legs.isEmpty else {
+    print(ANSI.c(ANSI.yellow, "\u{26A0}\u{FE0F}  No usable accounts for relay."))
+    return
+  }
+
+  let legColors = [ANSI.blue, ANSI.green, ANSI.yellow, ANSI.red, ANSI.magenta]
+
+  print()
+  print(ANSI.c(ANSI.bold + ANSI.cyan, "  Relay Plan") + ANSI.c(ANSI.dim, "  (strategy: \(strategy.rawValue) \u{00B7} \(plan.legCount) accounts \u{00B7} \(plan.coverageSummary))"))
+  print()
+
+  // Timeline bar
+  let barWidth = 40
+  let total = plan.totalCoverageSeconds
+  var barStr = ""
+  for (idx, leg) in plan.legs.enumerated() {
+    let fraction = leg.durationSeconds / total
+    let segWidth = max(1, Int(Double(barWidth) * fraction))
+    let color = legColors[idx % legColors.count]
+    barStr += ANSI.c(color, String(repeating: "\u{2588}", count: segWidth))
+  }
+  print("  \(barStr)")
+  print()
+
+  // Legend
+  for (idx, leg) in plan.legs.enumerated() {
+    let color = legColors[idx % legColors.count]
+    let dot = ANSI.c(color, "\u{25CF}")
+    let tag = idx == 0 ? ANSI.c(ANSI.dim, " (current)") : ""
+    let duration = formatDuration(seconds: Int(leg.durationSeconds))
+    print("  \(dot) \(ANSI.c(ANSI.bold, leg.displayName))\(tag)  \(Int(leg.startingRemainPercent.rounded()))% \u{2192} 0%  \u{00B7} \(duration)")
+  }
+  print()
+
+  // Summary
+  if plan.canSurviveUntilReset {
+    let resetLabel = plan.earliestPrimaryReset.map { formatResetTimestamp(resetAt: $0.timeIntervalSince1970) } ?? "?"
+    print(ANSI.c(ANSI.green, "  \u{2705} Relay covers until reset (\(resetLabel))"))
+  } else if let exhaustAt = plan.allExhaustedAt {
+    let exhaustLabel = formatResetTimestamp(resetAt: exhaustAt.timeIntervalSince1970)
+    let resetLabel = plan.earliestPrimaryReset.map { formatResetTimestamp(resetAt: $0.timeIntervalSince1970) } ?? "?"
+    if let gapSecs = plan.gapToResetSeconds {
+      let gapLabel = formatDuration(seconds: Int(abs(gapSecs)))
+      print(ANSI.c(ANSI.yellow, "  \u{26A0}\u{FE0F}  All exhausted: \(exhaustLabel)"))
+      print(ANSI.c(ANSI.yellow, "     Next reset: \(resetLabel)  \u{00B7}  Gap: \(gapLabel)"))
+    } else {
+      print(ANSI.c(ANSI.yellow, "  \u{26A0}\u{FE0F}  All exhausted: \(exhaustLabel)"))
+    }
+  }
+  print()
+}
+
 // MARK: - Help
 
 private func printHelp() {
@@ -649,12 +789,14 @@ private func printHelp() {
     profiles    List saved authentication profiles
     watch       Continuous monitoring mode
     history     Show usage history with sparklines
+    relay       Show relay plan across accounts
     help        Show this help message
 
   \(ANSI.c(ANSI.bold, "OPTIONS"))
     --json               Output as JSON
     --interval <secs>    Watch polling interval (default: 30, min: 10)
     --hours <N>          History window in hours (default: 24)
+    --strategy <name>    Relay strategy: reset-aware (default), greedy, max-runway
     -v, --version        Show version
     -h, --help           Show help
 
@@ -664,6 +806,8 @@ private func printHelp() {
     codex-rate profiles           List all auth profiles
     codex-rate watch --interval 15  Monitor every 15 seconds
     codex-rate history --hours 6  Show last 6 hours
+    codex-rate relay              Show relay plan
+    codex-rate relay --strategy greedy  Use greedy strategy
 
   \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/patchwork-body/shakeflow"))
   """
@@ -683,6 +827,8 @@ case .watch:
   await runWatch(interval: opts.watchInterval, json: opts.jsonOutput)
 case .history:
   runHistory(hours: opts.historyHours, json: opts.jsonOutput)
+case .relay:
+  await runRelay(strategyName: opts.relayStrategy, json: opts.jsonOutput)
 case .help:
   printHelp()
 }

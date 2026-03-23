@@ -154,7 +154,15 @@ final class AlertManager {
     }
   }
 
+  private var notificationAvailable: Bool {
+    Bundle.main.bundleIdentifier != nil
+  }
+
   private func requestNotificationPermission() {
+    guard notificationAvailable else {
+      print("[AlertManager] Skipping notification setup (no bundle identifier)")
+      return
+    }
     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
       if let error {
         print("[AlertManager] permission error: \(error.localizedDescription)")
@@ -186,6 +194,7 @@ final class AlertManager {
 
   /// Send auto-switch notification with Undo action button
   func sendAutoSwitchNotification(fromName: String, toName: String, reason: String) {
+    guard notificationAvailable else { return }
     let content = UNMutableNotificationContent()
     content.title = Copy.autoSwitchNotifyTitle(to: toName)
     content.body = Copy.autoSwitchNotifyBody(from: fromName, to: toName, reason: reason)
@@ -200,6 +209,27 @@ final class AlertManager {
     UNUserNotificationCenter.current().add(request) { error in
       if let error {
         print("[AlertManager] auto-switch notification error: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  /// Send relay-switch notification with coverage info
+  func sendRelayNotification(fromName: String, toName: String, coverage: String) {
+    guard notificationAvailable else { return }
+    let content = UNMutableNotificationContent()
+    content.title = Copy.relayAutoNotifyTitle(to: toName)
+    content.body = Copy.relayAutoNotifyBody(from: fromName, to: toName, coverage: coverage)
+    content.sound = .default
+    content.categoryIdentifier = "AUTO_SWITCH"
+
+    let request = UNNotificationRequest(
+      identifier: "relay-switch-\(Date().timeIntervalSince1970)",
+      content: content,
+      trigger: nil
+    )
+    UNUserNotificationCenter.current().add(request) { error in
+      if let error {
+        print("[AlertManager] relay notification error: \(error.localizedDescription)")
       }
     }
   }

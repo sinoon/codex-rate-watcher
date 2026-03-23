@@ -6,7 +6,7 @@
 
 **That never has to happen again.**
 
-A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/codex/) (ChatGPT Pro / Team) rate-limit usage in real time — with burn-rate predictions, multi-account switching, a CLI tool, and Raycast integration.
+A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/codex/) (ChatGPT Pro / Team) rate-limit usage in real time — with burn-rate predictions, intelligent multi-account relay, a CLI tool, and Raycast integration.
 
 [![en](https://img.shields.io/badge/lang-English-blue.svg)](README.md)
 [![zh-CN](https://img.shields.io/badge/lang-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-red.svg)](README.zh-CN.md)
@@ -25,7 +25,11 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
   <img src="docs/screenshot-window.png" width="440" alt="Codex Rate Watcher — macOS menu bar app monitoring OpenAI Codex ChatGPT rate limits in real time" />
 </p>
 
-**Real-time quota monitoring · Burn-rate prediction · Multi-account switching · CLI + Raycast**
+<p>
+  <img src="docs/screenshot-relay.jpg" width="440" alt="Codex Rate Watcher — Intelligent relay planning across multiple accounts" />
+</p>
+
+**Real-time quota monitoring · Burn-rate prediction · Intelligent relay · Multi-account switching · CLI + Raycast**
 
 </div>
 
@@ -93,11 +97,27 @@ v1.5.0 introduces automatic account switching — the app detects when your curr
 - **Off by default** — enable via right-click menu → "自动切换账号"
 - **Persisted config** — your preference survives app restarts
 
+
+### 🧠 Intelligent Relay
+
+v1.6.0 introduces **predictive relay planning** — the app uses burn-rate estimation to plan an optimal relay sequence across all your accounts, telling you exactly when all quotas will run out.
+
+<p>
+  <img src="docs/screenshot-relay.jpg" width="400" alt="Relay Plan — visual timeline showing multi-account relay coverage" />
+</p>
+
+- **Burn-rate projection** — uses linear regression to predict when each account will exhaust
+- **Visual timeline** — proportional color bar showing each account's contribution
+- **3 relay strategies** — Reset-aware (default, maximizes reset recycling), Greedy (use least-remaining first), Max-runway (use most-remaining first)
+- **Preemptive auto-switch** — switches 5 minutes _before_ predicted exhaustion instead of waiting for low-percent thresholds
+- **Survive-until-reset** — tells you whether the relay chain covers the gap until the earliest quota reset
+- **CLI support** — `codex-rate relay` shows the full relay plan in your terminal
+
 ---
 
 ## 🖥️ CLI Tool
 
-v1.4.0 introduces `codex-rate` — a companion CLI for terminal-first monitoring.
+v1.4.0+ introduces `codex-rate` — a companion CLI for terminal-first monitoring.
 
 ### Install
 
@@ -128,6 +148,11 @@ codex-rate watch --interval 15
 # Usage history with sparklines
 codex-rate history
 codex-rate history --hours 6
+
+# Relay plan across all accounts
+codex-rate relay
+codex-rate relay --strategy greedy
+codex-rate relay --json
 ```
 
 ### Example Output
@@ -278,6 +303,9 @@ Launches as a standalone window instead of a menu bar popover — useful for scr
     │    UsageEstimator (burn rate estimation)
     │
     ▼
+   RelayPlanner (intelligent relay planning)
+    │
+    ▼
    AuthProfileStore (multi-account management)
     │         │
     │         ▼
@@ -309,6 +337,20 @@ if is_current:  score += 4                // stay bonus
 ```
 
 The highest-scoring profile is recommended. Switching auto-backs up your current `auth.json`.
+
+### Relay Planning Algorithm
+
+The relay planner builds an optimal sequence across all available accounts:
+
+1. Filters usable profiles (valid, unblocked, remaining > 0%)
+2. Places the current account first in the queue
+3. Sorts remaining accounts by strategy:
+   - **Reset-aware**: accounts with earliest reset first (maximizes reset recycling on 5h windows)
+   - **Greedy**: least remaining first (preserves high-capacity accounts)
+   - **Max-runway**: most remaining first (maximizes immediate coverage)
+4. For each account: `coverage = (remaining% / burnRate) × 3600s`
+5. Chains legs sequentially to compute total coverage
+6. Checks if `totalCoverage ≥ earliestPrimaryReset - now` → can survive until reset
 
 ### Orphaned Snapshot Reconciliation
 

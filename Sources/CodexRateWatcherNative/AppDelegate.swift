@@ -24,7 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Lifecycle
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    UNUserNotificationCenter.current().delegate = self
+    if Bundle.main.bundleIdentifier != nil {
+      UNUserNotificationCenter.current().delegate = self
+    }
     buildMainMenu()
 
     let viewController = PopoverViewController(monitor: monitor)
@@ -74,8 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     // Wire auto-switch notification
-    monitor.onAutoSwitch = { [weak self] fromName, toName, reason in
-      self?.alertManager.sendAutoSwitchNotification(fromName: fromName, toName: toName, reason: reason)
+    monitor.onAutoSwitch = { [weak self] fromName, toName, coverageOrReason in
+      self?.alertManager.sendRelayNotification(fromName: fromName, toName: toName, coverage: coverageOrReason)
     }
 
     monitor.start()
@@ -410,7 +412,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     let primary = snapshot.rateLimit.primaryWindow
-    button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
+    let plan = state.relayPlan
+    if plan.legs.count > 1 {
+      let pct = Int(primary.remainingPercent.rounded())
+      if plan.canSurviveUntilReset {
+        button.title = "\(pct)% \(Copy.relayMenuBarSurvive(legCount: plan.legCount))"
+      } else if let gapSecs = plan.gapToResetSeconds {
+        button.title = "\(pct)% \(Copy.relayMenuBarGap(gap: Copy.duration(abs(gapSecs))))"
+      } else {
+        button.title = Copy.menuBarNormal(pct: pct, altCount: state.availableProfileCount)
+      }
+    } else {
+      button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
+    }
   }
 }
 

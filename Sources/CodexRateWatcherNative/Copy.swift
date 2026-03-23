@@ -239,4 +239,46 @@ enum Copy {
   static let deviceCodeFailed = "登录失败"
   static let deviceCodeRequestingCode = "正在获取验证码…"
 
+
+  // MARK: - Relay Plan
+
+  static let relaySectionTitle = "Relay Plan"
+
+  static func relayCoverage(duration: String, legCount: Int) -> String {
+    "\(legCount) 账号接力 · 覆盖 \(duration)"
+  }
+
+  static func relayLegLabel(name: String, duration: String, remaining: Int) -> String {
+    "\(name) · \(remaining)% · \(duration)"
+  }
+
+  static func relaySurvive(resetTime: String) -> String {
+    "✅ 可撑到 \(resetTime) 重置"
+  }
+
+  static func relayGap(exhaustTime: String, resetTime: String, gap: String) -> String {
+    "⚠️ \(exhaustTime) 全部耗尽 · \(resetTime) 重置 · 缺口 \(gap)"
+  }
+
+  static let relayNoAccounts = "无可用账号参与接力"
+
+  static let relayAllExhausted = "所有账号均已耗尽"
+
+  static func relayAutoNotifyTitle(to name: String) -> String {
+    "接力切换到 \(name)"
+  }
+
+  static func relayAutoNotifyBody(from: String, to: String, coverage: String) -> String {
+    "\(from) 即将耗尽 → 切到 \(to) · 剩余接力 \(coverage)"
+  }
+
+  static let relayAutoLabel = "智能接力"
+
+  static func relayMenuBarSurvive(legCount: Int) -> String {
+    "✓ \(legCount)号接力"
+  }
+
+  static func relayMenuBarGap(gap: String) -> String {
+    "缺口 \(gap)"
+  }
 }

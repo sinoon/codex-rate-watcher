@@ -32,6 +32,26 @@ final class UsageMonitor {
       buildSwitchRecommendation()
     }
 
+    var relayPlan: RelayPlan {
+      let inputs = RelayPlanner.inputs(from: profiles, activeProfileID: activeProfileID)
+      return RelayPlanner.plan(
+        profiles: inputs,
+        currentBurnRate: primaryEstimate.percentPerHour,
+        strategy: .resetAware
+      )
+    }
+
+    var relaySummary: String {
+      let plan = relayPlan
+      guard !plan.legs.isEmpty else { return Copy.relayNoAccounts }
+      let coverage = Copy.relayCoverage(duration: plan.coverageSummary, legCount: plan.legCount)
+      if plan.canSurviveUntilReset {
+        let resetLabel = plan.earliestPrimaryReset.map { Copy.resetDate($0.timeIntervalSince1970) } ?? "--"
+        return "\(coverage) · \(Copy.relaySurvive(resetTime: resetLabel))"
+      }
+      return coverage
+    }
+
     var lastUpdatedLabel: String {
       guard let lastUpdatedAt else {
         return "等待首次同步"  // Keep — only shown once
@@ -313,6 +333,7 @@ final class UsageMonitor {
 
   private let authStore: AuthStore
   private let apiClient: UsageAPIClient
+  private let tokenRefresher = TokenRefresher()
   private let sampleStore: SampleStore
   private let profileStore: AuthProfileStore
   private var timer: Timer?
@@ -383,7 +404,8 @@ final class UsageMonitor {
     previousProfileID = nil
   }
 
-  /// Called after each refresh. Checks if we should auto-switch.
+  /// Called after each refresh. Uses RelayPlanner to decide when to auto-switch.
+  /// Falls back to score-based logic if relay plan has no next leg.
   private func evaluateAutoSwitch() {
     guard autoSwitchConfig.enabled else { return }
     guard !isRefreshing else { return }
@@ -395,13 +417,37 @@ final class UsageMonitor {
     }
 
     let state = makeState()
+    let plan = state.relayPlan
+
+    // Strategy 1: Relay-based auto-switch (time-predictive)
+    // Switch when current account has ≤ 5 minutes of predicted usage left
+    if let nextLeg = RelayPlanner.shouldAutoRelay(plan: plan, preemptSeconds: 300) {
+      let currentProfile = profiles.first(where: { $0.id == activeProfileID })
+      let fromName = currentProfile?.displayName ?? "unknown"
+      let toName = nextLeg.displayName
+      let remainingLegs = plan.legs.dropFirst()
+      let remainingCoverage = remainingLegs.reduce(0.0) { $0 + $1.durationSeconds }
+      let coverageLabel = Copy.duration(remainingCoverage)
+
+      NSLog("[UsageMonitor] Auto-relay: \(fromName) → \(toName) (preemptive, remaining coverage: \(coverageLabel))")
+
+      previousProfileID = activeProfileID
+
+      Task { [weak self] in
+        await self?.switchToProfile(id: nextLeg.profileID)
+        self?.lastAutoSwitchAt = Date()
+        self?.onAutoSwitch?(fromName, toName, coverageLabel)
+      }
+      return
+    }
+
+    // Strategy 2: Fallback to score-based auto-switch for edge cases
     let rec = state.switchRecommendation
 
     guard rec.kind == .switchNow, let targetID = rec.recommendedProfileID else {
       return
     }
 
-    // Extra safety: verify score lead exceeds auto-switch threshold
     let currentProfile = profiles.first(where: { $0.id == activeProfileID })
     let targetProfile = profiles.first(where: { $0.id == targetID })
     guard let targetProfile else { return }
@@ -413,12 +459,11 @@ final class UsageMonitor {
       return
     }
 
-    // All checks passed — perform auto-switch
     let fromName = currentProfile?.displayName ?? "unknown"
     let toName = targetProfile.displayName
     let reason = targetProfile.latestUsage?.switchSummaryText ?? ""
 
-    NSLog("[UsageMonitor] Auto-switching: \(fromName) → \(toName) (score lead: \(Int(targetScore - currentScore)))")
+    NSLog("[UsageMonitor] Auto-switching (score-based): \(fromName) → \(toName) (score lead: \(Int(targetScore - currentScore)))")
 
     previousProfileID = activeProfileID
 
@@ -541,7 +586,17 @@ final class UsageMonitor {
     do {
       profiles = (try? await profileStore.captureCurrentAuthIfNeeded()) ?? profiles
       let auth = try authStore.load()
-      let freshSnapshot = try await apiClient.fetchUsage(auth: auth)
+      let freshSnapshot: UsageSnapshot
+      do {
+        freshSnapshot = try await apiClient.fetchUsage(auth: auth)
+      } catch let apiError as UsageAPIError {
+        // On 401, attempt automatic token refresh before giving up.
+        if case .httpError(statusCode: 401, _) = apiError {
+          freshSnapshot = try await refreshTokenAndRetry()
+        } else {
+          throw apiError
+        }
+      }
       let now = Date()
 
       snapshot = freshSnapshot
@@ -572,6 +627,22 @@ final class UsageMonitor {
         activeProfileID = await profileStore.currentProfileID()
       }
     }
+  }
+
+  /// Use the refresh_token to obtain a fresh access_token, persist it, then
+  /// retry the usage API call once.
+  private func refreshTokenAndRetry() async throws -> UsageSnapshot {
+    NSLog("[UsageMonitor] Access token expired (401). Attempting token refresh…")
+
+    let rawData = try authStore.loadRawData()
+    let updatedData = try await tokenRefresher.refresh(currentAuthData: rawData)
+    try authStore.writeRawData(updatedData)
+
+    NSLog("[UsageMonitor] Token refresh succeeded, retrying usage fetch")
+
+    // Re-read the freshly persisted auth and retry.
+    let freshAuth = try authStore.load()
+    return try await apiClient.fetchUsage(auth: freshAuth)
   }
 
   private func rebuildEstimates() {
