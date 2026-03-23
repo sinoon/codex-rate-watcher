@@ -423,7 +423,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.title = Copy.menuBarNormal(pct: pct, altCount: state.availableProfileCount)
       }
     } else {
-      button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
+      // Show cost rate on menu bar when burn rate is known
+      if let liveCost = state.liveCost, let cph = liveCost.costPerHour, cph > 0 {
+        let pct = Int(primary.remainingPercent.rounded())
+        button.title = Copy.costMenuBar(pct: pct, costHr: cph)
+      } else {
+        button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
+      }
     }
   }
 }

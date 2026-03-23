@@ -52,6 +52,16 @@ final class UsageMonitor {
       return coverage
     }
 
+    var liveCost: LiveCostState? {
+      guard let snapshot else { return nil }
+      let tier = SubscriptionTier(planType: snapshot.planType)
+      return CostTracker.todaySummary(
+        currentTier: tier,
+        currentBurnRate: primaryEstimate.percentPerHour,
+        currentUsedPercent: snapshot.rateLimit.primaryWindow.usedPercent
+      )
+    }
+
     var lastUpdatedLabel: String {
       guard let lastUpdatedAt else {
         return "等待首次同步"  // Keep — only shown once
@@ -604,6 +614,16 @@ final class UsageMonitor {
       lastUpdatedAt = now
       samples = await sampleStore.append(snapshot: freshSnapshot, capturedAt: now)
       rebuildEstimates()
+
+      // Record cost data point
+      CostTracker.record(
+        tier: SubscriptionTier(planType: freshSnapshot.planType),
+        primaryUsedPercent: freshSnapshot.rateLimit.primaryWindow.usedPercent,
+        burnRatePerHour: primaryEstimate.percentPerHour,
+        primaryResetAt: freshSnapshot.rateLimit.primaryWindow.resetAt,
+        weeklyUsedPercent: freshSnapshot.rateLimit.secondaryWindow?.usedPercent
+      )
+
       profiles = await profileStore.updateCurrentProfileValidation(snapshot: freshSnapshot)
       activeProfileID = await profileStore.currentProfileID()
 

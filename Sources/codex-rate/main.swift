@@ -188,6 +188,7 @@ private struct CLIOptions {
     case watch
     case history
     case relay
+    case cost
     case help
   }
   var command: Command = .status
@@ -216,6 +217,8 @@ private func parseArguments() -> CLIOptions {
     opts.command = .watch; idx = 1
   case "history":
     opts.command = .history; idx = 1
+  case "cost":
+    opts.command = .cost; idx = 1
   case "relay":
     opts.command = .relay; idx = 1
   case "help", "-h", "--help":
@@ -223,7 +226,7 @@ private func parseArguments() -> CLIOptions {
   case "--json":
     opts.command = .status; opts.jsonOutput = true; idx = 1
   case "--version", "-v":
-    print("codex-rate 1.6.0")
+    print("codex-rate 1.9.0")
     exit(0)
   default:
     fputs(ANSI.c(ANSI.red, "Unknown command: \(first)") + "\n", stderr)
@@ -777,6 +780,93 @@ private func runRelay(strategyName: String, json: Bool) async {
 
 // MARK: - Help
 
+
+private func runCost(json: Bool) async {
+  // Determine tier from profiles
+  let profilesURL = AppPaths.profileIndexFile
+  var tier = SubscriptionTier.plus
+  if let data = try? Data(contentsOf: profilesURL),
+     let profiles = try? JSONDecoder().decode([AuthProfileRecord].self, from: data) {
+    if let active = profiles.first(where: { $0.isValid }),
+       let usage = active.latestUsage {
+      tier = SubscriptionTier(planType: usage.planType)
+    }
+  }
+
+  let weekly = CostTracker.weeklyStats(tier: tier)
+  let live = CostTracker.todaySummary(currentTier: tier, currentBurnRate: nil, currentUsedPercent: 0)
+
+  if json {
+    var result: [[String: Any]] = []
+    for d in weekly {
+      result.append([
+        "date": d.date,
+        "tier": d.tier.rawValue,
+        "estimated_cost_usd": round(d.estimatedCostUSD * 100) / 100,
+        "avg_utilization": round(d.avgUtilization * 1000) / 10,
+        "active_minutes": d.totalActiveMinutes,
+        "peak_burn_rate": d.peakBurnRate ?? 0,
+        "cycles": d.cycles.count
+      ])
+    }
+    if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: .prettyPrinted),
+       let str = String(data: jsonData, encoding: .utf8) {
+      print(str)
+    }
+    return
+  }
+
+  // Pretty output
+  let bold = "\u{001B}[1m"
+  let dim = "\u{001B}[2m"
+  let green = "\u{001B}[32m"
+  let yellow = "\u{001B}[33m"
+  let cyan = "\u{001B}[36m"
+  let reset = "\u{001B}[0m"
+
+  print("")
+  print("\(bold)💰 Cost Dashboard\(reset)")
+  print("\(dim)────────────────────────────────────────\(reset)")
+  print("")
+
+  // Subscription info
+  print("  \(dim)Subscription:\(reset)  \(bold)\(tier.rawValue.capitalized)\(reset) · $\(Int(tier.monthlyUSD))/mo")
+  print("")
+
+  // Today summary
+  if let cph = live.costPerHour, cph > 0 {
+    print("  \(dim)Burn Rate:\(reset)     \(green)$\(String(format: "%.2f", cph))/hr\(reset)")
+  }
+  print("  \(dim)Today Cost:\(reset)    \(bold)$\(String(format: "%.2f", live.todayCostUSD))\(reset)")
+  print("  \(dim)Active Hours:\(reset)  \(String(format: "%.1f", live.activeHoursToday))h")
+  if let proj = live.projectedMonthlyCostUSD {
+    let color = proj > tier.monthlyUSD ? yellow : green
+    print("  \(dim)Monthly Est:\(reset)   \(color)$\(String(format: "%.0f", proj))\(reset)")
+  }
+  print("")
+
+  // 7-day history
+  if !weekly.isEmpty {
+    print("  \(bold)7-Day History\(reset)")
+    print("  \(dim)Date         Cost     Util   Active  Cycles\(reset)")
+    for d in weekly {
+      let utilColor = d.avgUtilization > 0.5 ? green : yellow
+      let utilPct = Int((d.avgUtilization * 100).rounded())
+      let activeH = String(format: "%.1f", Double(d.totalActiveMinutes) / 60.0)
+      print("  \(d.date)  \(cyan)$\(String(format: "%5.2f", d.estimatedCostUSD))\(reset)   \(utilColor)\(String(format: "%3d", utilPct))%\(reset)   \(activeH)h   \(d.cycles.count)")
+    }
+
+    let totalCost = weekly.map(\.estimatedCostUSD).reduce(0, +)
+    let avgUtil = weekly.map(\.avgUtilization).reduce(0, +) / Double(weekly.count)
+    print("  \(dim)─────────────────────────────────────\(reset)")
+    print("  \(dim)Total:\(reset)       \(bold)$\(String(format: "%.2f", totalCost))\(reset)   \(String(format: "%3d", Int((avgUtil * 100).rounded())))%")
+  } else {
+    print("  \(dim)No history data yet. Run the app to collect samples.\(reset)")
+  }
+
+  print("")
+}
+
 private func printHelp() {
   let help = """
   \(ANSI.c(ANSI.bold + ANSI.cyan, "codex-rate")) \u{2014} Codex CLI Usage Monitor
@@ -790,6 +880,7 @@ private func printHelp() {
     watch       Continuous monitoring mode
     history     Show usage history with sparklines
     relay       Show relay plan across accounts
+    cost        Show cost dashboard & 7-day spending
     help        Show this help message
 
   \(ANSI.c(ANSI.bold, "OPTIONS"))
@@ -808,6 +899,8 @@ private func printHelp() {
     codex-rate history --hours 6  Show last 6 hours
     codex-rate relay              Show relay plan
     codex-rate relay --strategy greedy  Use greedy strategy
+    codex-rate cost              Show cost dashboard
+    codex-rate cost --json       Cost data as JSON
 
   \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/patchwork-body/shakeflow"))
   """
@@ -827,6 +920,8 @@ case .watch:
   await runWatch(interval: opts.watchInterval, json: opts.jsonOutput)
 case .history:
   runHistory(hours: opts.historyHours, json: opts.jsonOutput)
+case .cost:
+  await runCost(json: opts.jsonOutput)
 case .relay:
   await runRelay(strategyName: opts.relayStrategy, json: opts.jsonOutput)
 case .help:

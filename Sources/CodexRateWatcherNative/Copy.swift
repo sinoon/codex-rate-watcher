@@ -281,4 +281,47 @@ enum Copy {
   static func relayMenuBarGap(gap: String) -> String {
     "缺口 \(gap)"
   }
+
+  // MARK: - Cost Dashboard
+
+  static let costSectionTitle = "COST INSIGHT"
+
+  static func costPerHour(_ usd: Double) -> String {
+    "$\(String(format: "%.2f", usd))/hr"
+  }
+
+  static func costToday(_ usd: Double) -> String {
+    "$\(String(format: "%.1f", usd)) today"
+  }
+
+  static func costUtilization(_ pct: Double) -> String {
+    "\(Int((pct * 100).rounded()))% util"
+  }
+
+  static func costSubscription(plan: String, monthly: Double) -> String {
+    "\(plan) · $\(Int(monthly))/mo"
+  }
+
+  static func costMonthUsed(_ usd: Double) -> String {
+    "本月已用 $\(String(format: "%.1f", usd))"
+  }
+
+  static func costProjectedMonthly(_ usd: Double) -> String {
+    "月度预计 $\(String(format: "%.0f", usd))"
+  }
+
+  static func costActiveHours(_ hours: Double) -> String {
+    "活跃 \(String(format: "%.1f", hours))h"
+  }
+
+  static func costBudgetAlert(daily: Double, actual: Double) -> String {
+    "日花费 $\(String(format: "%.1f", actual)) 已超预算 $\(String(format: "%.1f", daily))"
+  }
+
+  static let costNoBurnRate = "采样中"
+
+  static func costMenuBar(pct: Int, costHr: Double) -> String {
+    "\(pct)% · $\(String(format: "%.1f", costHr))/h"
+  }
+
 }

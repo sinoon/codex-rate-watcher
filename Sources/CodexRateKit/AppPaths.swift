@@ -10,6 +10,7 @@ public enum AppPaths {
   public static let profilesDirectory = rootDirectory.appending(path: "auth-profiles")
   public static let profileIndexFile = rootDirectory.appending(path: "profiles.json")
   public static let backupsDirectory = rootDirectory.appending(path: "auth-backups")
+  public static let costHistoryFile = rootDirectory.appending(path: "cost-history.json")
 }
 
 public struct UsageSample: Codable, Sendable {

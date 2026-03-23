@@ -93,6 +93,15 @@ final class PopoverViewController: NSViewController {
   private let relayLegStack = NSStackView()
   private let relayStatusLabel = NSTextField(labelWithString: "")
 
+
+  // Cost card
+  private var costWrapper: NSView!
+  private let costSectionLabel = NSTextField(labelWithString: "")
+  private let costHourLabel = NSTextField(labelWithString: "")
+  private let costTodayLabel = NSTextField(labelWithString: "")
+  private let costUtilLabel = NSTextField(labelWithString: "")
+  private let costSparklineView = NSView()
+  private let costSublineLabel = NSTextField(labelWithString: "")
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
   private let profileStack    = NSStackView()
@@ -149,6 +158,7 @@ final class PopoverViewController: NSViewController {
     let headerView = makeHeader()
     let primaryCard = makePrimaryCard()
     let quotaCard = makeQuotaCard()
+    let costCard = makeCostCard()
     let relayCard = makeRelayCard()
     let recView = makeRecBanner()
     let profileSection = makeProfileSection()
@@ -157,6 +167,7 @@ final class PopoverViewController: NSViewController {
     root.addArrangedSubview(headerView)
     root.addArrangedSubview(primaryCard)
     root.addArrangedSubview(quotaCard)
+    root.addArrangedSubview(costCard)
     root.addArrangedSubview(relayCard)
     root.addArrangedSubview(recView)
     root.addArrangedSubview(profileSection)
@@ -165,6 +176,7 @@ final class PopoverViewController: NSViewController {
     root.setCustomSpacing(LN.gap, after: headerView)
     root.setCustomSpacing(LN.gapSm, after: primaryCard)
     root.setCustomSpacing(LN.gapSm, after: quotaCard)
+    root.setCustomSpacing(LN.gapSm, after: costCard)
     root.setCustomSpacing(LN.gap, after: relayCard)
     root.setCustomSpacing(LN.gap, after: recView)
     root.setCustomSpacing(LN.gapSm, after: profileSection)
@@ -519,6 +531,97 @@ final class PopoverViewController: NSViewController {
 
   // MARK: - Relay Card
 
+
+  // MARK: - Cost Card
+
+  private func makeCostCard() -> NSView {
+    let wrapper = NSView()
+    wrapper.translatesAutoresizingMaskIntoConstraints = false
+    costWrapper = wrapper
+
+    let card = NSView()
+    card.wantsLayer = true
+    card.layer?.backgroundColor = LN.surface.cgColor
+    card.layer?.cornerRadius = LN.radius
+    card.layer?.borderWidth = 1
+    card.layer?.borderColor = LN.borderSubtle.cgColor
+    card.translatesAutoresizingMaskIntoConstraints = false
+
+    costSectionLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    costSectionLabel.textColor = LN.textMuted
+    costSectionLabel.stringValue = Copy.costSectionTitle
+    costSectionLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    // Use smaller font so 3 metrics fit side by side
+    costHourLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .semibold)
+    costHourLabel.textColor = LN.green
+    costHourLabel.alignment = .left
+    costHourLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    costTodayLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .semibold)
+    costTodayLabel.textColor = LN.textPrimary
+    costTodayLabel.alignment = .center
+    costTodayLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    costUtilLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .medium)
+    costUtilLabel.textColor = LN.textSecondary
+    costUtilLabel.alignment = .right
+    costUtilLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    // Use a horizontal stack for the 3 metrics — equal distribution
+    let metricsStack = NSStackView(views: [costHourLabel, costTodayLabel, costUtilLabel])
+    metricsStack.orientation = .horizontal
+    metricsStack.distribution = .fillEqually
+    metricsStack.spacing = LN.gapSm
+    metricsStack.translatesAutoresizingMaskIntoConstraints = false
+
+    costSparklineView.wantsLayer = true
+    costSparklineView.translatesAutoresizingMaskIntoConstraints = false
+
+    costSublineLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    costSublineLabel.textColor = LN.textTertiary
+    costSublineLabel.lineBreakMode = .byTruncatingTail
+    costSublineLabel.maximumNumberOfLines = 1
+    costSublineLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    card.addSubview(costSectionLabel)
+    card.addSubview(metricsStack)
+    card.addSubview(costSparklineView)
+    card.addSubview(costSublineLabel)
+
+    let cPad = LN.cardPad
+
+    NSLayoutConstraint.activate([
+      costSectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      costSectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
+      costSectionLabel.trailingAnchor.constraint(lessThanOrEqualTo: card.trailingAnchor, constant: -cPad),
+
+      metricsStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      metricsStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      metricsStack.topAnchor.constraint(equalTo: costSectionLabel.bottomAnchor, constant: LN.gapSm),
+
+      costSparklineView.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      costSparklineView.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      costSparklineView.topAnchor.constraint(equalTo: metricsStack.bottomAnchor, constant: LN.gapSm),
+      costSparklineView.heightAnchor.constraint(equalToConstant: 24),
+
+      costSublineLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      costSublineLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      costSublineLabel.topAnchor.constraint(equalTo: costSparklineView.bottomAnchor, constant: LN.gapXs),
+      costSublineLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+    ])
+
+    wrapper.addSubview(card)
+    NSLayoutConstraint.activate([
+      wrapper.widthAnchor.constraint(equalToConstant: LN.popoverW),
+      card.topAnchor.constraint(equalTo: wrapper.topAnchor),
+      card.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: LN.pad),
+      card.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -LN.pad),
+      card.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+    ])
+
+    return wrapper
+  }
   private func makeRelayCard() -> NSView {
     let wrapper = NSView()
     wrapper.translatesAutoresizingMaskIntoConstraints = false
@@ -758,6 +861,7 @@ final class PopoverViewController: NSViewController {
 
     renderPrimary(snapshot: snapshot, state: state, activeProfile: activeProfile)
     renderQuotas(snapshot: snapshot, state: state)
+    renderCost(state: state)
     renderRelay(state: state)
     renderRec(state: state)
     renderProfiles(state: state)
@@ -845,6 +949,84 @@ final class PopoverViewController: NSViewController {
     reviewDetail.stringValue = state.burnLabel(from: state.reviewEstimate)
   }
 
+
+  // MARK: - Render Cost Card
+
+  private func renderCost(state: UsageMonitor.State) {
+    guard let snapshot = state.snapshot else {
+      costWrapper?.isHidden = true
+      return
+    }
+    costWrapper?.isHidden = false
+
+    let tier = SubscriptionTier(planType: snapshot.planType)
+    let burnRate = state.primaryEstimate.percentPerHour
+    let usedPct = snapshot.rateLimit.primaryWindow.usedPercent
+
+    let live = CostTracker.todaySummary(
+      currentTier: tier,
+      currentBurnRate: burnRate,
+      currentUsedPercent: usedPct
+    )
+
+    // Top metrics row
+    if let cph = live.costPerHour, cph > 0 {
+      costHourLabel.stringValue = Copy.costPerHour(cph)
+      costHourLabel.textColor = cph > 1.0 ? LN.yellow : LN.green
+    } else {
+      costHourLabel.stringValue = Copy.costNoBurnRate
+      costHourLabel.textColor = LN.textTertiary
+    }
+
+    costTodayLabel.stringValue = Copy.costToday(live.todayCostUSD)
+    costUtilLabel.stringValue = Copy.costUtilization(live.currentCycleUtilization)
+
+    // Color utilization label
+    if live.currentCycleUtilization > 0.7 {
+      costUtilLabel.textColor = LN.green
+    } else if live.currentCycleUtilization > 0.3 {
+      costUtilLabel.textColor = LN.yellow
+    } else {
+      costUtilLabel.textColor = LN.textTertiary
+    }
+
+    // Sparkline
+    drawSparkline(live.sparkline)
+
+    // Subline
+    var parts: [String] = []
+    parts.append(Copy.costSubscription(plan: tier.rawValue.capitalized, monthly: live.subscriptionMonthlyUSD))
+    if let proj = live.projectedMonthlyCostUSD {
+      parts.append(Copy.costProjectedMonthly(proj))
+    }
+    if live.activeHoursToday > 0.1 {
+      parts.append(Copy.costActiveHours(live.activeHoursToday))
+    }
+    costSublineLabel.stringValue = parts.joined(separator: " · ")
+  }
+
+  private func drawSparkline(_ data: [Double]) {
+    costSparklineView.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+    guard !data.isEmpty else { return }
+
+    let maxVal = max(data.max() ?? 1, 0.001)
+    let w = costSparklineView.bounds.width
+    let h = costSparklineView.bounds.height
+    guard w > 0, h > 0 else { return }
+
+    let barWidth = max(2, (w - CGFloat(data.count - 1)) / CGFloat(data.count))
+    let spacing: CGFloat = 1
+
+    for (i, val) in data.enumerated() {
+      let barH = max(1, CGFloat(val / maxVal) * h)
+      let x = CGFloat(i) * (barWidth + spacing)
+      let bar = CALayer()
+      bar.frame = CGRect(x: x, y: 0, width: barWidth, height: barH)
+      bar.backgroundColor = val > 0 ? LN.green.withAlphaComponent(0.6).cgColor : LN.borderSubtle.cgColor
+      bar.cornerRadius = 1
+      costSparklineView.layer?.addSublayer(bar)
+    }
+  }
   private func renderRelay(state: UsageMonitor.State) {
     let plan = state.relayPlan
 
