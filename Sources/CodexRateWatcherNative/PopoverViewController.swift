@@ -288,7 +288,7 @@ final class PopoverViewController: NSViewController {
     card.addSubview(heroSubline)
     card.addSubview(primaryTrack)
 
-    let innerW = LN.popoverW - LN.pad * 2
+
     let cPad = LN.cardPad
 
     NSLayoutConstraint.activate([
@@ -402,7 +402,7 @@ final class PopoverViewController: NSViewController {
     card.addSubview(reviewDetail)
 
     let cPad = LN.cardPad
-    let trackW: CGFloat = 70
+    let trackW: CGFloat = 120
 
     NSLayoutConstraint.activate([
       sectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
@@ -429,8 +429,8 @@ final class PopoverViewController: NSViewController {
       // Divider
       divider.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       divider.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      divider.topAnchor.constraint(equalTo: weeklyLabel.bottomAnchor, constant: 8),
       divider.topAnchor.constraint(greaterThanOrEqualTo: weeklyDetail.bottomAnchor, constant: 4),
-      divider.topAnchor.constraint(greaterThanOrEqualTo: weeklyLabel.bottomAnchor, constant: 6),
       divider.heightAnchor.constraint(equalToConstant: 1),
 
       // Review row
@@ -727,7 +727,7 @@ final class PopoverViewController: NSViewController {
   }
 
   private func renderQuotas(snapshot: UsageSnapshot, state: UsageMonitor.State) {
-    let trackW: CGFloat = 70
+    let trackW: CGFloat = 120
 
     if let w = snapshot.rateLimit.secondaryWindow {
       weeklyLabel.isHidden = false
@@ -791,10 +791,10 @@ final class PopoverViewController: NSViewController {
     profileStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
     let others = state.profiles.filter { $0.id != state.activeProfileID && $0.validationError?.contains("402") != true }
     let availCount = others.filter { $0.validationError == nil && $0.latestUsage?.isBlocked != true }.count
-    profileHeader.stringValue = Copy.profileHeader(available: availCount)
+    profileHeader.stringValue = Copy.profileHeader(available: availCount, total: others.count)
 
     if others.isEmpty {
-      profileHeader.stringValue = Copy.profileHeader(available: 0)
+      profileHeader.stringValue = Copy.profileHeader(available: 0, total: 0)
       return
     }
 

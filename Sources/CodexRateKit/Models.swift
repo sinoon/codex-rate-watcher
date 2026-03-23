@@ -145,7 +145,7 @@ public struct AuthProfileUsageSummary: Codable, Sendable {
 
 public struct AuthProfileRecord: Codable, Identifiable, Sendable {
   public let id: UUID
-  public let fingerprint: String
+  public var fingerprint: String
   public let snapshotFileName: String
   public var authMode: String?
   public var accountID: String?

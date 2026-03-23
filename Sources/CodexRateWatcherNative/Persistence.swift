@@ -92,13 +92,21 @@ actor AuthProfileStore {
     }
 
     let profiles = await loadProfiles()
-    return profiles.first(where: { $0.fingerprint == envelope.fingerprint })?.id
+    // Match by fingerprint first, then fall back to accountID
+    if let match = profiles.first(where: { $0.fingerprint == envelope.fingerprint }) {
+      return match.id
+    }
+    if let accountID = envelope.snapshot.accountID {
+      return profiles.first(where: { $0.accountID == accountID })?.id
+    }
+    return nil
   }
 
   func captureCurrentAuthIfNeeded() async throws -> [AuthProfileRecord] {
-    // Reconcile orphaned snapshots on first call
+    // Reconcile and deduplicate on first call
     if !hasReconciled {
       reconcileOrphanedSnapshots()
+      deduplicateByAccountID()
       hasReconciled = true
     }
 
@@ -112,7 +120,10 @@ actor AuthProfileStore {
     }
 
     var profiles = (try? readProfiles()) ?? []
-    if let index = profiles.firstIndex(where: { $0.fingerprint == envelope.fingerprint }) {
+    // Match by fingerprint first, then fall back to accountID
+    let index = profiles.firstIndex(where: { $0.fingerprint == envelope.fingerprint })
+      ?? (envelope.snapshot.accountID.flatMap { acctID in profiles.firstIndex(where: { $0.accountID == acctID }) })
+    if let index {
       profiles[index].lastSeenAt = Date()
       profiles[index].lastValidatedAt = Date()
       profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: snapshot)
@@ -220,6 +231,12 @@ actor AuthProfileStore {
         continue
       }
 
+      // Skip if same accountID already tracked (token refreshed → different fingerprint)
+      if let accountID = envelope.snapshot.accountID,
+         profiles.contains(where: { $0.accountID == accountID }) {
+        continue
+      }
+
       // Derive UUID from the filename if it's a valid UUID, otherwise generate new
       let stem = fileURL.deletingPathExtension().lastPathComponent
       let profileID = UUID(uuidString: stem) ?? UUID()
@@ -247,16 +264,76 @@ actor AuthProfileStore {
     }
   }
 
+  /// Merge duplicate profiles that share the same accountID.
+  /// Keeps the most recently seen record and removes the rest,
+  /// cleaning up their snapshot files as well.
+  private func deduplicateByAccountID() {
+    var profiles = (try? readProfiles()) ?? []
+    guard profiles.count > 1 else { return }
+
+    // Group by accountID (nil accountIDs are never merged)
+    var seen: [String: Int] = [:]  // accountID → index of keeper
+    var toRemove: [Int] = []
+
+    for (i, profile) in profiles.enumerated() {
+      guard let accountID = profile.accountID else { continue }
+
+      if let existingIndex = seen[accountID] {
+        // Duplicate found — keep the one with more recent lastSeenAt
+        let existing = profiles[existingIndex]
+        if profile.lastSeenAt > existing.lastSeenAt {
+          toRemove.append(existingIndex)
+          seen[accountID] = i
+        } else {
+          toRemove.append(i)
+        }
+      } else {
+        seen[accountID] = i
+      }
+    }
+
+    guard !toRemove.isEmpty else { return }
+
+    // Delete snapshot files for removed profiles
+    let removeSet = Set(toRemove)
+    for index in removeSet {
+      let fileName = profiles[index].snapshotFileName
+      let url = AppPaths.profilesDirectory.appending(path: fileName)
+      try? fileManager.removeItem(at: url)
+    }
+
+    // Rebuild profile list without removed indices
+    let cleaned = profiles.enumerated().compactMap { removeSet.contains($0.offset) ? nil : $0.element }
+    try? writeProfiles(cleaned)
+  }
+
   private func storeEnvelopeIfNeeded(_ envelope: AuthEnvelope) throws -> [AuthProfileRecord] {
     try createDirectoriesIfNeeded()
     var profiles = try readProfiles()
     let now = Date()
 
+    // Match by fingerprint (exact same auth data)
     if let index = profiles.firstIndex(where: { $0.fingerprint == envelope.fingerprint }) {
       profiles[index].lastSeenAt = now
       profiles[index].authMode = envelope.snapshot.authMode
       if profiles[index].accountID == nil {
         profiles[index].accountID = envelope.snapshot.accountID
+      }
+      try writeProfiles(profiles)
+      return sortProfiles(profiles)
+    }
+
+    // Match by accountID (same account, token refreshed → different fingerprint)
+    if let accountID = envelope.snapshot.accountID,
+       let index = profiles.firstIndex(where: { $0.accountID == accountID }) {
+      // Update existing profile with new snapshot
+      let snapshotURL = AppPaths.profilesDirectory.appending(path: profiles[index].snapshotFileName)
+      try envelope.rawData.write(to: snapshotURL, options: .atomic)
+      profiles[index].fingerprint = envelope.fingerprint
+      profiles[index].lastSeenAt = now
+      profiles[index].authMode = envelope.snapshot.authMode
+      if profiles[index].email == nil {
+        profiles[index].email = envelope.snapshot.email
       }
       try writeProfiles(profiles)
       return sortProfiles(profiles)

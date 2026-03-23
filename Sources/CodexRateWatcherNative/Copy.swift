@@ -193,8 +193,10 @@ enum Copy {
 
   // MARK: - Profile list
 
-  static func profileHeader(available: Int) -> String {
-    available > 0 ? "Other Profiles · \(available) available" : "No other profiles"
+  static func profileHeader(available: Int, total: Int = 0) -> String {
+    if available > 0 { return "Other Profiles · \(available) available" }
+    if total > 0 { return "Other Profiles · none available" }
+    return "No other profiles"
   }
 
   static func profileBlocked(resetAt: TimeInterval?, label: String) -> String {

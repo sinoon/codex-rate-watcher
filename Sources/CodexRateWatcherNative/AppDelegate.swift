@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       popover.behavior = .transient
       popover.animates = true
-      popover.contentSize = NSSize(width: 860, height: 580)
+      popover.contentSize = NSSize(width: 400, height: 580)
       popover.contentViewController = viewController
 
       statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // MARK: - Status Item Click
 
   @objc private func handleStatusItemClick(_ sender: AnyObject?) {
-    guard let button = statusItem?.button,
+    guard let _ = statusItem?.button,
           let event = NSApp.currentEvent else { return }
 
     if event.type == .rightMouseUp {
