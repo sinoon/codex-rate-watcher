@@ -177,9 +177,14 @@ final class AlertManager {
       title: Copy.autoSwitchUndoAction,
       options: [.foreground]
     )
+    let restartAction = UNNotificationAction(
+      identifier: "RESTART_CODEX",
+      title: Copy.restartCodexAction,
+      options: [.foreground]
+    )
     let autoSwitchCategory = UNNotificationCategory(
       identifier: "AUTO_SWITCH",
-      actions: [undoAction],
+      actions: [restartAction, undoAction],
       intentIdentifiers: [],
       options: []
     )
@@ -198,6 +203,7 @@ final class AlertManager {
     let content = UNMutableNotificationContent()
     content.title = Copy.autoSwitchNotifyTitle(to: toName)
     content.body = Copy.autoSwitchNotifyBody(from: fromName, to: toName, reason: reason)
+    content.subtitle = Copy.restartCodexHint
     content.sound = .default
     content.categoryIdentifier = "AUTO_SWITCH"
 
@@ -219,6 +225,7 @@ final class AlertManager {
     let content = UNMutableNotificationContent()
     content.title = Copy.relayAutoNotifyTitle(to: toName)
     content.body = Copy.relayAutoNotifyBody(from: fromName, to: toName, coverage: coverage)
+    content.subtitle = Copy.restartCodexHint
     content.sound = .default
     content.categoryIdentifier = "AUTO_SWITCH"
 

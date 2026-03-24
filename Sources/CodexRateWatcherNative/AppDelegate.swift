@@ -538,15 +538,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - UNUserNotificationCenterDelegate
 
 extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
+
+  // MARK: - Codex App Restart
+
+  func restartCodexApp() {
+    NSLog("[Codex] Restarting Codex app...")
+    let codexBundleID = "com.openai.codex"
+    let codexAppPath = "/Applications/Codex.app"
+
+    let running = NSWorkspace.shared.runningApplications.filter {
+      $0.bundleIdentifier == codexBundleID
+    }
+    for proc in running {
+      proc.terminate()
+    }
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      let url = URL(fileURLWithPath: codexAppPath)
+      NSWorkspace.shared.openApplication(
+        at: url,
+        configuration: NSWorkspace.OpenConfiguration()
+      ) { _, error in
+        if let error {
+          NSLog("[Codex] relaunch failed: \(error.localizedDescription)")
+        } else {
+          NSLog("[Codex] relaunched successfully")
+        }
+      }
+    }
+  }
   func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
-    if response.actionIdentifier == "UNDO_SWITCH" {
+    switch response.actionIdentifier {
+    case "UNDO_SWITCH":
       Task { @MainActor in
         await self.monitor.undoLastAutoSwitch()
       }
+    case "RESTART_CODEX":
+      Task { @MainActor in
+        self.restartCodexApp()
+      }
+    default:
+      break
     }
     completionHandler()
   }

@@ -218,6 +218,8 @@ enum Copy {
     "\(from) → \(to) · \(reason)"
   }
   static let autoSwitchUndoAction = "撤销切换"
+  static let restartCodexAction = "重启 Codex"
+  static let restartCodexHint = "请重启 Codex 以使用新账号"
   static let autoSwitchMenuLabel = "自动切换账号"
   static let autoSwitchCooldown = "冷却中，稍后再试"
 
