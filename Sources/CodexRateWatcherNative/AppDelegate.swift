@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var currentTier: StatusBarIcon.Tier = .unknown
   private var hotkeyManager: HotkeyManager?
   private var autoSwitchMenuItem: NSMenuItem?
+  private let codexConfigManager = CodexConfigManager()
   private var deviceCodeLoginTask: Task<Void, Never>?
 
   init(windowMode: Bool = false) {
@@ -172,6 +173,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     hotkeyToggle.target = self
     menu.addItem(hotkeyToggle)
 
+    // Codex mode toggle
+    let currentMode = codexConfigManager.currentMode()
+    let modeEmoji = currentMode == .proxy ? "🌐" : "⚡️"
+    let modeText = currentMode == .proxy ? "Codex 模式：代理" : "Codex 模式：直连"
+    let modeToggle = NSMenuItem(title: "\(modeEmoji) \(modeText)", action: #selector(toggleCodexMode), keyEquivalent: "")
+    modeToggle.target = self
+    menu.addItem(modeToggle)
+
     let addAccountItem = NSMenuItem(title: Copy.addAccount, action: #selector(startDeviceCodeLogin), keyEquivalent: "")
     addAccountItem.target = self
     menu.addItem(addAccountItem)
@@ -226,6 +235,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var config = hk.config
     config.enabled.toggle()
     hk.updateConfig(config)
+  }
+
+  @objc private func toggleCodexMode() {
+    do {
+      if codexConfigManager.currentMode() == .proxy {
+        try codexConfigManager.switchToDirect()
+      } else {
+        try codexConfigManager.switchTo(proxy: 19876)
+      }
+      if let vc = popover.contentViewController as? PopoverViewController {
+        vc.refreshModeFromExternal()
+      }
+    } catch {
+      NSLog("[ModeToggle] toggle failed: \(error.localizedDescription)")
+    }
   }
 
   @objc private func showAbout() {

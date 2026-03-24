@@ -18,6 +18,7 @@ private enum LN {
   static let yellow = NSColor(srgbRed: 0.957, green: 0.737, blue: 0.263, alpha: 1)
   static let red    = NSColor(srgbRed: 0.918, green: 0.345, blue: 0.345, alpha: 1)
   static let blue   = NSColor(srgbRed: 0.357, green: 0.416, blue: 0.816, alpha: 1)
+  static let purple = NSColor(srgbRed: 0.541, green: 0.376, blue: 0.839, alpha: 1)
 
   static let radius:   CGFloat = 10
   static let radiusSm: CGFloat = 6
@@ -102,6 +103,15 @@ final class PopoverViewController: NSViewController {
   private let costUtilLabel = NSTextField(labelWithString: "")
   private let costSparklineView = NSView()
   private let costSublineLabel = NSTextField(labelWithString: "")
+
+  // Mode card
+  private var modeWrapper: NSView!
+  private let modeSectionLabel = NSTextField(labelWithString: "CODEX MODE")
+  private let modeDirectBtn = NSButton()
+  private let modeProxyBtn = NSButton()
+  private let modeStatusLabel = NSTextField(labelWithString: "")
+  private let codexConfig = CodexConfigManager()
+
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
   private let profileStack    = NSStackView()
@@ -156,6 +166,7 @@ final class PopoverViewController: NSViewController {
     ])
 
     let headerView = makeHeader()
+    let modeCard = makeModeCard()
     let primaryCard = makePrimaryCard()
     let quotaCard = makeQuotaCard()
     let costCard = makeCostCard()
@@ -165,6 +176,7 @@ final class PopoverViewController: NSViewController {
     let footer = makeFooter()
 
     root.addArrangedSubview(headerView)
+    root.addArrangedSubview(modeCard)
     root.addArrangedSubview(primaryCard)
     root.addArrangedSubview(quotaCard)
     root.addArrangedSubview(costCard)
@@ -174,6 +186,7 @@ final class PopoverViewController: NSViewController {
     root.addArrangedSubview(footer)
 
     root.setCustomSpacing(LN.gap, after: headerView)
+    root.setCustomSpacing(LN.gapSm, after: modeCard)
     root.setCustomSpacing(LN.gapSm, after: primaryCard)
     root.setCustomSpacing(LN.gapSm, after: quotaCard)
     root.setCustomSpacing(LN.gapSm, after: costCard)
@@ -224,6 +237,124 @@ final class PopoverViewController: NSViewController {
     ])
 
     return container
+  }
+
+
+  // MARK: - Mode Card (Codex proxy toggle)
+
+  private func makeModeCard() -> NSView {
+    let wrapper = NSView()
+    wrapper.translatesAutoresizingMaskIntoConstraints = false
+    modeWrapper = wrapper
+
+    let card = NSView()
+    card.wantsLayer = true
+    card.layer?.backgroundColor = LN.surface.cgColor
+    card.layer?.cornerRadius = LN.radius
+    card.layer?.borderWidth = 1
+    card.layer?.borderColor = LN.borderSubtle.cgColor
+    card.translatesAutoresizingMaskIntoConstraints = false
+
+    modeSectionLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    modeSectionLabel.textColor = LN.textMuted
+    modeSectionLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    // Segmented toggle track
+    let toggleTrack = NSView()
+    toggleTrack.wantsLayer = true
+    toggleTrack.layer?.backgroundColor = LN.elevated.cgColor
+    toggleTrack.layer?.cornerRadius = LN.radiusSm + 2
+    toggleTrack.translatesAutoresizingMaskIntoConstraints = false
+
+    configureModeButton(modeDirectBtn, title: "⚡️  Direct", action: #selector(modeTappedDirect))
+    configureModeButton(modeProxyBtn, title: "🌐  Proxy", action: #selector(modeTappedProxy))
+
+    toggleTrack.addSubview(modeDirectBtn)
+    toggleTrack.addSubview(modeProxyBtn)
+
+    modeStatusLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    modeStatusLabel.textColor = LN.textTertiary
+    modeStatusLabel.lineBreakMode = .byTruncatingTail
+    modeStatusLabel.maximumNumberOfLines = 1
+    modeStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    card.addSubview(modeSectionLabel)
+    card.addSubview(toggleTrack)
+    card.addSubview(modeStatusLabel)
+
+    let cPad = LN.cardPad
+    let toggleH: CGFloat = 32
+    let btnPad: CGFloat = 3
+
+    NSLayoutConstraint.activate([
+      modeSectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      modeSectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
+
+      toggleTrack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      toggleTrack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      toggleTrack.topAnchor.constraint(equalTo: modeSectionLabel.bottomAnchor, constant: LN.gapSm),
+      toggleTrack.heightAnchor.constraint(equalToConstant: toggleH),
+
+      modeDirectBtn.leadingAnchor.constraint(equalTo: toggleTrack.leadingAnchor, constant: btnPad),
+      modeDirectBtn.topAnchor.constraint(equalTo: toggleTrack.topAnchor, constant: btnPad),
+      modeDirectBtn.bottomAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: -btnPad),
+      modeDirectBtn.trailingAnchor.constraint(equalTo: toggleTrack.centerXAnchor, constant: -1),
+
+      modeProxyBtn.leadingAnchor.constraint(equalTo: toggleTrack.centerXAnchor, constant: 1),
+      modeProxyBtn.topAnchor.constraint(equalTo: toggleTrack.topAnchor, constant: btnPad),
+      modeProxyBtn.bottomAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: -btnPad),
+      modeProxyBtn.trailingAnchor.constraint(equalTo: toggleTrack.trailingAnchor, constant: -btnPad),
+
+      modeStatusLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      modeStatusLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      modeStatusLabel.topAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: LN.gapSm),
+      modeStatusLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+    ])
+
+    wrapper.addSubview(card)
+    NSLayoutConstraint.activate([
+      wrapper.widthAnchor.constraint(equalToConstant: LN.popoverW),
+      card.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: LN.pad),
+      card.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -LN.pad),
+      card.topAnchor.constraint(equalTo: wrapper.topAnchor),
+      card.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+    ])
+
+    refreshModeCard()
+    return wrapper
+  }
+
+  private func configureModeButton(_ btn: NSButton, title: String, action: Selector) {
+    btn.bezelStyle = .texturedRounded
+    btn.isBordered = false
+    btn.wantsLayer = true
+    btn.layer?.cornerRadius = LN.radiusSm
+    btn.font = .systemFont(ofSize: LN.fontSmall, weight: .semibold)
+    btn.title = title
+    btn.target = self
+    btn.action = action
+    btn.translatesAutoresizingMaskIntoConstraints = false
+  }
+
+  private func refreshModeCard() {
+    let mode = codexConfig.currentMode()
+    if mode == .direct {
+      modeDirectBtn.layer?.backgroundColor = LN.purple.cgColor
+      modeDirectBtn.contentTintColor = .white
+      modeProxyBtn.layer?.backgroundColor = NSColor.clear.cgColor
+      modeProxyBtn.contentTintColor = LN.textTertiary
+      modeStatusLabel.stringValue = "Direct connection · Account-based auth"
+    } else {
+      modeProxyBtn.layer?.backgroundColor = LN.purple.cgColor
+      modeProxyBtn.contentTintColor = .white
+      modeDirectBtn.layer?.backgroundColor = NSColor.clear.cgColor
+      modeDirectBtn.contentTintColor = LN.textTertiary
+      modeStatusLabel.stringValue = "Proxy mode · localhost:19876"
+    }
+  }
+
+  func refreshModeFromExternal() {
+    refreshModeCard()
   }
 
   // MARK: - Primary Card (hero metric in a card)
@@ -840,6 +971,26 @@ final class PopoverViewController: NSViewController {
   @objc private func recSwitchTapped() {
     guard let pid = recProfileID else { return }
     Task { await monitor.switchToProfile(id: pid) }
+  }
+
+  @objc private func modeTappedDirect() {
+    guard codexConfig.currentMode() != .direct else { return }
+    do {
+      try codexConfig.switchToDirect()
+      refreshModeCard()
+    } catch {
+      NSLog("[ModeToggle] switch to direct failed: \(error.localizedDescription)")
+    }
+  }
+
+  @objc private func modeTappedProxy() {
+    guard codexConfig.currentMode() != .proxy else { return }
+    do {
+      try codexConfig.switchTo(proxy: 19876)
+      refreshModeCard()
+    } catch {
+      NSLog("[ModeToggle] switch to proxy failed: \(error.localizedDescription)")
+    }
   }
 
   // MARK: - Render
