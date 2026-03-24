@@ -15,6 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var hotkeyManager: HotkeyManager?
   private var autoSwitchMenuItem: NSMenuItem?
   private let codexConfigManager = CodexConfigManager()
+  private var proxyTask: Task<Void, Never>?
+  private var proxyServer: ProxyServer?
+  private var proxyStatusTimer: Timer?
   private var deviceCodeLoginTask: Task<Void, Never>?
 
   init(windowMode: Bool = false) {
@@ -83,6 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     monitor.start()
 
+    // Auto-start proxy if current mode is proxy
+    if codexConfigManager.currentMode() == .proxy {
+      startProxyServer()
+    }
+
     // Set up global hotkey (⇧⌃⌥K by default)
     if !windowMode {
       let hk = HotkeyManager()
@@ -103,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self.observerID = nil
     }
     monitor.stop()
+    stopProxyServer()
     deviceCodeLoginTask?.cancel()
   }
 
@@ -241,14 +250,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     do {
       if codexConfigManager.currentMode() == .proxy {
         try codexConfigManager.switchToDirect()
+        stopProxyServer()
       } else {
         try codexConfigManager.switchTo(proxy: 19876)
+        startProxyServer()
       }
       if let vc = popover.contentViewController as? PopoverViewController {
         vc.refreshModeFromExternal()
       }
     } catch {
       NSLog("[ModeToggle] toggle failed: \(error.localizedDescription)")
+    }
+  }
+
+  /// Called by PopoverViewController when user toggles mode in the UI.
+  func handleModeSwitch(toProxy: Bool) {
+    if toProxy {
+      startProxyServer()
+    } else {
+      stopProxyServer()
+    }
+  }
+
+  // MARK: - Proxy Lifecycle
+
+  private func startProxyServer() {
+    guard proxyTask == nil else { return }
+    let config = ProxyServer.Config(port: 19876)
+    let server = ProxyServer(config: config)
+    proxyServer = server
+    proxyTask = Task.detached {
+      do {
+        try await server.run()
+      } catch {
+        NSLog("[Proxy] server stopped: \(error.localizedDescription)")
+      }
+    }
+    NSLog("[Proxy] started on :19876")
+    // Start status polling
+    startProxyStatusPolling()
+  }
+
+  private func stopProxyServer() {
+    proxyStatusTimer?.invalidate()
+    proxyStatusTimer = nil
+    proxyTask?.cancel()
+    proxyTask = nil
+    proxyServer = nil
+    NSLog("[Proxy] stopped")
+    // Update popover
+    if let vc = popover.contentViewController as? PopoverViewController {
+      vc.updateProxyStatus(running: false, stats: nil)
+    }
+  }
+
+  private func startProxyStatusPolling() {
+    proxyStatusTimer?.invalidate()
+    proxyStatusTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+      guard let self else { return }
+      Task { @MainActor in
+        let running = await ProxyServer.healthCheck(port: 19876)
+        let stats = self.proxyServer?.stats
+        if let vc = self.popover.contentViewController as? PopoverViewController {
+          vc.updateProxyStatus(running: running, stats: stats)
+        }
+        // Auto-restart if proxy died but mode is still proxy
+        if !running && self.codexConfigManager.currentMode() == .proxy && self.proxyTask != nil {
+          NSLog("[Proxy] detected crash, restarting...")
+          self.proxyTask?.cancel()
+          self.proxyTask = nil
+          self.proxyServer = nil
+          self.startProxyServer()
+        }
+      }
     }
   }
 
@@ -418,20 +492,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       button.image = StatusBarIcon.icon(for: tier)
     }
 
+    let modePrefix = codexConfigManager.currentMode() == .proxy ? "🌐 " : ""
+
     guard let snapshot = state.snapshot else {
-      button.title = Copy.menuBarDefault
+      button.title = modePrefix + Copy.menuBarDefault
       return
     }
 
     if let weeklyWindow = snapshot.rateLimit.secondaryWindow,
        weeklyWindow.remainingPercent <= 0 {
-      button.title = Copy.menuBarUnavailable(altCount: state.availableProfileCount)
+      button.title = modePrefix + Copy.menuBarUnavailable(altCount: state.availableProfileCount)
       return
     }
 
     if !snapshot.rateLimit.allowed || snapshot.rateLimit.limitReached
         || snapshot.rateLimit.primaryWindow.remainingPercent <= 0 {
-      button.title = Copy.menuBarUnavailable(altCount: state.availableProfileCount)
+      button.title = modePrefix + Copy.menuBarUnavailable(altCount: state.availableProfileCount)
       return
     }
 
@@ -440,19 +516,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if plan.legs.count > 1 {
       let pct = Int(primary.remainingPercent.rounded())
       if plan.canSurviveUntilReset {
-        button.title = "\(pct)% \(Copy.relayMenuBarSurvive(legCount: plan.legCount))"
+        button.title = modePrefix + "\(pct)% \(Copy.relayMenuBarSurvive(legCount: plan.legCount))"
       } else if let gapSecs = plan.gapToResetSeconds {
-        button.title = "\(pct)% \(Copy.relayMenuBarGap(gap: Copy.duration(abs(gapSecs))))"
+        button.title = modePrefix + "\(pct)% \(Copy.relayMenuBarGap(gap: Copy.duration(abs(gapSecs))))"
       } else {
-        button.title = Copy.menuBarNormal(pct: pct, altCount: state.availableProfileCount)
+        button.title = modePrefix + Copy.menuBarNormal(pct: pct, altCount: state.availableProfileCount)
       }
     } else {
       // Show cost rate on menu bar when burn rate is known
       if let liveCost = state.liveCost, let cph = liveCost.costPerHour, cph > 0 {
         let pct = Int(primary.remainingPercent.rounded())
-        button.title = Copy.costMenuBar(pct: pct, costHr: cph)
+        button.title = modePrefix + Copy.costMenuBar(pct: pct, costHr: cph)
       } else {
-        button.title = Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
+        button.title = modePrefix + Copy.menuBarNormal(pct: Int(primary.remainingPercent.rounded()), altCount: state.availableProfileCount)
       }
     }
   }

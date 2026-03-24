@@ -111,6 +111,9 @@ final class PopoverViewController: NSViewController {
   private let modeProxyBtn = NSButton()
   private let modeStatusLabel = NSTextField(labelWithString: "")
   private let codexConfig = CodexConfigManager()
+  private let modeIndicatorDot = NSView()
+  private let modeRequestsLabel = NSTextField(labelWithString: "")
+  private var proxyIsRunning = false
 
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
@@ -278,9 +281,25 @@ final class PopoverViewController: NSViewController {
     modeStatusLabel.maximumNumberOfLines = 1
     modeStatusLabel.translatesAutoresizingMaskIntoConstraints = false
 
+    // Indicator dot (green=running, red=down, hidden in direct mode)
+    modeIndicatorDot.wantsLayer = true
+    modeIndicatorDot.layer?.cornerRadius = 3
+    modeIndicatorDot.layer?.backgroundColor = LN.textMuted.cgColor
+    modeIndicatorDot.translatesAutoresizingMaskIntoConstraints = false
+    modeIndicatorDot.isHidden = true
+
+    // Request counter (proxy mode only)
+    modeRequestsLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    modeRequestsLabel.textColor = LN.textMuted
+    modeRequestsLabel.alignment = .right
+    modeRequestsLabel.translatesAutoresizingMaskIntoConstraints = false
+    modeRequestsLabel.isHidden = true
+
     card.addSubview(modeSectionLabel)
     card.addSubview(toggleTrack)
+    card.addSubview(modeIndicatorDot)
     card.addSubview(modeStatusLabel)
+    card.addSubview(modeRequestsLabel)
 
     let cPad = LN.cardPad
     let toggleH: CGFloat = 32
@@ -305,10 +324,18 @@ final class PopoverViewController: NSViewController {
       modeProxyBtn.bottomAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: -btnPad),
       modeProxyBtn.trailingAnchor.constraint(equalTo: toggleTrack.trailingAnchor, constant: -btnPad),
 
-      modeStatusLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
-      modeStatusLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      modeIndicatorDot.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      modeIndicatorDot.widthAnchor.constraint(equalToConstant: 6),
+      modeIndicatorDot.heightAnchor.constraint(equalToConstant: 6),
+      modeIndicatorDot.centerYAnchor.constraint(equalTo: modeStatusLabel.centerYAnchor),
+
+      modeStatusLabel.leadingAnchor.constraint(equalTo: modeIndicatorDot.trailingAnchor, constant: 5),
       modeStatusLabel.topAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: LN.gapSm),
       modeStatusLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+
+      modeRequestsLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      modeRequestsLabel.centerYAnchor.constraint(equalTo: modeStatusLabel.centerYAnchor),
+      modeStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: modeRequestsLabel.leadingAnchor, constant: -4),
     ])
 
     wrapper.addSubview(card)
@@ -343,18 +370,37 @@ final class PopoverViewController: NSViewController {
       modeDirectBtn.contentTintColor = .white
       modeProxyBtn.layer?.backgroundColor = NSColor.clear.cgColor
       modeProxyBtn.contentTintColor = LN.textTertiary
-      modeStatusLabel.stringValue = "Direct connection · Account-based auth"
+      modeStatusLabel.stringValue = "Direct connection · Account-based"
+      modeIndicatorDot.isHidden = true
+      modeRequestsLabel.isHidden = true
     } else {
       modeProxyBtn.layer?.backgroundColor = LN.purple.cgColor
       modeProxyBtn.contentTintColor = .white
       modeDirectBtn.layer?.backgroundColor = NSColor.clear.cgColor
       modeDirectBtn.contentTintColor = LN.textTertiary
-      modeStatusLabel.stringValue = "Proxy mode · localhost:19876"
+      modeIndicatorDot.isHidden = false
+      modeRequestsLabel.isHidden = false
+      if proxyIsRunning {
+        modeIndicatorDot.layer?.backgroundColor = LN.green.cgColor
+        modeStatusLabel.stringValue = "Proxy running · :19876"
+      } else {
+        modeIndicatorDot.layer?.backgroundColor = LN.red.cgColor
+        modeStatusLabel.stringValue = "Proxy starting…"
+      }
     }
   }
 
   func refreshModeFromExternal() {
     refreshModeCard()
+  }
+
+  func updateProxyStatus(running: Bool, stats: ProxyServer.Stats?) {
+    proxyIsRunning = running
+    refreshModeCard()
+    if let stats, codexConfig.currentMode() == .proxy {
+      modeRequestsLabel.isHidden = false
+      modeRequestsLabel.stringValue = "\(stats.requests) req"
+    }
   }
 
   // MARK: - Primary Card (hero metric in a card)
@@ -977,9 +1023,14 @@ final class PopoverViewController: NSViewController {
     guard codexConfig.currentMode() != .direct else { return }
     do {
       try codexConfig.switchToDirect()
-      refreshModeCard()
+      // Delegate lifecycle to AppDelegate
+      if let appDel = NSApp.delegate as? AppDelegate {
+        appDel.handleModeSwitch(toProxy: false)
+      }
+      flashModeSwitch(success: true)
     } catch {
       NSLog("[ModeToggle] switch to direct failed: \(error.localizedDescription)")
+      flashModeSwitch(success: false)
     }
   }
 
@@ -987,9 +1038,29 @@ final class PopoverViewController: NSViewController {
     guard codexConfig.currentMode() != .proxy else { return }
     do {
       try codexConfig.switchTo(proxy: 19876)
-      refreshModeCard()
+      if let appDel = NSApp.delegate as? AppDelegate {
+        appDel.handleModeSwitch(toProxy: true)
+      }
+      flashModeSwitch(success: true)
     } catch {
       NSLog("[ModeToggle] switch to proxy failed: \(error.localizedDescription)")
+      flashModeSwitch(success: false)
+    }
+  }
+
+  private func flashModeSwitch(success: Bool) {
+    refreshModeCard()
+    guard let card = modeWrapper?.subviews.first else { return }
+    let originalBorder = card.layer?.borderColor
+    let flashColor = success ? LN.green.withAlphaComponent(0.6).cgColor : LN.red.withAlphaComponent(0.6).cgColor
+    card.layer?.borderColor = flashColor
+    card.layer?.borderWidth = 1.5
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+      NSAnimationContext.runAnimationGroup { ctx in
+        ctx.duration = 0.3
+        card.layer?.borderColor = originalBorder
+        card.layer?.borderWidth = 1
+      }
     }
   }
 

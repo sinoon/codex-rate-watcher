@@ -53,6 +53,19 @@ public final class ProxyServer: @unchecked Sendable {
   private var failoverCount = 0
   private var errorCount = 0
 
+  public struct Stats: Sendable {
+    public let requests: Int
+    public let failovers: Int
+    public let errors: Int
+  }
+
+  public var stats: Stats {
+    lock.withLock { Stats(requests: requestCount, failovers: failoverCount, errors: errorCount) }
+  }
+
+  private var _isRunning = false
+  public var isRunning: Bool { lock.withLock { _isRunning } }
+
   public init(config: Config) {
     self.config = config
     self.upstreamURL = URL(string: config.upstream)!
@@ -91,6 +104,7 @@ public final class ProxyServer: @unchecked Sendable {
     fcntl(serverFD, F_SETFL, flags | O_NONBLOCK)
 
     printBanner()
+    lock.withLock { _isRunning = true }
 
     while !Task.isCancelled {
       var caddr = sockaddr_in()
@@ -121,6 +135,7 @@ public final class ProxyServer: @unchecked Sendable {
       }
     }
 
+    lock.withLock { _isRunning = false }
     Darwin.close(serverFD)
   }
 
@@ -369,6 +384,19 @@ public final class ProxyServer: @unchecked Sendable {
       print("       Falling back to ~/.codex/auth.json")
     }
     print()
+  }
+
+  /// Quick health probe — returns true if proxy responds on the given port.
+  public static func healthCheck(port: UInt16 = 19876) async -> Bool {
+    guard let url = URL(string: "http://127.0.0.1:\(port)/health") else { return false }
+    var req = URLRequest(url: url)
+    req.timeoutInterval = 1.5
+    do {
+      let (_, resp) = try await URLSession.shared.data(for: req)
+      return (resp as? HTTPURLResponse)?.statusCode == 200
+    } catch {
+      return false
+    }
   }
 
   private func statusText(_ code: Int) -> String {
