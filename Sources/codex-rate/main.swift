@@ -189,6 +189,7 @@ private struct CLIOptions {
     case history
     case relay
     case cost
+    case proxy
     case help
   }
   var command: Command = .status
@@ -196,6 +197,10 @@ private struct CLIOptions {
   var relayStrategy: String = "reset-aware"
   var watchInterval: Int = 30
   var historyHours: Int = 24
+  var proxyPort: UInt16 = 19876
+  var proxyUpstream: String = "https://api.openai.com"
+  var noAutoRelay: Bool = false
+  var proxyVerbose: Bool = false
 }
 
 private func parseArguments() -> CLIOptions {
@@ -219,6 +224,8 @@ private func parseArguments() -> CLIOptions {
     opts.command = .history; idx = 1
   case "cost":
     opts.command = .cost; idx = 1
+  case "proxy":
+    opts.command = .proxy; idx = 1
   case "relay":
     opts.command = .relay; idx = 1
   case "help", "-h", "--help":
@@ -226,7 +233,7 @@ private func parseArguments() -> CLIOptions {
   case "--json":
     opts.command = .status; opts.jsonOutput = true; idx = 1
   case "--version", "-v":
-    print("codex-rate 1.9.0")
+    print("codex-rate 2.0.0")
     exit(0)
   default:
     fputs(ANSI.c(ANSI.red, "Unknown command: \(first)") + "\n", stderr)
@@ -258,6 +265,22 @@ private func parseArguments() -> CLIOptions {
         exitWithError("--strategy requires a value: reset-aware, greedy, or max-runway")
       }
       opts.relayStrategy = args[idx]
+    case "--port":
+      idx += 1
+      guard idx < args.count, let val = UInt16(args[idx]) else {
+        exitWithError("--port requires a valid port number (1-65535)")
+      }
+      opts.proxyPort = val
+    case "--upstream":
+      idx += 1
+      guard idx < args.count else {
+        exitWithError("--upstream requires a URL")
+      }
+      opts.proxyUpstream = args[idx]
+    case "--no-relay":
+      opts.noAutoRelay = true
+    case "--verbose":
+      opts.proxyVerbose = true
     case "-h", "--help":
       opts.command = .help; return opts
     default:
@@ -778,6 +801,35 @@ private func runRelay(strategyName: String, json: Bool) async {
   print()
 }
 
+
+
+// MARK: - Subcommand: Proxy
+
+private func runProxy(opts: CLIOptions) async {
+  let config = ProxyServer.Config(
+    port: opts.proxyPort,
+    upstream: opts.proxyUpstream,
+    autoRelay: !opts.noAutoRelay,
+    verbose: opts.proxyVerbose
+  )
+
+  // Trap SIGINT for graceful shutdown
+  signal(SIGINT, SIG_IGN)
+  let sigSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+  sigSource.setEventHandler {
+    print("\n" + ANSI.c(ANSI.dim, "Shutting down proxy..."))
+    Foundation.exit(0)
+  }
+  sigSource.resume()
+
+  let server = ProxyServer(config: config)
+  do {
+    try await server.run()
+  } catch {
+    exitWithError(error.localizedDescription)
+  }
+}
+
 // MARK: - Help
 
 
@@ -881,6 +933,7 @@ private func printHelp() {
     history     Show usage history with sparklines
     relay       Show relay plan across accounts
     cost        Show cost dashboard & 7-day spending
+    proxy       Start local HTTP proxy for Codex API
     help        Show this help message
 
   \(ANSI.c(ANSI.bold, "OPTIONS"))
@@ -888,6 +941,10 @@ private func printHelp() {
     --interval <secs>    Watch polling interval (default: 30, min: 10)
     --hours <N>          History window in hours (default: 24)
     --strategy <name>    Relay strategy: reset-aware (default), greedy, max-runway
+    --port <N>           Proxy listen port (default: 19876)
+    --upstream <url>     Proxy upstream URL (default: https://api.openai.com)
+    --no-relay           Disable automatic 429 failover
+    --verbose            Verbose proxy logging
     -v, --version        Show version
     -h, --help           Show help
 
@@ -901,7 +958,9 @@ private func printHelp() {
     codex-rate relay --strategy greedy  Use greedy strategy
     codex-rate cost              Show cost dashboard
     codex-rate cost --json       Cost data as JSON
-
+    codex-rate proxy             Start proxy on port 19876
+    codex-rate proxy --port 8080 Start proxy on custom port
+    codex-rate proxy --verbose   Proxy with request logging
   \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/patchwork-body/shakeflow"))
   """
   print(help)
@@ -922,6 +981,8 @@ case .history:
   runHistory(hours: opts.historyHours, json: opts.jsonOutput)
 case .cost:
   await runCost(json: opts.jsonOutput)
+case .proxy:
+  await runProxy(opts: opts)
 case .relay:
   await runRelay(strategyName: opts.relayStrategy, json: opts.jsonOutput)
 case .help:
