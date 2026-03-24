@@ -190,6 +190,7 @@ private struct CLIOptions {
     case relay
     case cost
     case proxy
+    case mode
     case help
   }
   var command: Command = .status
@@ -201,6 +202,7 @@ private struct CLIOptions {
   var proxyUpstream: String = "https://api.openai.com"
   var noAutoRelay: Bool = false
   var proxyVerbose: Bool = false
+  var modeTarget: String = ""
 }
 
 private func parseArguments() -> CLIOptions {
@@ -226,6 +228,8 @@ private func parseArguments() -> CLIOptions {
     opts.command = .cost; idx = 1
   case "proxy":
     opts.command = .proxy; idx = 1
+  case "mode":
+    opts.command = .mode; idx = 1
   case "relay":
     opts.command = .relay; idx = 1
   case "help", "-h", "--help":
@@ -233,12 +237,18 @@ private func parseArguments() -> CLIOptions {
   case "--json":
     opts.command = .status; opts.jsonOutput = true; idx = 1
   case "--version", "-v":
-    print("codex-rate 2.0.0")
+    print("codex-rate 2.1.0")
     exit(0)
   default:
     fputs(ANSI.c(ANSI.red, "Unknown command: \(first)") + "\n", stderr)
     fputs("Run 'codex-rate help' for usage information.\n", stderr)
     exit(1)
+  }
+
+  // Parse mode subcommand (proxy/direct)
+  if opts.command == .mode && idx < args.count && !args[idx].hasPrefix("-") {
+    opts.modeTarget = args[idx]
+    idx += 1
   }
 
   // Parse remaining flags
@@ -934,6 +944,7 @@ private func printHelp() {
     relay       Show relay plan across accounts
     cost        Show cost dashboard & 7-day spending
     proxy       Start local HTTP proxy for Codex API
+    mode        Switch Codex between proxy and direct modes
     help        Show this help message
 
   \(ANSI.c(ANSI.bold, "OPTIONS"))
@@ -961,9 +972,89 @@ private func printHelp() {
     codex-rate proxy             Start proxy on port 19876
     codex-rate proxy --port 8080 Start proxy on custom port
     codex-rate proxy --verbose   Proxy with request logging
+    codex-rate mode              Show current Codex mode
+    codex-rate mode proxy        Switch to proxy mode
+    codex-rate mode direct       Switch to direct/account mode
   \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/patchwork-body/shakeflow"))
   """
   print(help)
+}
+
+
+// MARK: - Subcommand: Mode
+
+private func runMode(target: String, port: UInt16, json: Bool) {
+  let mgr = CodexConfigManager()
+  let current = mgr.currentMode()
+
+  // No target = show current mode
+  if target.isEmpty {
+    if json {
+      let obj: [String: String] = [
+        "mode": current.rawValue,
+        "config": mgr.path,
+      ]
+      if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+         let str = String(data: data, encoding: .utf8) {
+        print(str)
+      }
+    } else {
+      let icon = current == .proxy ? "PROXY" : "DIRECT"
+      let color = current == .proxy ? ANSI.magenta : ANSI.green
+      print(ANSI.c(ANSI.bold, "Codex Mode: ") + ANSI.c(ANSI.bold + color, icon))
+      print(ANSI.c(ANSI.dim, "  Config: \(mgr.path)"))
+      if current == .proxy {
+        print(ANSI.c(ANSI.dim, "  Proxy:  http://localhost:\(port)"))
+      }
+      print()
+      print("Switch with:  codex-rate mode proxy | codex-rate mode direct")
+    }
+    return
+  }
+
+  // Switch mode
+  switch target.lowercased() {
+  case "proxy":
+    if current == .proxy {
+      print(ANSI.c(ANSI.yellow, "Already in proxy mode."))
+      return
+    }
+    do {
+      try mgr.switchTo(proxy: port)
+      if json {
+        print("{\"mode\":\"proxy\",\"port\":\(port)}")
+      } else {
+        print(ANSI.c(ANSI.green, "Switched to PROXY mode."))
+        print("  Codex will route through: http://localhost:\(port)")
+        print()
+        print(ANSI.c(ANSI.dim, "Make sure the proxy is running:"))
+        print(ANSI.c(ANSI.cyan, "  codex-rate proxy --port \(port)"))
+      }
+    } catch {
+      fputs(ANSI.c(ANSI.red, "Failed: \(error.localizedDescription)") + "\n", stderr)
+    }
+
+  case "direct", "normal":
+    if current == .direct {
+      print(ANSI.c(ANSI.yellow, "Already in direct mode."))
+      return
+    }
+    do {
+      try mgr.switchToDirect()
+      if json {
+        print("{\"mode\":\"direct\"}")
+      } else {
+        print(ANSI.c(ANSI.green, "Switched to DIRECT mode."))
+        print("  Codex will use account-based auth directly.")
+      }
+    } catch {
+      fputs(ANSI.c(ANSI.red, "Failed: \(error.localizedDescription)") + "\n", stderr)
+    }
+
+  default:
+    fputs(ANSI.c(ANSI.red, "Unknown mode: \(target)") + "\n", stderr)
+    fputs("Usage: codex-rate mode [proxy|direct]\n", stderr)
+  }
 }
 
 // MARK: - Main Entry Point
@@ -983,6 +1074,8 @@ case .cost:
   await runCost(json: opts.jsonOutput)
 case .proxy:
   await runProxy(opts: opts)
+case .mode:
+  runMode(target: opts.modeTarget, port: opts.proxyPort, json: opts.jsonOutput)
 case .relay:
   await runRelay(strategyName: opts.relayStrategy, json: opts.jsonOutput)
 case .help:
