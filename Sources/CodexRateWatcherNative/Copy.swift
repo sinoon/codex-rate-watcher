@@ -290,7 +290,27 @@ enum Copy {
 
   // MARK: - Cost Dashboard
 
-  static let costSectionTitle = "COST INSIGHT"
+  static let costSectionTitle = "TOKEN COST"
+
+  static let costNoLocalData = "暂无本地会话数据"
+
+  static func costTodayMetric(_ value: String) -> String {
+    "Today \(value)"
+  }
+
+  static func costLast30DaysMetric(_ value: String) -> String {
+    "30d \(value)"
+  }
+
+  static func costTokenMetric(_ value: String) -> String {
+    "\(value) tok"
+  }
+
+  static func costActiveDays(_ days: Int) -> String {
+    "活跃 \(days) 天"
+  }
+
+  static let costPartialPricing = "部分模型无定价"
 
   static func costPerHour(_ usd: Double) -> String {
     "$\(String(format: "%.2f", usd))/hr"

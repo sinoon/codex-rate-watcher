@@ -101,7 +101,7 @@ public final class ProxyServer: @unchecked Sendable {
 
     // Non-blocking for async accept loop
     let flags = fcntl(serverFD, F_GETFL)
-    fcntl(serverFD, F_SETFL, flags | O_NONBLOCK)
+    _ = fcntl(serverFD, F_SETFL, flags | O_NONBLOCK)
 
     printBanner()
     lock.withLock { _isRunning = true }
@@ -128,7 +128,7 @@ public final class ProxyServer: @unchecked Sendable {
       setsockopt(cfd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
       setsockopt(cfd, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
 
-      nonisolated(unsafe) let clientFD = cfd
+      let clientFD = cfd
       Task.detached { [self] in
         await self.handleClient(fd: clientFD)
         Darwin.close(clientFD)
@@ -361,7 +361,7 @@ public final class ProxyServer: @unchecked Sendable {
     let portStr = "\(config.port)"
     print("""
 
-    \u{1F680} codex-rate proxy v2.0.0
+    \u{1F680} codex-rate proxy v\(AppVersion.current)
     \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}
     Listen:      http://127.0.0.1:\(portStr)
     Upstream:    \(config.upstream)

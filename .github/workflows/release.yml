@@ -168,7 +168,7 @@ jobs:
             echo "- Orphaned snapshot auto-reconciliation"
             echo "- Plus / Team plan badges"
             echo "- Dark-themed Linear-inspired UI"
-            echo "- **Global Hotkey** -- Toggle the popover from anywhere"
+            echo "- **Local Token Cost** -- Scan Codex session logs and price tokens by model"
             echo "- **codex-rate CLI** -- Terminal-first monitoring with JSON output"
             echo "- **Raycast Extension** -- Native integration via CLI bridge"
             echo "- Zero dependencies -- pure Apple system frameworks"

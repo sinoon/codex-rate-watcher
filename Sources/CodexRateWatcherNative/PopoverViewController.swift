@@ -1249,54 +1249,54 @@ final class PopoverViewController: NSViewController {
   // MARK: - Render Cost Card
 
   private func renderCost(state: UsageMonitor.State) {
-    guard let snapshot = state.snapshot else {
+    guard let tokenCostSnapshot = state.tokenCostSnapshot else {
       costWrapper?.isHidden = true
       return
     }
     costWrapper?.isHidden = false
 
-    let tier = SubscriptionTier(planType: snapshot.planType)
-    let burnRate = state.primaryEstimate.percentPerHour
-    let usedPct = snapshot.rateLimit.primaryWindow.usedPercent
-
-    let live = CostTracker.todaySummary(
-      currentTier: tier,
-      currentBurnRate: burnRate,
-      currentUsedPercent: usedPct
-    )
-
-    // Top metrics row
-    if let cph = live.costPerHour, cph > 0 {
-      costHourLabel.stringValue = Copy.costPerHour(cph)
-      costHourLabel.textColor = cph > 1.0 ? LN.yellow : LN.green
-    } else {
-      costHourLabel.stringValue = Copy.costNoBurnRate
+    guard tokenCostSnapshot.hasAnyData else {
+      costHourLabel.stringValue = Copy.costNoLocalData
       costHourLabel.textColor = LN.textTertiary
-    }
-
-    costTodayLabel.stringValue = Copy.costToday(live.todayCostUSD)
-    costUtilLabel.stringValue = Copy.costUtilization(live.currentCycleUtilization)
-
-    // Color utilization label
-    if live.currentCycleUtilization > 0.7 {
-      costUtilLabel.textColor = LN.green
-    } else if live.currentCycleUtilization > 0.3 {
-      costUtilLabel.textColor = LN.yellow
-    } else {
+      costTodayLabel.stringValue = "—"
+      costTodayLabel.textColor = LN.textSecondary
+      costUtilLabel.stringValue = "—"
+      costHourLabel.textColor = LN.textTertiary
       costUtilLabel.textColor = LN.textTertiary
+      drawSparkline([])
+      costSublineLabel.stringValue = "运行 Codex 后会在这里显示本地 token 成本"
+      return
     }
 
-    // Sparkline
-    drawSparkline(live.sparkline)
+    let todayCostLabel = tokenCostSnapshot.todayCostUSD.map {
+      TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
+    } ?? "—"
+    let todayTokenLabel = tokenCostSnapshot.todayTokens.map {
+      TokenCostFormatting.tokenCount($0)
+    } ?? "—"
+    let last30CostLabel = tokenCostSnapshot.last30DaysCostUSD.map {
+      TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
+    } ?? "—"
+    let last30TokenLabel = tokenCostSnapshot.last30DaysTokens.map {
+      TokenCostFormatting.tokenCount($0)
+    } ?? "—"
 
-    // Subline
+    costHourLabel.stringValue = Copy.costTodayMetric(todayCostLabel)
+    costHourLabel.textColor = tokenCostSnapshot.todayCostUSD == nil ? LN.textTertiary : LN.green
+    costTodayLabel.stringValue = Copy.costTokenMetric(todayTokenLabel)
+    costTodayLabel.textColor = LN.textPrimary
+    costUtilLabel.stringValue = Copy.costLast30DaysMetric(last30CostLabel)
+    costUtilLabel.textColor = tokenCostSnapshot.last30DaysCostUSD == nil ? LN.textTertiary : LN.yellow
+
+    drawSparkline(tokenCostSnapshot.daily.map { $0.costUSD ?? 0 })
+
     var parts: [String] = []
-    parts.append(Copy.costSubscription(plan: tier.rawValue.capitalized, monthly: live.subscriptionMonthlyUSD))
-    if let proj = live.projectedMonthlyCostUSD {
-      parts.append(Copy.costProjectedMonthly(proj))
+    parts.append(Copy.costLast30DaysMetric(Copy.costTokenMetric(last30TokenLabel)))
+    if tokenCostSnapshot.activeDayCount > 0 {
+      parts.append(Copy.costActiveDays(tokenCostSnapshot.activeDayCount))
     }
-    if live.activeHoursToday > 0.1 {
-      parts.append(Copy.costActiveHours(live.activeHoursToday))
+    if tokenCostSnapshot.last30DaysCostUSD == nil, tokenCostSnapshot.last30DaysTokens != nil {
+      parts.append(Copy.costPartialPricing)
     }
     costSublineLabel.stringValue = parts.joined(separator: " · ")
   }

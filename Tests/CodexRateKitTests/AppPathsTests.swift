@@ -66,6 +66,16 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(managedAccountsPath.hasPrefix(rootPath), "Managed accounts file should be under root directory")
   }
 
+  func testTokenCostCacheFileName() {
+    XCTAssertEqual(AppPaths.tokenCostCacheFile.lastPathComponent, "token-cost-cache.json")
+  }
+
+  func testTokenCostCacheFileIsUnderRoot() {
+    let cachePath = AppPaths.tokenCostCacheFile.path
+    let rootPath = AppPaths.rootDirectory.path
+    XCTAssertTrue(cachePath.hasPrefix(rootPath), "Token cost cache file should be under root directory")
+  }
+
   func testAllPathsAreAbsolute() {
     // All paths should be absolute (start with /)
     XCTAssertTrue(AppPaths.rootDirectory.path.hasPrefix("/"))
@@ -75,5 +85,6 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(AppPaths.backupsDirectory.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.managedCodexHomesDirectory.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.managedCodexAccountsFile.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.tokenCostCacheFile.path.hasPrefix("/"))
   }
 }

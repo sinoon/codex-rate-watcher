@@ -237,7 +237,7 @@ private func parseArguments() -> CLIOptions {
   case "--json":
     opts.command = .status; opts.jsonOutput = true; idx = 1
   case "--version", "-v":
-    print("codex-rate 2.1.0")
+    print("codex-rate \(AppVersion.current)")
     exit(0)
   default:
     fputs(ANSI.c(ANSI.red, "Unknown command: \(first)") + "\n", stderr)
@@ -613,29 +613,38 @@ private func runHistory(hours: Int, json: Bool) {
     let primaryValues = recent.map { $0.primaryUsedPercent }
     let weeklyValues = recent.compactMap { $0.secondaryUsedPercent }
     let reviewValues = recent.map { $0.reviewUsedPercent }
+    let primaryCurrent = primaryValues.last ?? 0.0
+    let primaryPeak = primaryValues.max() ?? 0.0
+    let primaryAverage = primaryValues.isEmpty ? 0.0 : primaryValues.reduce(0, +) / Double(primaryValues.count)
+    let weeklyCurrent = weeklyValues.last ?? 0.0
+    let weeklyPeak = weeklyValues.max() ?? 0.0
+    let weeklyAverage = weeklyValues.isEmpty ? 0.0 : weeklyValues.reduce(0, +) / Double(weeklyValues.count)
+    let reviewCurrent = reviewValues.last ?? 0.0
+    let reviewPeak = reviewValues.max() ?? 0.0
+    let reviewAverage = reviewValues.isEmpty ? 0.0 : reviewValues.reduce(0, +) / Double(reviewValues.count)
 
     output["primary"] = [
       "values": primaryValues,
       "sparkline": Sparkline.render(values: primaryValues),
-      "current": primaryValues.last ?? 0,
-      "peak": primaryValues.max() ?? 0,
-      "average": primaryValues.isEmpty ? 0 : primaryValues.reduce(0, +) / Double(primaryValues.count)
+      "current": primaryCurrent,
+      "peak": primaryPeak,
+      "average": primaryAverage
     ] as [String: Any]
 
     output["weekly"] = [
       "values": weeklyValues,
       "sparkline": weeklyValues.isEmpty ? "" : Sparkline.render(values: weeklyValues),
-      "current": weeklyValues.last ?? 0,
-      "peak": weeklyValues.max() ?? 0,
-      "average": weeklyValues.isEmpty ? 0 : weeklyValues.reduce(0, +) / Double(weeklyValues.count)
+      "current": weeklyCurrent,
+      "peak": weeklyPeak,
+      "average": weeklyAverage
     ] as [String: Any]
 
     output["review"] = [
       "values": reviewValues,
       "sparkline": Sparkline.render(values: reviewValues),
-      "current": reviewValues.last ?? 0,
-      "peak": reviewValues.max() ?? 0,
-      "average": reviewValues.isEmpty ? 0 : reviewValues.reduce(0, +) / Double(reviewValues.count)
+      "current": reviewCurrent,
+      "peak": reviewPeak,
+      "average": reviewAverage
     ] as [String: Any]
 
     if let data = try? JSONSerialization.data(withJSONObject: output, options: [.prettyPrinted, .sortedKeys]),
@@ -844,34 +853,14 @@ private func runProxy(opts: CLIOptions) async {
 
 
 private func runCost(json: Bool) async {
-  // Determine tier from profiles
-  let profilesURL = AppPaths.profileIndexFile
-  var tier = SubscriptionTier.plus
-  if let data = try? Data(contentsOf: profilesURL),
-     let profiles = try? JSONDecoder().decode([AuthProfileRecord].self, from: data) {
-    if let active = profiles.first(where: { $0.isValid }),
-       let usage = active.latestUsage {
-      tier = SubscriptionTier(planType: usage.planType)
-    }
-  }
-
-  let weekly = CostTracker.weeklyStats(tier: tier)
-  let live = CostTracker.todaySummary(currentTier: tier, currentBurnRate: nil, currentUsedPercent: 0)
+  let snapshot = await LiveTokenCostSnapshotLoader().loadSnapshot(now: Date())
 
   if json {
-    var result: [[String: Any]] = []
-    for d in weekly {
-      result.append([
-        "date": d.date,
-        "tier": d.tier.rawValue,
-        "estimated_cost_usd": round(d.estimatedCostUSD * 100) / 100,
-        "avg_utilization": round(d.avgUtilization * 1000) / 10,
-        "active_minutes": d.totalActiveMinutes,
-        "peak_burn_rate": d.peakBurnRate ?? 0,
-        "cycles": d.cycles.count
-      ])
-    }
-    if let jsonData = try? JSONSerialization.data(withJSONObject: result, options: .prettyPrinted),
+    let payload = CostJSONPayload(snapshot: snapshot)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    encoder.dateEncodingStrategy = .iso8601
+    if let jsonData = try? encoder.encode(payload),
        let str = String(data: jsonData, encoding: .utf8) {
       print(str)
     }
@@ -881,52 +870,132 @@ private func runCost(json: Bool) async {
   // Pretty output
   let bold = "\u{001B}[1m"
   let dim = "\u{001B}[2m"
-  let green = "\u{001B}[32m"
-  let yellow = "\u{001B}[33m"
   let cyan = "\u{001B}[36m"
   let reset = "\u{001B}[0m"
 
   print("")
-  print("\(bold)💰 Cost Dashboard\(reset)")
+  print("\(bold)💰 Token Cost\(reset)")
   print("\(dim)────────────────────────────────────────\(reset)")
   print("")
 
-  // Subscription info
-  print("  \(dim)Subscription:\(reset)  \(bold)\(tier.rawValue.capitalized)\(reset) · $\(Int(tier.monthlyUSD))/mo")
+  if !snapshot.hasAnyData {
+    print("  \(dim)No local session data yet. Run Codex to collect session logs.\(reset)")
+    print("")
+    return
+  }
+
+  let todayCost = snapshot.todayCostUSD.map {
+    TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
+  } ?? "—"
+  let todayTokens = snapshot.todayTokens.map(TokenCostFormatting.tokenCount) ?? "—"
+  let monthCost = snapshot.last30DaysCostUSD.map {
+    TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
+  } ?? "—"
+  let monthTokens = snapshot.last30DaysTokens.map(TokenCostFormatting.tokenCount) ?? "—"
+
+  print("  \(dim)Today Cost:\(reset)     \(bold)\(todayCost)\(reset)")
+  print("  \(dim)Today Tokens:\(reset)   \(todayTokens)")
+  print("  \(dim)Last 30 Days:\(reset)   \(bold)\(monthCost)\(reset)")
+  print("  \(dim)30d Tokens:\(reset)     \(monthTokens)")
+  print("  \(dim)Active Days:\(reset)    \(snapshot.activeDayCount)")
   print("")
 
-  // Today summary
-  if let cph = live.costPerHour, cph > 0 {
-    print("  \(dim)Burn Rate:\(reset)     \(green)$\(String(format: "%.2f", cph))/hr\(reset)")
-  }
-  print("  \(dim)Today Cost:\(reset)    \(bold)$\(String(format: "%.2f", live.todayCostUSD))\(reset)")
-  print("  \(dim)Active Hours:\(reset)  \(String(format: "%.1f", live.activeHoursToday))h")
-  if let proj = live.projectedMonthlyCostUSD {
-    let color = proj > tier.monthlyUSD ? yellow : green
-    print("  \(dim)Monthly Est:\(reset)   \(color)$\(String(format: "%.0f", proj))\(reset)")
-  }
-  print("")
-
-  // 7-day history
-  if !weekly.isEmpty {
-    print("  \(bold)7-Day History\(reset)")
-    print("  \(dim)Date         Cost     Util   Active  Cycles\(reset)")
-    for d in weekly {
-      let utilColor = d.avgUtilization > 0.5 ? green : yellow
-      let utilPct = Int((d.avgUtilization * 100).rounded())
-      let activeH = String(format: "%.1f", Double(d.totalActiveMinutes) / 60.0)
-      print("  \(d.date)  \(cyan)$\(String(format: "%5.2f", d.estimatedCostUSD))\(reset)   \(utilColor)\(String(format: "%3d", utilPct))%\(reset)   \(activeH)h   \(d.cycles.count)")
+  let recentDaily = snapshot.daily.suffix(7)
+  if !recentDaily.isEmpty {
+    print("  \(bold)Recent Daily Breakdown\(reset)")
+    print("  \(dim)Date         Cost        Tokens      Models\(reset)")
+    for entry in recentDaily {
+      let cost = entry.costUSD.map {
+        TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
+      } ?? "—"
+      let tokens = entry.totalTokens.map(TokenCostFormatting.tokenCount) ?? "—"
+      let models = (entry.modelsUsed ?? []).joined(separator: ",")
+      print("  \(entry.date)  \(cyan)\(cost)\(reset)   \(tokens.padding(toLength: 9, withPad: " ", startingAt: 0))   \(models)")
     }
-
-    let totalCost = weekly.map(\.estimatedCostUSD).reduce(0, +)
-    let avgUtil = weekly.map(\.avgUtilization).reduce(0, +) / Double(weekly.count)
-    print("  \(dim)─────────────────────────────────────\(reset)")
-    print("  \(dim)Total:\(reset)       \(bold)$\(String(format: "%.2f", totalCost))\(reset)   \(String(format: "%3d", Int((avgUtil * 100).rounded())))%")
-  } else {
-    print("  \(dim)No history data yet. Run the app to collect samples.\(reset)")
   }
 
   print("")
+}
+
+private struct CostJSONPayload: Encodable {
+  let updatedAt: Date
+  let todayTokens: Int?
+  let todayCostUSD: Double?
+  let last30DaysTokens: Int?
+  let last30DaysCostUSD: Double?
+  let activeDays: Int
+  let daily: [CostJSONDailyEntry]
+
+  init(snapshot: TokenCostSnapshot) {
+    self.updatedAt = snapshot.updatedAt
+    self.todayTokens = snapshot.todayTokens
+    self.todayCostUSD = snapshot.todayCostUSD
+    self.last30DaysTokens = snapshot.last30DaysTokens
+    self.last30DaysCostUSD = snapshot.last30DaysCostUSD
+    self.activeDays = snapshot.activeDayCount
+    self.daily = snapshot.daily.map(CostJSONDailyEntry.init)
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case updatedAt = "updated_at"
+    case todayTokens = "today_tokens"
+    case todayCostUSD = "today_cost_usd"
+    case last30DaysTokens = "last_30_days_tokens"
+    case last30DaysCostUSD = "last_30_days_cost_usd"
+    case activeDays = "active_days"
+    case daily
+  }
+}
+
+private struct CostJSONDailyEntry: Encodable {
+  let date: String
+  let inputTokens: Int?
+  let cacheReadTokens: Int?
+  let outputTokens: Int?
+  let totalTokens: Int?
+  let costUSD: Double?
+  let modelsUsed: [String]?
+  let modelBreakdowns: [CostJSONModelBreakdown]?
+
+  init(_ entry: TokenCostDailyEntry) {
+    self.date = entry.date
+    self.inputTokens = entry.inputTokens
+    self.cacheReadTokens = entry.cacheReadTokens
+    self.outputTokens = entry.outputTokens
+    self.totalTokens = entry.totalTokens
+    self.costUSD = entry.costUSD
+    self.modelsUsed = entry.modelsUsed
+    self.modelBreakdowns = entry.modelBreakdowns?.map(CostJSONModelBreakdown.init)
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case date
+    case inputTokens = "input_tokens"
+    case cacheReadTokens = "cache_read_tokens"
+    case outputTokens = "output_tokens"
+    case totalTokens = "total_tokens"
+    case costUSD = "cost_usd"
+    case modelsUsed = "models_used"
+    case modelBreakdowns = "model_breakdowns"
+  }
+}
+
+private struct CostJSONModelBreakdown: Encodable {
+  let modelName: String
+  let costUSD: Double?
+  let totalTokens: Int?
+
+  init(_ breakdown: TokenCostModelBreakdown) {
+    self.modelName = breakdown.modelName
+    self.costUSD = breakdown.costUSD
+    self.totalTokens = breakdown.totalTokens
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case modelName = "model_name"
+    case costUSD = "cost_usd"
+    case totalTokens = "total_tokens"
+  }
 }
 
 private func printHelp() {
@@ -942,7 +1011,7 @@ private func printHelp() {
     watch       Continuous monitoring mode
     history     Show usage history with sparklines
     relay       Show relay plan across accounts
-    cost        Show cost dashboard & 7-day spending
+    cost        Show local token cost from Codex session logs
     proxy       Start local HTTP proxy for Codex API
     mode        Switch Codex between proxy and direct modes
     help        Show this help message
@@ -967,8 +1036,8 @@ private func printHelp() {
     codex-rate history --hours 6  Show last 6 hours
     codex-rate relay              Show relay plan
     codex-rate relay --strategy greedy  Use greedy strategy
-    codex-rate cost              Show cost dashboard
-    codex-rate cost --json       Cost data as JSON
+    codex-rate cost              Show local token cost
+    codex-rate cost --json       Local token cost as JSON
     codex-rate proxy             Start proxy on port 19876
     codex-rate proxy --port 8080 Start proxy on custom port
     codex-rate proxy --verbose   Proxy with request logging

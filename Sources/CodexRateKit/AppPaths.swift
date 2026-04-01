@@ -12,7 +12,7 @@ public enum AppPaths {
   public static let backupsDirectory = rootDirectory.appending(path: "auth-backups")
   public static let managedCodexHomesDirectory = rootDirectory.appending(path: "managed-codex-homes")
   public static let managedCodexAccountsFile = rootDirectory.appending(path: "managed-codex-accounts.json")
-  public static let costHistoryFile = rootDirectory.appending(path: "cost-history.json")
+  public static let tokenCostCacheFile = rootDirectory.appending(path: "token-cost-cache.json")
 }
 
 public struct UsageSample: Codable, Sendable {

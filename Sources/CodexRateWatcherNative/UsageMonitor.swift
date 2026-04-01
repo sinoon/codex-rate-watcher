@@ -25,6 +25,7 @@ final class UsageMonitor {
     let lastUpdatedAt: Date?
     let isRefreshing: Bool
     let isAddingAccount: Bool
+    let tokenCostSnapshot: TokenCostSnapshot?
     let primaryEstimate: BurnEstimate
     let secondaryEstimate: BurnEstimate
     let reviewEstimate: BurnEstimate
@@ -51,16 +52,6 @@ final class UsageMonitor {
         return "\(coverage) · \(Copy.relaySurvive(resetTime: resetLabel))"
       }
       return coverage
-    }
-
-    var liveCost: LiveCostState? {
-      guard let snapshot else { return nil }
-      let tier = SubscriptionTier(planType: snapshot.planType)
-      return CostTracker.todaySummary(
-        currentTier: tier,
-        currentBurnRate: primaryEstimate.percentPerHour,
-        currentUsedPercent: snapshot.rateLimit.primaryWindow.usedPercent
-      )
     }
 
     var lastUpdatedLabel: String {
@@ -348,6 +339,7 @@ final class UsageMonitor {
   private let authStore: AuthStore
   private let apiClient: UsageAPIClient
   private let tokenRefresher = TokenRefresher()
+  private let tokenCostLoader: TokenCostSnapshotLoading
   private let sampleStore: SampleStore
   private let profileStore: AuthProfileStore
   private let managedAccountService: ManagedCodexAccountService
@@ -362,6 +354,7 @@ final class UsageMonitor {
   private var lastProfilesValidationAt: Date?
   private var isRefreshing = false
   private var isAddingAccount = false
+  private var tokenCostSnapshot: TokenCostSnapshot?
   private var samples: [UsageSample] = []
   private var primaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
   private var secondaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
@@ -382,6 +375,7 @@ final class UsageMonitor {
   init(
     authStore: AuthStore = AuthStore(),
     apiClient: UsageAPIClient = UsageAPIClient(),
+    tokenCostLoader: TokenCostSnapshotLoading = LiveTokenCostSnapshotLoader(),
     sampleStore: SampleStore = SampleStore(),
     profileStore: AuthProfileStore? = nil,
     managedAccountService: ManagedCodexAccountService = ManagedCodexAccountService(),
@@ -389,6 +383,7 @@ final class UsageMonitor {
   ) {
     self.authStore = authStore
     self.apiClient = apiClient
+    self.tokenCostLoader = tokenCostLoader
     self.sampleStore = sampleStore
     self.profileStore = profileStore ?? AuthProfileStore(authStore: authStore)
     self.managedAccountService = managedAccountService
@@ -554,15 +549,7 @@ final class UsageMonitor {
       lastUpdatedAt = now
       samples = await sampleStore.append(snapshot: freshSnapshot, capturedAt: now)
       rebuildEstimates()
-
-      // Record cost data point
-      CostTracker.record(
-        tier: SubscriptionTier(planType: freshSnapshot.planType),
-        primaryUsedPercent: freshSnapshot.rateLimit.primaryWindow.usedPercent,
-        burnRatePerHour: primaryEstimate.percentPerHour,
-        primaryResetAt: freshSnapshot.rateLimit.primaryWindow.resetAt,
-        weeklyUsedPercent: freshSnapshot.rateLimit.secondaryWindow?.usedPercent
-      )
+      tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: now)
 
       profiles = await profileStore.updateCurrentProfileValidation(snapshot: freshSnapshot)
       activeProfileID = await profileStore.currentProfileID()
@@ -574,6 +561,7 @@ final class UsageMonitor {
       }
     } catch {
       errorMessage = error.localizedDescription
+      tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: Date())
       if manual {
         lastUpdatedAt = Date()
       }
@@ -630,6 +618,7 @@ final class UsageMonitor {
       lastUpdatedAt: lastUpdatedAt,
       isRefreshing: isRefreshing,
       isAddingAccount: isAddingAccount,
+      tokenCostSnapshot: tokenCostSnapshot,
       primaryEstimate: primaryEstimate,
       secondaryEstimate: secondaryEstimate,
       reviewEstimate: reviewEstimate
