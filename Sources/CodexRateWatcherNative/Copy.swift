@@ -220,26 +220,30 @@ enum Copy {
   static let autoSwitchUndoAction = "撤销切换"
   static let restartCodexAction = "重启 Codex"
   static let restartCodexHint = "请重启 Codex 以使用新账号"
+
+  // MARK: - Launch at Login
+  static let launchAtLoginOn = "✅ 开机自启：已开启"
+  static let launchAtLoginOff = "⬜ 开机自启：已关闭"
   static let autoSwitchMenuLabel = "自动切换账号"
   static let autoSwitchCooldown = "冷却中，稍后再试"
 
 
-  // MARK: - Device Code Login
+  // MARK: - Managed Account Login
 
   static let addAccount = "添加账号"
-  static let deviceCodeTitle = "登录 Codex 账号"
-  static func deviceCodeMessage(code: String) -> String {
-    "请在浏览器中输入以下验证码完成登录：\n\n\(code)\n\n点击下方按钮自动复制验证码并打开浏览器。"
+  static let addAccountStarting = "正在添加账号…"
+  static let addAccountInProgress = "浏览器登录进行中"
+  static let addAccountStartedTitle = "正在添加 Codex 账号"
+  static let addAccountStartedBody = "浏览器会接管登录流程，完成授权后账号会自动加入列表。"
+  static let addAccountSuccess = "新账号已添加"
+  static func addAccountSuccessBody(email: String?) -> String {
+    if let email, !email.isEmpty {
+      return "\(email) 已加入账号列表，当前账号保持不变。"
+    }
+    return "新账号已加入账号列表，当前账号保持不变。"
   }
-  static let deviceCodeCopyAndOpen = "复制验证码并打开浏览器"
-  static let deviceCodeCancel = "取消"
-  static let deviceCodeSuccess = "新账号登录成功"
-  static func deviceCodeSuccessBody(email: String?) -> String {
-    if let e = email { return "\(e) 已登录并自动注册到账号列表" }
-    return "新账号已登录并注册到账号列表"
-  }
-  static let deviceCodeFailed = "登录失败"
-  static let deviceCodeRequestingCode = "正在获取验证码…"
+  static let addAccountFailed = "添加账号失败"
+  static let addAccountAlreadyRunning = "已有一个添加账号流程在进行中。"
 
 
   // MARK: - Relay Plan

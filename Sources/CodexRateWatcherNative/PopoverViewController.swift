@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import CodexRateKit
 
 // MARK: - Design Tokens (Linear-inspired)
@@ -117,10 +118,12 @@ final class PopoverViewController: NSViewController {
 
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
+  private let addAccountButton = NSButton()
   private let profileStack    = NSStackView()
 
   // Footer
   private let footerLabel    = NSTextField(labelWithString: "")
+  private let launchAtLoginBtn = NSButton()
   private let errorLabel     = NSTextField(labelWithString: "")
 
   init(monitor: UsageMonitor) {
@@ -141,6 +144,15 @@ final class PopoverViewController: NSViewController {
     buildLayout()
     observerID = monitor.addObserver { [weak self] s in
       DispatchQueue.main.async { self?.render(state: s) }
+    }
+  }
+
+  override func viewDidLayout() {
+    super.viewDidLayout()
+    let fitting = view.fittingSize
+    let newSize = NSSize(width: LN.popoverW, height: fitting.height)
+    if preferredContentSize != newSize {
+      preferredContentSize = newSize
     }
   }
 
@@ -572,6 +584,8 @@ final class PopoverViewController: NSViewController {
     weeklyFillW = wfw
     wfw.isActive = true
     configureDetailLabel(weeklyDetail)
+    weeklyDetail.maximumNumberOfLines = 1
+    weeklyDetail.lineBreakMode = .byTruncatingTail
 
     // Review row
     configureMetricLabel(reviewLabel)
@@ -582,6 +596,8 @@ final class PopoverViewController: NSViewController {
     reviewFillW = rfw
     rfw.isActive = true
     configureDetailLabel(reviewDetail)
+    reviewDetail.maximumNumberOfLines = 1
+    reviewDetail.lineBreakMode = .byTruncatingTail
 
     // Divider
     let divider = NSView()
@@ -601,13 +617,12 @@ final class PopoverViewController: NSViewController {
     card.addSubview(reviewDetail)
 
     let cPad = LN.cardPad
-    let trackW: CGFloat = 120
 
     NSLayoutConstraint.activate([
       sectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       sectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
 
-      // Weekly row
+      // --- Weekly: line 1 = label + pct + progress bar (fill remaining width) ---
       weeklyLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       weeklyLabel.topAnchor.constraint(equalTo: sectionLabel.bottomAnchor, constant: 8),
       weeklyLabel.widthAnchor.constraint(equalToConstant: 50),
@@ -618,21 +633,21 @@ final class PopoverViewController: NSViewController {
 
       weeklyTrack.leadingAnchor.constraint(equalTo: weeklyPct.trailingAnchor, constant: 6),
       weeklyTrack.centerYAnchor.constraint(equalTo: weeklyLabel.centerYAnchor),
-      weeklyTrack.widthAnchor.constraint(equalToConstant: trackW),
+      weeklyTrack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
       weeklyTrack.heightAnchor.constraint(equalToConstant: LN.progressH),
 
-      weeklyDetail.leadingAnchor.constraint(equalTo: weeklyTrack.trailingAnchor, constant: 8),
+      // --- Weekly: line 2 = detail text below the metric row ---
+      weeklyDetail.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       weeklyDetail.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      weeklyDetail.firstBaselineAnchor.constraint(equalTo: weeklyLabel.firstBaselineAnchor),
+      weeklyDetail.topAnchor.constraint(equalTo: weeklyLabel.bottomAnchor, constant: 3),
 
       // Divider
       divider.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       divider.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      divider.topAnchor.constraint(equalTo: weeklyLabel.bottomAnchor, constant: 8),
-      divider.topAnchor.constraint(greaterThanOrEqualTo: weeklyDetail.bottomAnchor, constant: 4),
+      divider.topAnchor.constraint(equalTo: weeklyDetail.bottomAnchor, constant: 6),
       divider.heightAnchor.constraint(equalToConstant: 1),
 
-      // Review row
+      // --- Review: line 1 = label + pct + progress bar ---
       reviewLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       reviewLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 6),
       reviewLabel.widthAnchor.constraint(equalToConstant: 50),
@@ -643,14 +658,16 @@ final class PopoverViewController: NSViewController {
 
       reviewTrack.leadingAnchor.constraint(equalTo: reviewPct.trailingAnchor, constant: 6),
       reviewTrack.centerYAnchor.constraint(equalTo: reviewLabel.centerYAnchor),
-      reviewTrack.widthAnchor.constraint(equalToConstant: trackW),
+      reviewTrack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
       reviewTrack.heightAnchor.constraint(equalToConstant: LN.progressH),
 
-      reviewDetail.leadingAnchor.constraint(equalTo: reviewTrack.trailingAnchor, constant: 8),
+      // --- Review: line 2 = detail text ---
+      reviewDetail.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       reviewDetail.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      reviewDetail.firstBaselineAnchor.constraint(equalTo: reviewLabel.firstBaselineAnchor),
+      reviewDetail.topAnchor.constraint(equalTo: reviewLabel.bottomAnchor, constant: 3),
 
-      reviewLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+      // Card bottom anchored to review detail
+      reviewDetail.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
     ])
 
     wrapper.addSubview(card)
@@ -949,19 +966,33 @@ final class PopoverViewController: NSViewController {
     profileHeader.textColor = LN.textTertiary
     profileHeader.translatesAutoresizingMaskIntoConstraints = false
 
+    addAccountButton.title = Copy.addAccount
+    addAccountButton.bezelStyle = .inline
+    addAccountButton.isBordered = false
+    addAccountButton.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    addAccountButton.contentTintColor = LN.blue
+    addAccountButton.target = self
+    addAccountButton.action = #selector(addAccountTapped)
+    addAccountButton.translatesAutoresizingMaskIntoConstraints = false
+    addAccountButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+
     profileStack.orientation = .vertical
     profileStack.spacing = LN.gapXs
     profileStack.translatesAutoresizingMaskIntoConstraints = false
 
     container.addSubview(profileHeader)
+    container.addSubview(addAccountButton)
     container.addSubview(profileStack)
 
     NSLayoutConstraint.activate([
       container.widthAnchor.constraint(equalToConstant: LN.popoverW),
 
       profileHeader.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LN.pad),
-      profileHeader.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
+      profileHeader.trailingAnchor.constraint(lessThanOrEqualTo: addAccountButton.leadingAnchor, constant: -8),
       profileHeader.topAnchor.constraint(equalTo: container.topAnchor),
+
+      addAccountButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
+      addAccountButton.centerYAnchor.constraint(equalTo: profileHeader.centerYAnchor),
 
       profileStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LN.pad),
       profileStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
@@ -989,16 +1020,24 @@ final class PopoverViewController: NSViewController {
     errorLabel.isHidden = true
     errorLabel.translatesAutoresizingMaskIntoConstraints = false
 
+    // Launch at Login toggle (compact, right-aligned in footer)
+    refreshLaunchAtLoginBtn()
+
     container.addSubview(footerLabel)
     container.addSubview(errorLabel)
+    container.addSubview(launchAtLoginBtn)
 
     NSLayoutConstraint.activate([
       container.widthAnchor.constraint(equalToConstant: LN.popoverW),
       container.heightAnchor.constraint(equalToConstant: 32),
 
       footerLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LN.pad),
-      footerLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
       footerLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
+
+      launchAtLoginBtn.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
+      launchAtLoginBtn.centerYAnchor.constraint(equalTo: footerLabel.centerYAnchor),
+
+      footerLabel.trailingAnchor.constraint(lessThanOrEqualTo: launchAtLoginBtn.leadingAnchor, constant: -4),
 
       errorLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LN.pad),
       errorLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
@@ -1008,10 +1047,40 @@ final class PopoverViewController: NSViewController {
     return container
   }
 
+  private func refreshLaunchAtLoginBtn() {
+    let isOn = SMAppService.mainApp.status == .enabled
+    launchAtLoginBtn.title = isOn ? "✅ 自启" : "⬜ 自启"
+    launchAtLoginBtn.bezelStyle = .inline
+    launchAtLoginBtn.isBordered = false
+    launchAtLoginBtn.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    launchAtLoginBtn.contentTintColor = LN.textMuted
+    launchAtLoginBtn.target = self
+    launchAtLoginBtn.action = #selector(toggleLaunchAtLogin)
+    launchAtLoginBtn.translatesAutoresizingMaskIntoConstraints = false
+  }
+
+  @objc private func toggleLaunchAtLogin() {
+    do {
+      if SMAppService.mainApp.status == .enabled {
+        try SMAppService.mainApp.unregister()
+      } else {
+        try SMAppService.mainApp.register()
+      }
+    } catch {
+      NSLog("[LaunchAtLogin] toggle failed: \(error.localizedDescription)")
+    }
+    refreshLaunchAtLoginBtn()
+  }
+
   // MARK: - Actions
 
   @objc private func refreshTapped() {
     Task { await monitor.refresh(manual: true) }
+  }
+
+  @objc private func addAccountTapped() {
+    guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+    appDelegate.startAddAccountFlow()
   }
 
   @objc private func recSwitchTapped() {
@@ -1068,7 +1137,10 @@ final class PopoverViewController: NSViewController {
 
   private func render(state: UsageMonitor.State) {
     updatedLabel.stringValue = state.lastUpdatedLabel
-    refreshButton.isEnabled = !state.isRefreshing
+    refreshButton.isEnabled = !state.isRefreshing && !state.isAddingAccount
+    addAccountButton.isEnabled = !state.isAddingAccount
+    addAccountButton.title = state.isAddingAccount ? Copy.addAccountStarting : Copy.addAccount
+    addAccountButton.contentTintColor = state.isAddingAccount ? LN.textMuted : LN.blue
     footerLabel.stringValue = state.footerMessage ?? ""
     errorLabel.stringValue = state.errorMessage ?? ""
     errorLabel.isHidden = state.errorMessage == nil
@@ -1138,7 +1210,8 @@ final class PopoverViewController: NSViewController {
   }
 
   private func renderQuotas(snapshot: UsageSnapshot, state: UsageMonitor.State) {
-    let trackW: CGFloat = 120
+    // Track width is now dynamic (fills remaining space); read actual width at render time
+    let trackW = weeklyTrack.bounds.width > 0 ? weeklyTrack.bounds.width : (LN.popoverW - LN.pad * 2 - LN.cardPad * 2 - 50 - 4 - 36 - 6)
 
     if let w = snapshot.rateLimit.secondaryWindow {
       weeklyLabel.isHidden = false
@@ -1160,13 +1233,14 @@ final class PopoverViewController: NSViewController {
       weeklyDetail.isHidden = true
     }
 
+    let reviewTrackW = reviewTrack.bounds.width > 0 ? reviewTrack.bounds.width : trackW
     let rw = snapshot.codeReviewRateLimit.primaryWindow
     let rPct = rw.remainingPercent
     let rAccent = Self.accentColor(for: rPct)
     let rPctInt = Int(rPct.rounded())
     reviewPct.stringValue = String(rPctInt) + "%"
     reviewPct.textColor = rAccent
-    reviewFillW?.constant = trackW * CGFloat(rPct / 100)
+    reviewFillW?.constant = reviewTrackW * CGFloat(rPct / 100)
     reviewFill.layer?.backgroundColor = rAccent.cgColor
     reviewDetail.stringValue = state.burnLabel(from: state.reviewEstimate)
   }
@@ -1445,7 +1519,7 @@ final class PopoverViewController: NSViewController {
       row.configure(
         profile: profile,
         isRecommended: profile.id == state.switchRecommendation.recommendedProfileID,
-        isBusy: state.isRefreshing
+        isBusy: state.isRefreshing || state.isAddingAccount
       ) { [weak self] in
         self?.confirmSwitch(to: profile)
       }

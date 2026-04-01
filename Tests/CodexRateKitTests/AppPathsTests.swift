@@ -46,6 +46,26 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(backupsPath.hasPrefix(rootPath), "Backups directory should be under root directory")
   }
 
+  func testManagedCodexHomesDirectoryName() {
+    XCTAssertEqual(AppPaths.managedCodexHomesDirectory.lastPathComponent, "managed-codex-homes")
+  }
+
+  func testManagedCodexHomesDirectoryIsUnderRoot() {
+    let managedHomesPath = AppPaths.managedCodexHomesDirectory.path
+    let rootPath = AppPaths.rootDirectory.path
+    XCTAssertTrue(managedHomesPath.hasPrefix(rootPath), "Managed homes directory should be under root directory")
+  }
+
+  func testManagedCodexAccountsFileName() {
+    XCTAssertEqual(AppPaths.managedCodexAccountsFile.lastPathComponent, "managed-codex-accounts.json")
+  }
+
+  func testManagedCodexAccountsFileIsUnderRoot() {
+    let managedAccountsPath = AppPaths.managedCodexAccountsFile.path
+    let rootPath = AppPaths.rootDirectory.path
+    XCTAssertTrue(managedAccountsPath.hasPrefix(rootPath), "Managed accounts file should be under root directory")
+  }
+
   func testAllPathsAreAbsolute() {
     // All paths should be absolute (start with /)
     XCTAssertTrue(AppPaths.rootDirectory.path.hasPrefix("/"))
@@ -53,5 +73,7 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(AppPaths.profilesDirectory.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.profileIndexFile.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.backupsDirectory.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.managedCodexHomesDirectory.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.managedCodexAccountsFile.path.hasPrefix("/"))
   }
 }

@@ -19,7 +19,7 @@ let package = Package(
     .executableTarget(
       name: "CodexRateWatcherNative",
       dependencies: ["CodexRateKit"],
-      linkerSettings: [.linkedFramework("AppKit")]
+      linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("ServiceManagement")]
     ),
     // CLI tool — terminal-based quota checker
     .executableTarget(
@@ -31,6 +31,11 @@ let package = Package(
     .testTarget(
       name: "CodexRateKitTests",
       dependencies: ["CodexRateKit"]
+    ),
+    // Tests for the native macOS app UI
+    .testTarget(
+      name: "CodexRateWatcherNativeTests",
+      dependencies: ["CodexRateWatcherNative"]
     ),
   ]
 )

@@ -24,6 +24,7 @@ final class UsageMonitor {
     let errorMessage: String?
     let lastUpdatedAt: Date?
     let isRefreshing: Bool
+    let isAddingAccount: Bool
     let primaryEstimate: BurnEstimate
     let secondaryEstimate: BurnEstimate
     let reviewEstimate: BurnEstimate
@@ -70,6 +71,9 @@ final class UsageMonitor {
     }
 
     var footerMessage: String? {
+      if isAddingAccount {
+        return Copy.addAccountInProgress
+      }
       guard let snapshot else { return nil }
 
       if let weeklyWindow = snapshot.rateLimit.secondaryWindow, weeklyWindow.remainingPercent <= 0 {
@@ -346,6 +350,7 @@ final class UsageMonitor {
   private let tokenRefresher = TokenRefresher()
   private let sampleStore: SampleStore
   private let profileStore: AuthProfileStore
+  private let managedAccountService: ManagedCodexAccountService
   private var timer: Timer?
   private var authWatcher: AuthFileWatcher?
   private var authChangeTask: Task<Void, Never>?
@@ -356,6 +361,7 @@ final class UsageMonitor {
   private var lastUpdatedAt: Date?
   private var lastProfilesValidationAt: Date?
   private var isRefreshing = false
+  private var isAddingAccount = false
   private var samples: [UsageSample] = []
   private var primaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
   private var secondaryEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
@@ -383,12 +389,14 @@ final class UsageMonitor {
     authStore: AuthStore = AuthStore(),
     apiClient: UsageAPIClient = UsageAPIClient(),
     sampleStore: SampleStore = SampleStore(),
-    profileStore: AuthProfileStore? = nil
+    profileStore: AuthProfileStore? = nil,
+    managedAccountService: ManagedCodexAccountService = ManagedCodexAccountService()
   ) {
     self.authStore = authStore
     self.apiClient = apiClient
     self.sampleStore = sampleStore
     self.profileStore = profileStore ?? AuthProfileStore(authStore: authStore)
+    self.managedAccountService = managedAccountService
     self.autoSwitchConfig = Self.loadAutoSwitchConfig()
   }
 
@@ -546,6 +554,28 @@ final class UsageMonitor {
     await performRefresh(manual: manual, refreshProfiles: refreshProfiles, manageLoadingState: true)
   }
 
+  func addManagedAccount(timeout: TimeInterval = 300) async throws -> ManagedCodexAccount {
+    guard !isAddingAccount else {
+      throw NSError(domain: "CodexRateWatcherNative", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: Copy.addAccountAlreadyRunning
+      ])
+    }
+
+    isAddingAccount = true
+    emitState()
+    defer {
+      isAddingAccount = false
+      emitState()
+    }
+
+    let account = try await managedAccountService.authenticateManagedAccount(timeout: timeout)
+    profiles = try await profileStore.syncManagedAccount(account)
+    activeProfileID = await profileStore.currentProfileID()
+    errorMessage = nil
+    await performRefresh(manual: true, refreshProfiles: true, manageLoadingState: false)
+    return account
+  }
+
   func switchToProfile(id: UUID) async {
     guard !isRefreshing else { return }
     isRefreshing = true
@@ -691,6 +721,7 @@ final class UsageMonitor {
       errorMessage: errorMessage,
       lastUpdatedAt: lastUpdatedAt,
       isRefreshing: isRefreshing,
+      isAddingAccount: isAddingAccount,
       primaryEstimate: primaryEstimate,
       secondaryEstimate: secondaryEstimate,
       reviewEstimate: reviewEstimate

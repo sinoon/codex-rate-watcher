@@ -10,6 +10,8 @@ public enum AppPaths {
   public static let profilesDirectory = rootDirectory.appending(path: "auth-profiles")
   public static let profileIndexFile = rootDirectory.appending(path: "profiles.json")
   public static let backupsDirectory = rootDirectory.appending(path: "auth-backups")
+  public static let managedCodexHomesDirectory = rootDirectory.appending(path: "managed-codex-homes")
+  public static let managedCodexAccountsFile = rootDirectory.appending(path: "managed-codex-accounts.json")
   public static let costHistoryFile = rootDirectory.appending(path: "cost-history.json")
 }
 

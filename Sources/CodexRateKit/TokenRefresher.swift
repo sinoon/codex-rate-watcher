@@ -7,7 +7,7 @@ public struct TokenRefresher: Sendable {
 
   public init() {}
 
-  // Same issuer / clientID used by DeviceCodeAuth and Codex CLI.
+  // Same issuer / clientID used by Codex CLI browser login.
   private static let tokenURL = URL(string: "https://auth.openai.com/oauth/token")!
   private static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 

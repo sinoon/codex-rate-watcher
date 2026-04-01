@@ -1,5 +1,6 @@
 import AppKit
 import UserNotifications
+import ServiceManagement
 import CodexRateKit
 
 @MainActor
@@ -12,13 +13,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let windowMode: Bool
   private var debugWindow: NSWindow?
   private var currentTier: StatusBarIcon.Tier = .unknown
-  private var hotkeyManager: HotkeyManager?
   private var autoSwitchMenuItem: NSMenuItem?
   private let codexConfigManager = CodexConfigManager()
+
+  /// Launch at Login via SMAppService (macOS 13+)
+  var launchAtLoginEnabled: Bool {
+    SMAppService.mainApp.status == .enabled
+  }
   private var proxyTask: Task<Void, Never>?
   private var proxyServer: ProxyServer?
   private var proxyStatusTimer: Timer?
-  private var deviceCodeLoginTask: Task<Void, Never>?
+  private var addAccountTask: Task<Void, Never>?
 
   init(windowMode: Bool = false) {
     self.windowMode = windowMode
@@ -58,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       popover.behavior = .transient
       popover.animates = true
-      popover.contentSize = NSSize(width: 400, height: 580)
+      popover.contentSize = NSSize(width: 400, height: 10)  // initial; PopoverVC adjusts via preferredContentSize
       popover.contentViewController = viewController
 
       statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -90,19 +95,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if codexConfigManager.currentMode() == .proxy {
       startProxyServer()
     }
-
-    // Set up global hotkey (⇧⌃⌥K by default)
-    if !windowMode {
-      let hk = HotkeyManager()
-      hk.onToggle = { [weak self] in
-        self?.togglePopover()
-      }
-      hk.onConflict = { info in
-        NSLog("[Hotkey] ⚠️ \(info.shortcut) \(info.message)")
-      }
-      hotkeyManager = hk
-      NSLog("[AppDelegate] Hotkey registered: \(hk.config.displayString)")
-    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {
@@ -112,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     monitor.stop()
     stopProxyServer()
-    deviceCodeLoginTask?.cancel()
+    addAccountTask?.cancel()
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -175,13 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     menu.addItem(NSMenuItem.separator())
 
-    let hotkeyLabel = hotkeyManager?.config.enabled == true
-      ? "⌨️ 快捷键：\(hotkeyManager?.statusLine ?? "⇧⌃⌥K")"
-      : "⌨️ 快捷键：已关闭"
-    let hotkeyToggle = NSMenuItem(title: hotkeyLabel, action: #selector(toggleHotkey), keyEquivalent: "")
-    hotkeyToggle.target = self
-    menu.addItem(hotkeyToggle)
-
     // Codex mode toggle
     let currentMode = codexConfigManager.currentMode()
     let modeEmoji = currentMode == .proxy ? "🌐" : "⚡️"
@@ -190,9 +175,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     modeToggle.target = self
     menu.addItem(modeToggle)
 
-    let addAccountItem = NSMenuItem(title: Copy.addAccount, action: #selector(startDeviceCodeLogin), keyEquivalent: "")
+    let addAccountItem = NSMenuItem(title: Copy.addAccount, action: #selector(startAddAccountFlow), keyEquivalent: "")
     addAccountItem.target = self
     menu.addItem(addAccountItem)
+
+    // Launch at Login toggle
+    let launchLabel = launchAtLoginEnabled
+      ? Copy.launchAtLoginOn
+      : Copy.launchAtLoginOff
+    let launchItem = NSMenuItem(title: launchLabel, action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+    launchItem.target = self
+    menu.addItem(launchItem)
 
     menu.addItem(NSMenuItem.separator())
 
@@ -239,11 +232,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     autoSwitchMenuItem?.title = "\(Copy.autoSwitchMenuLabel)：\(monitor.autoSwitchConfig.enabled ? "已开启" : "已关闭")"
   }
 
-  @objc private func toggleHotkey() {
-    guard let hk = hotkeyManager else { return }
-    var config = hk.config
-    config.enabled.toggle()
-    hk.updateConfig(config)
+  @objc private func toggleLaunchAtLogin() {
+    do {
+      if launchAtLoginEnabled {
+        try SMAppService.mainApp.unregister()
+        NSLog("[LaunchAtLogin] disabled")
+      } else {
+        try SMAppService.mainApp.register()
+        NSLog("[LaunchAtLogin] enabled")
+      }
+    } catch {
+      NSLog("[LaunchAtLogin] toggle failed: \(error.localizedDescription)")
+    }
   }
 
   @objc private func toggleCodexMode() {
@@ -342,86 +342,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
 
-  // MARK: - Device Code Login
+  // MARK: - Managed Account Login
 
-  @objc private func startDeviceCodeLogin() {
-    deviceCodeLoginTask?.cancel()
+  @objc func startAddAccountFlow() {
+    guard addAccountTask == nil else {
+      return
+    }
 
-    deviceCodeLoginTask = Task {
+    sendUserNotification(
+      identifier: "managed-account-login-started",
+      title: Copy.addAccountStartedTitle,
+      body: Copy.addAccountStartedBody
+    )
+
+    addAccountTask = Task { [weak self] in
+      guard let self else { return }
+      defer { self.addAccountTask = nil }
+
       do {
-        let auth = DeviceCodeAuth()
-
-        // Step 1: Request device code
-        let deviceCode = try await auth.requestDeviceCode()
-
-        // Step 2: Show alert with user code
-        if !windowMode {
-          NSApp.setActivationPolicy(.regular)
-        }
-        NSApp.activate(ignoringOtherApps: true)
-
-        let alert = NSAlert()
-        alert.messageText = Copy.deviceCodeTitle
-        alert.informativeText = Copy.deviceCodeMessage(code: deviceCode.userCode)
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: Copy.deviceCodeCopyAndOpen)
-        alert.addButton(withTitle: Copy.deviceCodeCancel)
-
-        let response = alert.runModal()
-
-        if !windowMode {
-          NSApp.setActivationPolicy(.accessory)
-        }
-
-        guard response == .alertFirstButtonReturn else { return }
-
-        // Copy code to clipboard
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(deviceCode.userCode, forType: .string)
-
-        // Open verification URL in browser
-        if let url = URL(string: DeviceCodeAuth.verificationURL) {
-          NSWorkspace.shared.open(url)
-        }
-
-        // Step 3: Poll for authorization & exchange tokens
-        NSLog("[DeviceCodeLogin] Polling for authorization...")
-        let tokens = try await auth.pollAndExchange(
-          deviceAuthID: deviceCode.deviceAuthID,
-          userCode: deviceCode.userCode,
-          interval: deviceCode.interval
+        let account = try await monitor.addManagedAccount(timeout: 300)
+        NSLog("[ManagedAccountLogin] Added account: \(account.email)")
+        sendUserNotification(
+          identifier: "managed-account-login-success",
+          title: Copy.addAccountSuccess,
+          body: Copy.addAccountSuccessBody(email: account.email)
         )
-        NSLog("[DeviceCodeLogin] Token exchange complete")
-
-        // Step 4: Build and write auth.json
-        let authData = try DeviceCodeAuth.buildAuthJSON(tokens: tokens)
-        let authStore = AuthStore()
-        try authStore.writeRawData(authData)
-        NSLog("[DeviceCodeLogin] auth.json written")
-
-        // Parse email for notification
-        let envelope = try authStore.envelope(from: authData)
-
-        // Step 5: Send success notification
-        let notifContent = UNMutableNotificationContent()
-        notifContent.title = Copy.deviceCodeSuccess
-        notifContent.body = Copy.deviceCodeSuccessBody(email: envelope.snapshot.email)
-        notifContent.sound = .default
-
-        let notifRequest = UNNotificationRequest(
-          identifier: "device-code-login-success",
-          content: notifContent,
-          trigger: nil
-        )
-        try? await UNUserNotificationCenter.current().add(notifRequest)
-
-        // Force refresh to pick up the new account
-        await monitor.refresh(manual: true)
-
       } catch is CancellationError {
-        // User cancelled or task was replaced — do nothing
+        return
       } catch {
-        NSLog("[DeviceCodeLogin] Error: \(error.localizedDescription)")
+        NSLog("[ManagedAccountLogin] Error: \(error.localizedDescription)")
+        sendUserNotification(
+          identifier: "managed-account-login-failed",
+          title: Copy.addAccountFailed,
+          body: error.localizedDescription
+        )
 
         if !windowMode {
           NSApp.setActivationPolicy(.regular)
@@ -429,7 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         let errorAlert = NSAlert()
-        errorAlert.messageText = Copy.deviceCodeFailed
+        errorAlert.messageText = Copy.addAccountFailed
         errorAlert.informativeText = error.localizedDescription
         errorAlert.alertStyle = .warning
         errorAlert.addButton(withTitle: "好")
@@ -439,6 +393,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           NSApp.setActivationPolicy(.accessory)
         }
       }
+    }
+  }
+
+  private func sendUserNotification(identifier: String, title: String, body: String) {
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    content.sound = .default
+
+    let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+    Task {
+      try? await UNUserNotificationCenter.current().add(request)
     }
   }
 

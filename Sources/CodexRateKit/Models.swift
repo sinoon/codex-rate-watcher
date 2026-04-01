@@ -183,6 +183,57 @@ public struct AuthProfileRecord: Codable, Identifiable, Sendable {
   }
 }
 
+public struct ManagedCodexAccount: Codable, Equatable, Identifiable, Sendable {
+  public let id: UUID
+  public let email: String
+  public let managedHomePath: String
+  public let accountID: String?
+  public let createdAt: Date
+  public let updatedAt: Date
+  public let lastAuthenticatedAt: Date
+
+  public init(
+    id: UUID,
+    email: String,
+    managedHomePath: String,
+    accountID: String? = nil,
+    createdAt: Date,
+    updatedAt: Date,
+    lastAuthenticatedAt: Date
+  ) {
+    self.id = id
+    self.email = email
+    self.managedHomePath = managedHomePath
+    self.accountID = accountID
+    self.createdAt = createdAt
+    self.updatedAt = updatedAt
+    self.lastAuthenticatedAt = lastAuthenticatedAt
+  }
+}
+
+public struct ManagedCodexAccountSet: Codable, Equatable, Sendable {
+  public let version: Int
+  public let accounts: [ManagedCodexAccount]
+
+  public init(version: Int = 1, accounts: [ManagedCodexAccount]) {
+    self.version = version
+    self.accounts = accounts
+  }
+
+  public func account(id: UUID) -> ManagedCodexAccount? {
+    accounts.first { $0.id == id }
+  }
+
+  public func account(email: String) -> ManagedCodexAccount? {
+    let normalizedEmail = Self.normalizeEmail(email)
+    return accounts.first { Self.normalizeEmail($0.email) == normalizedEmail }
+  }
+
+  private static func normalizeEmail(_ email: String) -> String {
+    email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  }
+}
+
 extension AuthProfileRecord {
   public var isValid: Bool {
     validationError == nil && latestUsage != nil
