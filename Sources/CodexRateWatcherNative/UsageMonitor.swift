@@ -368,20 +368,14 @@ final class UsageMonitor {
   private var reviewEstimate = BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: Copy.sampling)
   // MARK: - Auto-Switch
 
-  struct AutoSwitchConfig: Codable, Equatable {
+  struct AutoSwitchConfig: Equatable {
     var enabled: Bool = false
-    /// Minimum score lead required to trigger auto-switch (higher than display threshold of 12)
-    var scoreLeadThreshold: Double = 20
-    /// Minimum seconds between auto-switches
-    var cooldownSeconds: TimeInterval = 300  // 5 minutes
+
+    static let disabled = AutoSwitchConfig()
   }
 
-  private(set) var autoSwitchConfig: AutoSwitchConfig {
-    didSet { saveAutoSwitchConfig() }
-  }
-  private var lastAutoSwitchAt: Date?
-  private var previousProfileID: UUID?  // for undo
-  var onAutoSwitch: ((String, String, String) -> Void)?  // (fromName, toName, reason)
+  private let clearPersistedAutoSwitchConfig: () -> Void
+  private(set) var autoSwitchConfig: AutoSwitchConfig
 
   private var observers: [UUID: (State) -> Void] = [:]
 
@@ -390,14 +384,17 @@ final class UsageMonitor {
     apiClient: UsageAPIClient = UsageAPIClient(),
     sampleStore: SampleStore = SampleStore(),
     profileStore: AuthProfileStore? = nil,
-    managedAccountService: ManagedCodexAccountService = ManagedCodexAccountService()
+    managedAccountService: ManagedCodexAccountService = ManagedCodexAccountService(),
+    clearPersistedAutoSwitchConfig: @escaping () -> Void = UsageMonitor.clearPersistedAutoSwitchConfig
   ) {
     self.authStore = authStore
     self.apiClient = apiClient
     self.sampleStore = sampleStore
     self.profileStore = profileStore ?? AuthProfileStore(authStore: authStore)
     self.managedAccountService = managedAccountService
-    self.autoSwitchConfig = Self.loadAutoSwitchConfig()
+    self.clearPersistedAutoSwitchConfig = clearPersistedAutoSwitchConfig
+    self.autoSwitchConfig = .disabled
+    self.clearPersistedAutoSwitchConfig()
   }
 
   func stop() {
@@ -411,107 +408,20 @@ final class UsageMonitor {
   // MARK: - Auto-Switch Control
 
   func setAutoSwitch(enabled: Bool) {
-    autoSwitchConfig.enabled = enabled
-    NSLog("[UsageMonitor] Auto-switch \(enabled ? "enabled" : "disabled")")
-  }
-
-  func undoLastAutoSwitch() async {
-    guard let prevID = previousProfileID else { return }
-    NSLog("[UsageMonitor] Undoing auto-switch, reverting to profile \(prevID)")
-    await switchToProfile(id: prevID)
-    previousProfileID = nil
-  }
-
-  /// Called after each refresh. Uses RelayPlanner to decide when to auto-switch.
-  /// Falls back to score-based logic if relay plan has no next leg.
-  private func evaluateAutoSwitch() {
-    guard autoSwitchConfig.enabled else { return }
-    guard !isRefreshing else { return }
-
-    // Cooldown check
-    if let lastSwitch = lastAutoSwitchAt,
-       Date().timeIntervalSince(lastSwitch) < autoSwitchConfig.cooldownSeconds {
-      return
-    }
-
-    let state = makeState()
-    let plan = state.relayPlan
-
-    // Strategy 1: Relay-based auto-switch (time-predictive)
-    // Switch when current account has ≤ 5 minutes of predicted usage left
-    if let nextLeg = RelayPlanner.shouldAutoRelay(plan: plan, preemptSeconds: 300) {
-      let currentProfile = profiles.first(where: { $0.id == activeProfileID })
-      let fromName = currentProfile?.displayName ?? "unknown"
-      let toName = nextLeg.displayName
-      let remainingLegs = plan.legs.dropFirst()
-      let remainingCoverage = remainingLegs.reduce(0.0) { $0 + $1.durationSeconds }
-      let coverageLabel = Copy.duration(remainingCoverage)
-
-      NSLog("[UsageMonitor] Auto-relay: \(fromName) → \(toName) (preemptive, remaining coverage: \(coverageLabel))")
-
-      previousProfileID = activeProfileID
-
-      Task { [weak self] in
-        await self?.switchToProfile(id: nextLeg.profileID)
-        self?.lastAutoSwitchAt = Date()
-        self?.onAutoSwitch?(fromName, toName, coverageLabel)
-      }
-      return
-    }
-
-    // Strategy 2: Fallback to score-based auto-switch for edge cases
-    let rec = state.switchRecommendation
-
-    guard rec.kind == .switchNow, let targetID = rec.recommendedProfileID else {
-      return
-    }
-
-    let currentProfile = profiles.first(where: { $0.id == activeProfileID })
-    let targetProfile = profiles.first(where: { $0.id == targetID })
-    guard let targetProfile else { return }
-
-    let currentScore = currentProfile.flatMap { state.score(for: $0, isCurrent: true) } ?? -999
-    let targetScore = state.score(for: targetProfile, isCurrent: false) ?? 0
-
-    guard targetScore - currentScore >= autoSwitchConfig.scoreLeadThreshold else {
-      return
-    }
-
-    let fromName = currentProfile?.displayName ?? "unknown"
-    let toName = targetProfile.displayName
-    let reason = targetProfile.latestUsage?.switchSummaryText ?? ""
-
-    NSLog("[UsageMonitor] Auto-switching (score-based): \(fromName) → \(toName) (score lead: \(Int(targetScore - currentScore)))")
-
-    previousProfileID = activeProfileID
-
-    Task { [weak self] in
-      await self?.switchToProfile(id: targetID)
-      self?.lastAutoSwitchAt = Date()
-      self?.onAutoSwitch?(fromName, toName, reason)
+    autoSwitchConfig = .disabled
+    clearPersistedAutoSwitchConfig()
+    if enabled {
+      NSLog("[UsageMonitor] Auto-switch is disabled and cannot be enabled")
+    } else {
+      NSLog("[UsageMonitor] Auto-switch disabled")
     }
   }
 
-  // MARK: - Auto-Switch Persistence
-
-  private static let autoSwitchConfigURL: URL = {
+  nonisolated private static func clearPersistedAutoSwitchConfig() {
     let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
       .appendingPathComponent("CodexRateWatcherNative", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    return dir.appendingPathComponent("auto-switch-config.json")
-  }()
-
-  private func saveAutoSwitchConfig() {
-    guard let data = try? JSONEncoder().encode(autoSwitchConfig) else { return }
-    try? data.write(to: Self.autoSwitchConfigURL, options: .atomic)
-  }
-
-  private static func loadAutoSwitchConfig() -> AutoSwitchConfig {
-    guard let data = try? Data(contentsOf: autoSwitchConfigURL),
-          let config = try? JSONDecoder().decode(AutoSwitchConfig.self, from: data) else {
-      return AutoSwitchConfig()
-    }
-    return config
+    let url = dir.appendingPathComponent("auto-switch-config.json")
+    try? FileManager.default.removeItem(at: url)
   }
 
 
@@ -709,8 +619,6 @@ final class UsageMonitor {
     for handler in observers.values {
       handler(state)
     }
-    // Evaluate auto-switch after every state emission
-    evaluateAutoSwitch()
   }
 
   private func makeState() -> State {

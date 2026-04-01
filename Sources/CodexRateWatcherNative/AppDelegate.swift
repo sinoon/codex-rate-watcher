@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let windowMode: Bool
   private var debugWindow: NSWindow?
   private var currentTier: StatusBarIcon.Tier = .unknown
-  private var autoSwitchMenuItem: NSMenuItem?
   private let codexConfigManager = CodexConfigManager()
 
   /// Launch at Login via SMAppService (macOS 13+)
@@ -83,10 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.renderMenuBar(state: state)
         self?.alertManager.evaluate(state: state)
       }
-    }
-    // Wire auto-switch notification
-    monitor.onAutoSwitch = { [weak self] fromName, toName, coverageOrReason in
-      self?.alertManager.sendRelayNotification(fromName: fromName, toName: toName, coverage: coverageOrReason)
     }
 
     monitor.start()
@@ -224,12 +219,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var config = alertManager.config
     config.playSound.toggle()
     alertManager.updateConfig(config)
-  }
-
-  @objc private func toggleAutoSwitch() {
-    monitor.setAutoSwitch(enabled: !monitor.autoSwitchConfig.enabled)
-    // Update menu item title
-    autoSwitchMenuItem?.title = "\(Copy.autoSwitchMenuLabel)：\(monitor.autoSwitchConfig.enabled ? "已开启" : "已关闭")"
   }
 
   @objc private func toggleLaunchAtLogin() {
@@ -504,54 +493,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - UNUserNotificationCenterDelegate
 
 extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
-
-  // MARK: - Codex App Restart
-
-  func restartCodexApp() {
-    NSLog("[Codex] Restarting Codex app...")
-    let codexBundleID = "com.openai.codex"
-    let codexAppPath = "/Applications/Codex.app"
-
-    let running = NSWorkspace.shared.runningApplications.filter {
-      $0.bundleIdentifier == codexBundleID
-    }
-    for proc in running {
-      proc.terminate()
-    }
-
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-      let url = URL(fileURLWithPath: codexAppPath)
-      NSWorkspace.shared.openApplication(
-        at: url,
-        configuration: NSWorkspace.OpenConfiguration()
-      ) { _, error in
-        if let error {
-          NSLog("[Codex] relaunch failed: \(error.localizedDescription)")
-        } else {
-          NSLog("[Codex] relaunched successfully")
-        }
-      }
-    }
-  }
-  func userNotificationCenter(
-    _ center: UNUserNotificationCenter,
-    didReceive response: UNNotificationResponse,
-    withCompletionHandler completionHandler: @escaping () -> Void
-  ) {
-    switch response.actionIdentifier {
-    case "UNDO_SWITCH":
-      Task { @MainActor in
-        await self.monitor.undoLastAutoSwitch()
-      }
-    case "RESTART_CODEX":
-      Task { @MainActor in
-        self.restartCodexApp()
-      }
-    default:
-      break
-    }
-    completionHandler()
-  }
 
   func userNotificationCenter(
     _ center: UNUserNotificationCenter,

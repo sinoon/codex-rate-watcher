@@ -172,73 +172,13 @@ final class AlertManager {
   }
 
   private func registerNotificationCategories() {
-    let undoAction = UNNotificationAction(
-      identifier: "UNDO_SWITCH",
-      title: Copy.autoSwitchUndoAction,
-      options: [.foreground]
-    )
-    let restartAction = UNNotificationAction(
-      identifier: "RESTART_CODEX",
-      title: Copy.restartCodexAction,
-      options: [.foreground]
-    )
-    let autoSwitchCategory = UNNotificationCategory(
-      identifier: "AUTO_SWITCH",
-      actions: [restartAction, undoAction],
-      intentIdentifiers: [],
-      options: []
-    )
     let quotaCategory = UNNotificationCategory(
       identifier: "QUOTA_ALERT",
       actions: [],
       intentIdentifiers: [],
       options: []
     )
-    UNUserNotificationCenter.current().setNotificationCategories([autoSwitchCategory, quotaCategory])
-  }
-
-  /// Send auto-switch notification with Undo action button
-  func sendAutoSwitchNotification(fromName: String, toName: String, reason: String) {
-    guard notificationAvailable else { return }
-    let content = UNMutableNotificationContent()
-    content.title = Copy.autoSwitchNotifyTitle(to: toName)
-    content.body = Copy.autoSwitchNotifyBody(from: fromName, to: toName, reason: reason)
-    content.subtitle = Copy.restartCodexHint
-    content.sound = .default
-    content.categoryIdentifier = "AUTO_SWITCH"
-
-    let request = UNNotificationRequest(
-      identifier: "auto-switch-\(Date().timeIntervalSince1970)",
-      content: content,
-      trigger: nil
-    )
-    UNUserNotificationCenter.current().add(request) { error in
-      if let error {
-        print("[AlertManager] auto-switch notification error: \(error.localizedDescription)")
-      }
-    }
-  }
-
-  /// Send relay-switch notification with coverage info
-  func sendRelayNotification(fromName: String, toName: String, coverage: String) {
-    guard notificationAvailable else { return }
-    let content = UNMutableNotificationContent()
-    content.title = Copy.relayAutoNotifyTitle(to: toName)
-    content.body = Copy.relayAutoNotifyBody(from: fromName, to: toName, coverage: coverage)
-    content.subtitle = Copy.restartCodexHint
-    content.sound = .default
-    content.categoryIdentifier = "AUTO_SWITCH"
-
-    let request = UNNotificationRequest(
-      identifier: "relay-switch-\(Date().timeIntervalSince1970)",
-      content: content,
-      trigger: nil
-    )
-    UNUserNotificationCenter.current().add(request) { error in
-      if let error {
-        print("[AlertManager] relay notification error: \(error.localizedDescription)")
-      }
-    }
+    UNUserNotificationCenter.current().setNotificationCategories([quotaCategory])
   }
 
   // MARK: - Persistence
