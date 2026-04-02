@@ -760,22 +760,35 @@ final class PopoverViewController: NSViewController {
     costHourLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .semibold)
     costHourLabel.textColor = LN.green
     costHourLabel.alignment = .left
+    costHourLabel.lineBreakMode = .byTruncatingTail
+    costHourLabel.maximumNumberOfLines = 1
+    costHourLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+    costHourLabel.setContentHuggingPriority(.required, for: .horizontal)
     costHourLabel.translatesAutoresizingMaskIntoConstraints = false
 
     costTodayLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .semibold)
     costTodayLabel.textColor = LN.textPrimary
     costTodayLabel.alignment = .center
+    costTodayLabel.lineBreakMode = .byTruncatingTail
+    costTodayLabel.maximumNumberOfLines = 1
+    costTodayLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+    costTodayLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
     costTodayLabel.translatesAutoresizingMaskIntoConstraints = false
 
     costUtilLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .medium)
     costUtilLabel.textColor = LN.textSecondary
     costUtilLabel.alignment = .right
+    costUtilLabel.lineBreakMode = .byTruncatingTail
+    costUtilLabel.maximumNumberOfLines = 1
+    costUtilLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+    costUtilLabel.setContentHuggingPriority(.required, for: .horizontal)
     costUtilLabel.translatesAutoresizingMaskIntoConstraints = false
 
-    // Use a horizontal stack for the 3 metrics — equal distribution
+    // Let metric widths follow content so long token strings do not look clipped.
     let metricsStack = NSStackView(views: [costHourLabel, costTodayLabel, costUtilLabel])
     metricsStack.orientation = .horizontal
-    metricsStack.distribution = .fillEqually
+    metricsStack.alignment = .firstBaseline
+    metricsStack.distribution = .fill
     metricsStack.spacing = LN.gapSm
     metricsStack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -784,8 +797,8 @@ final class PopoverViewController: NSViewController {
 
     costSublineLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
     costSublineLabel.textColor = LN.textTertiary
-    costSublineLabel.lineBreakMode = .byTruncatingTail
-    costSublineLabel.maximumNumberOfLines = 1
+    costSublineLabel.lineBreakMode = .byWordWrapping
+    costSublineLabel.maximumNumberOfLines = 2
     costSublineLabel.translatesAutoresizingMaskIntoConstraints = false
 
     card.addSubview(costSectionLabel)

@@ -304,7 +304,7 @@ enum Copy {
   }
 
   static func costTokenMetric(_ value: String) -> String {
-    "\(value) tok"
+    "\(value) tokens"
   }
 
   static func costActiveDays(_ days: Int) -> String {
