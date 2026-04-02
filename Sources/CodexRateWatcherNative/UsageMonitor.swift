@@ -188,6 +188,7 @@ final class UsageMonitor {
     private func buildSwitchRecommendation() -> SwitchRecommendation {
       let currentProfile = profiles.first(where: { $0.id == activeProfileID })
       let rankedProfiles = rankedReadyProfiles()
+      let waitingProfiles = rankedWaitingProfiles(excluding: activeProfileID)
 
       guard snapshot != nil else {
         return SwitchRecommendation(
@@ -200,7 +201,10 @@ final class UsageMonitor {
 
       guard let bestProfile = rankedProfiles.first else {
         let fallbackDetail: String
-        if let currentProfile, let currentUsage = currentProfile.latestUsage {
+        if let waitingProfile = waitingProfiles.first,
+           let waitingUsage = waitingProfile.latestUsage {
+          fallbackDetail = "暂无可立即切换账号 · 最近恢复 \(waitingProfile.displayName) (\(waitingUsage.switchSummaryText))"
+        } else if let currentProfile, let currentUsage = currentProfile.latestUsage {
           fallbackDetail = "\(currentProfile.displayName) \(Copy.unavailable) (\(currentUsage.switchSummaryText))"
         } else {
           fallbackDetail = "无可切账号，等重置"
@@ -214,7 +218,7 @@ final class UsageMonitor {
         )
       }
 
-      let backupProfile = rankedProfiles.dropFirst().first
+      let backupProfile = rankedProfiles.dropFirst().first ?? waitingProfiles.first
       let currentScore = currentProfile.flatMap { score(for: $0, isCurrent: true) }
       let bestScore = score(for: bestProfile, isCurrent: bestProfile.id == activeProfileID) ?? 0
 
@@ -270,8 +274,23 @@ final class UsageMonitor {
         .map(\.0)
     }
 
+    private func rankedWaitingProfiles(excluding excludedID: UUID?) -> [AuthProfileRecord] {
+      profiles
+        .filter { profile in
+          profile.id != excludedID && profile.isWaitingForReset
+        }
+        .sorted { lhs, rhs in
+          let lhsReset = lhs.latestUsage?.nextBlockingResetAt ?? .greatestFiniteMagnitude
+          let rhsReset = rhs.latestUsage?.nextBlockingResetAt ?? .greatestFiniteMagnitude
+          if lhsReset == rhsReset {
+            return (lhs.lastValidatedAt ?? .distantPast) > (rhs.lastValidatedAt ?? .distantPast)
+          }
+          return lhsReset < rhsReset
+        }
+    }
+
     func score(for profile: AuthProfileRecord, isCurrent: Bool) -> Double? {
-      guard profile.validationError == nil, let usage = profile.latestUsage, !usage.isBlocked else {
+      guard profile.isReadyForImmediateSwitch, let usage = profile.latestUsage else {
         return nil
       }
 

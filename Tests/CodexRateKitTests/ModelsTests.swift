@@ -471,6 +471,20 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(label!.contains("5h"))
   }
 
+  func testBlockingLabelPrimaryExhaustedIncludesWeeklyRemainingWhenAvailable() {
+    let summary = makeSummary(
+      primaryUsedPercent: 100.0,
+      primaryResetAt: 1_900_000_000,
+      secondaryUsedPercent: 61.0,
+      secondaryResetAt: 1_900_500_000
+    )
+
+    let label = try! XCTUnwrap(summary.blockingLabel)
+
+    XCTAssertTrue(label.contains("5h耗尽"))
+    XCTAssertTrue(label.contains("周 39%"))
+  }
+
   func testBlockingLabelNotAllowed() {
     let summary = makeSummary(isAllowed: false)
     XCTAssertEqual(summary.blockingLabel, "不可用")
@@ -479,6 +493,18 @@ final class ModelsTests: XCTestCase {
   func testBlockingLabelNilWhenNormal() {
     let summary = makeSummary(primaryUsedPercent: 50.0, secondaryUsedPercent: 30.0)
     XCTAssertNil(summary.blockingLabel)
+  }
+
+  func testSwitchSummaryTextPrimaryExhaustedIncludesWeeklyRemainingWhenAvailable() {
+    let summary = makeSummary(
+      primaryUsedPercent: 100.0,
+      primaryResetAt: 1_900_000_000,
+      secondaryUsedPercent: 61.0,
+      secondaryResetAt: 1_900_500_000
+    )
+
+    XCTAssertTrue(summary.switchSummaryText.contains("5h耗尽"))
+    XCTAssertTrue(summary.switchSummaryText.contains("周 39%"))
   }
 
   // MARK: - AuthProfileUsageSummary Codable Round-trip
@@ -568,6 +594,24 @@ final class ModelsTests: XCTestCase {
   func testAuthProfileRecordStatusTextRunningLow() {
     let record = makeRecord(latestUsage: makeSummary(primaryUsedPercent: 90.0))
     XCTAssertEqual(record.statusText, "即将耗尽")
+  }
+
+  func testAuthProfileRecordSwitchStateReady() {
+    let record = makeRecord(latestUsage: makeSummary(primaryUsedPercent: 40.0, secondaryUsedPercent: 20.0))
+    XCTAssertEqual(record.switchState, .ready)
+  }
+
+  func testAuthProfileRecordSwitchStateWaitingForResetWhenPrimaryExhausted() {
+    let record = makeRecord(latestUsage: makeSummary(primaryUsedPercent: 100.0, secondaryUsedPercent: 61.0))
+    XCTAssertEqual(record.switchState, .waitingForReset)
+  }
+
+  func testAuthProfileRecordSwitchStateUnavailableWhenValidationFails() {
+    let record = makeRecord(
+      latestUsage: makeSummary(primaryUsedPercent: 20.0, secondaryUsedPercent: 10.0),
+      validationError: "401"
+    )
+    XCTAssertEqual(record.switchState, .unavailable)
   }
 
   func testAuthProfileRecordStatusTextValidating() {

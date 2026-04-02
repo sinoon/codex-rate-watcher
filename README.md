@@ -22,7 +22,7 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
 ![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-success)
 
 <p>
-  <img src="docs/screenshot-window.png" width="440" alt="Codex Rate Watcher — macOS menu bar app monitoring OpenAI Codex ChatGPT rate limits in real time" />
+  <img src="docs/screenshot.jpg" width="440" alt="Codex Rate Watcher — macOS menu bar app monitoring OpenAI Codex ChatGPT rate limits in real time" />
 </p>
 
 <p>

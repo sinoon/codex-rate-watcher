@@ -193,9 +193,19 @@ enum Copy {
 
   // MARK: - Profile list
 
-  static func profileHeader(available: Int, total: Int = 0) -> String {
-    if available > 0 { return "Other Profiles · \(available) available" }
-    if total > 0 { return "Other Profiles · none available" }
+  static func profileHeader(available: Int, waiting: Int = 0, total: Int = 0) -> String {
+    var parts = ["Other Profiles"]
+    if available > 0 {
+      parts.append("\(available) available")
+    } else if total > 0 {
+      parts.append("none available")
+    }
+    if waiting > 0 {
+      parts.append("\(waiting) waiting")
+    }
+    if parts.count > 1 {
+      return parts.joined(separator: " · ")
+    }
     return "No other profiles"
   }
 

@@ -183,6 +183,13 @@ public struct AuthProfileRecord: Codable, Identifiable, Sendable {
   }
 }
 
+public enum AuthProfileSwitchState: Equatable, Sendable {
+  case ready
+  case waitingForReset
+  case unavailable
+  case validating
+}
+
 public struct ManagedCodexAccount: Codable, Equatable, Identifiable, Sendable {
   public let id: UUID
   public let email: String
@@ -237,6 +244,34 @@ public struct ManagedCodexAccountSet: Codable, Equatable, Sendable {
 extension AuthProfileRecord {
   public var isValid: Bool {
     validationError == nil && latestUsage != nil
+  }
+
+  public var switchState: AuthProfileSwitchState {
+    if validationError != nil {
+      return .unavailable
+    }
+
+    guard let latestUsage else {
+      return .validating
+    }
+
+    if latestUsage.isPrimaryExhausted || latestUsage.isWeeklyExhausted {
+      return .waitingForReset
+    }
+
+    if latestUsage.isBlocked {
+      return .unavailable
+    }
+
+    return .ready
+  }
+
+  public var isReadyForImmediateSwitch: Bool {
+    switchState == .ready
+  }
+
+  public var isWaitingForReset: Bool {
+    switchState == .waitingForReset
   }
 
   /// Whether the subscription check failed (e.g. 402 Payment Required).
@@ -363,10 +398,11 @@ extension AuthProfileUsageSummary {
     }
     if isPrimaryExhausted {
       let resetLabel = nextResetLabel(for: primaryResetAt)
+      let weeklyLabel = secondaryRemainingPercentLabel.map { "周 \($0)" } ?? "周 --"
       if let resetLabel {
-        return "5h耗尽 · \(resetLabel) 重置"
+        return "5h耗尽 · \(weeklyLabel) · \(resetLabel) 重置"
       }
-      return "5h耗尽"
+      return "5h耗尽 · \(weeklyLabel)"
     }
     if !isAllowed || limitReached { return "不可用" }
     return nil
@@ -405,8 +441,8 @@ extension AuthProfileUsageSummary {
   }
 
   public var switchSummaryText: String {
-    if isBlocked, let resetText = nextBlockingResetLabel {
-      return "\(resetText) 重置"
+    if let blockingLabel {
+      return blockingLabel
     }
     if let secondaryRemainingPercentLabel {
       return "5h \(primaryRemainingPercentLabel) · 周 \(secondaryRemainingPercentLabel)"
@@ -424,6 +460,16 @@ extension AuthProfileUsageSummary {
     }
     if isPrimaryExhausted {
       return nextResetLabel(for: primaryResetAt)
+    }
+    return nil
+  }
+
+  public var nextBlockingResetAt: TimeInterval? {
+    if isWeeklyExhausted {
+      return secondaryResetAt
+    }
+    if isPrimaryExhausted {
+      return primaryResetAt
     }
     return nil
   }
