@@ -1193,6 +1193,10 @@ final class PopoverViewController: NSViewController {
     renderProfiles(state: state)
   }
 
+  func renderForTesting(state: UsageMonitor.State) {
+    render(state: state)
+  }
+
   private func renderLoading(activeProfile: AuthProfileRecord?) {
     accountLabel.stringValue = activeProfile?.displayName ?? "Loading..."
     statusDot.layer?.backgroundColor = LN.textMuted.cgColor
@@ -1530,6 +1534,15 @@ final class PopoverViewController: NSViewController {
       recIcon.stringValue = "\u{26A0}"
       recIcon.textColor = LN.red
       recBtn.isHidden = true
+    } else if rec.kind == .stay, rec.headline == Copy.recStayLow {
+      recWrapper?.isHidden = false
+      recProfileID = nil
+      recLabel.stringValue = rec.headline + " \u{00B7} " + rec.detail
+      recBanner.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.08).cgColor
+      recBanner.layer?.borderColor = LN.yellow.withAlphaComponent(0.15).cgColor
+      recIcon.stringValue = "\u{23ED}"
+      recIcon.textColor = LN.yellow
+      recBtn.isHidden = true
     } else {
       recWrapper?.isHidden = true
     }
@@ -1538,11 +1551,12 @@ final class PopoverViewController: NSViewController {
   private func renderProfiles(state: UsageMonitor.State) {
     profileStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
     let others = state.profiles.filter { $0.id != state.activeProfileID && $0.validationError?.contains("402") != true }
-    let availCount = others.filter { $0.validationError == nil && $0.latestUsage?.isBlocked != true }.count
-    profileHeader.stringValue = Copy.profileHeader(available: availCount, total: others.count)
+    let availCount = others.filter(\.isReadyForImmediateSwitch).count
+    let waitingCount = others.filter(\.isWaitingForReset).count
+    profileHeader.stringValue = Copy.profileHeader(available: availCount, waiting: waitingCount, total: others.count)
 
     if others.isEmpty {
-      profileHeader.stringValue = Copy.profileHeader(available: 0, total: 0)
+      profileHeader.stringValue = Copy.profileHeader(available: 0, waiting: 0, total: 0)
       return
     }
 
@@ -1677,33 +1691,60 @@ private final class ProfileRowView: NSView {
     nameLabel.stringValue = profile.displayName
 
     let accent: NSColor
-    if profile.validationError != nil || profile.latestUsage?.isBlocked == true {
+    switch profile.switchState {
+    case .unavailable:
       accent = LN.red
       usageLabel.stringValue = profile.statusText
       layer?.backgroundColor = LN.red.withAlphaComponent(0.06).cgColor
-    } else if let usage = profile.latestUsage {
+      switchBtn.title = " Unavailable "
+      switchBtn.layer?.backgroundColor = LN.red.withAlphaComponent(0.10).cgColor
+      switchBtn.contentTintColor = LN.textMuted
+      switchBtn.isEnabled = false
+    case .waitingForReset:
+      accent = LN.yellow
+      usageLabel.stringValue = profile.latestUsage?.switchSummaryText ?? profile.statusText
+      layer?.backgroundColor = LN.yellow.withAlphaComponent(0.08).cgColor
+      switchBtn.title = " Wait "
+      switchBtn.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.12).cgColor
+      switchBtn.contentTintColor = LN.yellow
+      switchBtn.isEnabled = false
+    case .ready:
+      guard let usage = profile.latestUsage else {
+        accent = LN.textMuted
+        usageLabel.stringValue = "Validating..."
+        layer?.backgroundColor = LN.surfaceHover.cgColor
+        switchBtn.title = " Check "
+        switchBtn.layer?.backgroundColor = LN.elevated.cgColor
+        switchBtn.contentTintColor = LN.textMuted
+        switchBtn.isEnabled = false
+        dot.layer?.backgroundColor = accent.cgColor
+        return
+      }
       let pct = usage.effectiveRemainingPercent
       accent = PopoverViewController.accentColor(for: pct)
       usageLabel.stringValue = usage.switchSummaryText
       layer?.backgroundColor = LN.surfaceHover.cgColor
-    } else {
+      if isRecommended {
+        switchBtn.title = " Recommend "
+        switchBtn.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.12).cgColor
+        switchBtn.contentTintColor = LN.yellow
+      } else {
+        switchBtn.title = " Use "
+        switchBtn.layer?.backgroundColor = LN.elevated.cgColor
+        switchBtn.contentTintColor = LN.textSecondary
+      }
+      switchBtn.isEnabled = !isBusy
+    case .validating:
       accent = LN.textMuted
       usageLabel.stringValue = "Validating..."
       layer?.backgroundColor = LN.surfaceHover.cgColor
+      switchBtn.title = " Check "
+      switchBtn.layer?.backgroundColor = LN.elevated.cgColor
+      switchBtn.contentTintColor = LN.textMuted
+      switchBtn.isEnabled = false
     }
 
     dot.layer?.backgroundColor = accent.cgColor
-
-    if isRecommended {
-      switchBtn.title = " Recommend "
-      switchBtn.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.12).cgColor
-      switchBtn.contentTintColor = LN.yellow
-    } else {
-      switchBtn.title = " Use "
-      switchBtn.layer?.backgroundColor = LN.elevated.cgColor
-      switchBtn.contentTintColor = LN.textSecondary
-    }
-    switchBtn.isEnabled = !isBusy && profile.validationError == nil
   }
 
   @objc private func tapped() { onSwitch?() }
