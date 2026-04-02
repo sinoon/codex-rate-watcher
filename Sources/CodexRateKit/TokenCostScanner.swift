@@ -54,7 +54,7 @@ public enum TokenCostScanner {
     options: Options
   ) -> TokenCostCache {
     let now = Date(timeIntervalSince1970: TimeInterval(nowMilliseconds) / 1000)
-    let earliest = Calendar.current.date(byAdding: .day, value: -29, to: now) ?? now
+    let earliest = Calendar.current.date(byAdding: .day, value: -89, to: now) ?? now
     let fileURLs = discoverSessionFiles(options: options, since: earliest, until: now).sorted { $0.path < $1.path }
     var nextCache = TokenCostCache(lastScanUnixMilliseconds: nowMilliseconds)
     var seenSessionIDs: Set<String> = []
@@ -89,90 +89,428 @@ public enum TokenCostScanner {
   private static func buildSnapshot(from cache: TokenCostCache, now: Date) -> TokenCostSnapshot {
     let calendar = Calendar.current
     let todayKey = dayKey(from: now)
-    let earliestDate = calendar.date(byAdding: .day, value: -29, to: now) ?? now
+    let earliestDate = calendar.date(byAdding: .day, value: -89, to: now) ?? now
     let earliestKey = dayKey(from: earliestDate)
 
     let dayKeys = cache.days.keys.sorted().filter { $0 >= earliestKey && $0 <= todayKey }
-    var dailyEntries: [TokenCostDailyEntry] = []
-    var totalTokens = 0
-    var totalCost: Double = 0
-    var totalCostKnown = true
-    var sawTokens = false
-    var sawCost = false
+    let dailyEntries = dayKeys.compactMap { buildDailyEntry(dayKey: $0, cachedDay: cache.days[$0]) }
 
-    for dayKey in dayKeys {
-      guard let models = cache.days[dayKey] else { continue }
-      let sortedModels = models.keys.sorted()
+    let windows = [7, 30, 90].map {
+      buildWindowSummary(from: dailyEntries, windowDays: $0, now: now)
+    }
 
-      var dayInput = 0
-      var dayCacheRead = 0
-      var dayOutput = 0
-      var dayCost = 0.0
-      var dayCostKnown = true
-      var breakdowns: [TokenCostModelBreakdown] = []
+    let sevenDayWindow = windows.first { $0.windowDays == 7 }
+    let thirtyDayWindow = windows.first { $0.windowDays == 30 }
+    let ninetyDayWindow = windows.first { $0.windowDays == 90 }
+    let todayEntry = dailyEntries.last { $0.date == todayKey }
 
-      for model in sortedModels {
-        let bucket = models[model] ?? TokenCostBucket()
-        let modelCost = TokenCostPricing.codexCostUSD(
+    return TokenCostSnapshot(
+      todayTokens: todayEntry?.totalTokens,
+      todayCostUSD: todayEntry?.costUSD,
+      last7DaysTokens: sevenDayWindow?.totalTokens,
+      last7DaysCostUSD: sevenDayWindow?.totalCostUSD,
+      last30DaysTokens: thirtyDayWindow?.totalTokens,
+      last30DaysCostUSD: thirtyDayWindow?.totalCostUSD,
+      last90DaysTokens: ninetyDayWindow?.totalTokens,
+      last90DaysCostUSD: ninetyDayWindow?.totalCostUSD,
+      averageDailyTokens: thirtyDayWindow?.averageDailyTokens,
+      averageDailyCostUSD: thirtyDayWindow?.averageDailyCostUSD,
+      modelSummaries: thirtyDayWindow?.modelSummaries ?? [],
+      hourly: thirtyDayWindow?.hourly ?? [],
+      alerts: thirtyDayWindow?.alerts ?? [],
+      narrative: thirtyDayWindow?.narrative ?? .init(),
+      windows: windows,
+      hasPartialPricing: thirtyDayWindow?.hasPartialPricing ?? false,
+      daily: dailyEntries,
+      updatedAt: now
+    )
+  }
+
+  private static func buildDailyEntry(dayKey: String, cachedDay: TokenCostCachedDay?) -> TokenCostDailyEntry? {
+    guard let cachedDay else { return nil }
+
+    let sortedModels = cachedDay.models.keys.sorted()
+    var dayInput = 0
+    var dayCacheRead = 0
+    var dayOutput = 0
+    var dayCost = 0.0
+    var dayCostKnown = true
+    var breakdowns: [TokenCostModelBreakdown] = []
+
+    for model in sortedModels {
+      let bucket = cachedDay.models[model] ?? TokenCostBucket()
+      let modelCost = TokenCostPricing.codexCostUSD(
+        model: model,
+        inputTokens: bucket.inputTokens,
+        cachedInputTokens: bucket.cacheReadTokens,
+        outputTokens: bucket.outputTokens
+      )
+
+      if modelCost == nil, bucket.totalTokens > 0 {
+        dayCostKnown = false
+      } else {
+        dayCost += modelCost ?? 0
+      }
+
+      dayInput += bucket.inputTokens
+      dayCacheRead += bucket.cacheReadTokens
+      dayOutput += bucket.outputTokens
+      breakdowns.append(
+        TokenCostModelBreakdown(
+          modelName: model,
+          inputTokens: bucket.inputTokens,
+          cacheReadTokens: bucket.cacheReadTokens,
+          outputTokens: bucket.outputTokens,
+          costUSD: modelCost,
+          totalTokens: bucket.totalTokens
+        )
+      )
+    }
+
+    let hourlyBreakdowns = cachedDay.hours.keys.sorted().map { hour -> TokenCostHourlyEntry in
+      let hourModels = cachedDay.hours[hour]?.models ?? [:]
+      var inputTokens = 0
+      var cacheReadTokens = 0
+      var outputTokens = 0
+      var cost = 0.0
+      var costKnown = true
+
+      for (model, bucket) in hourModels {
+        inputTokens += bucket.inputTokens
+        cacheReadTokens += bucket.cacheReadTokens
+        outputTokens += bucket.outputTokens
+
+        let hourCost = TokenCostPricing.codexCostUSD(
           model: model,
           inputTokens: bucket.inputTokens,
           cachedInputTokens: bucket.cacheReadTokens,
           outputTokens: bucket.outputTokens
         )
-
-        if modelCost == nil {
-          dayCostKnown = false
+        if hourCost == nil, bucket.totalTokens > 0 {
+          costKnown = false
         } else {
-          dayCost += modelCost ?? 0
-          sawCost = true
+          cost += hourCost ?? 0
         }
-
-        dayInput += bucket.inputTokens
-        dayCacheRead += bucket.cacheReadTokens
-        dayOutput += bucket.outputTokens
-        breakdowns.append(
-          TokenCostModelBreakdown(
-            modelName: model,
-            costUSD: modelCost,
-            totalTokens: bucket.totalTokens
-          )
-        )
       }
 
-      let dayTotalTokens = dayInput + dayOutput
-      if dayTotalTokens > 0 {
-        sawTokens = true
-        totalTokens += dayTotalTokens
+      let totalTokens = inputTokens + outputTokens
+      return TokenCostHourlyEntry(
+        hour: hour,
+        inputTokens: inputTokens,
+        cacheReadTokens: cacheReadTokens,
+        outputTokens: outputTokens,
+        totalTokens: totalTokens,
+        costUSD: costKnown ? cost : nil
+      )
+    }
+
+    let dayTotalTokens = dayInput + dayOutput
+    return TokenCostDailyEntry(
+      date: dayKey,
+      inputTokens: dayInput,
+      cacheReadTokens: dayCacheRead,
+      outputTokens: dayOutput,
+      totalTokens: dayTotalTokens,
+      costUSD: dayCostKnown ? dayCost : nil,
+      modelsUsed: sortedModels,
+      modelBreakdowns: sortBreakdowns(breakdowns),
+      hourlyBreakdowns: hourlyBreakdowns
+    )
+  }
+
+  private static func buildWindowSummary(
+    from dailyEntries: [TokenCostDailyEntry],
+    windowDays: Int,
+    now: Date
+  ) -> TokenCostWindowSummary {
+    let calendar = Calendar.current
+    let startDate = calendar.date(byAdding: .day, value: -(windowDays - 1), to: now) ?? now
+    let startKey = dayKey(from: startDate)
+    let endKey = dayKey(from: now)
+    let rangeEntries = dailyEntries.filter { $0.date >= startKey && $0.date <= endKey }
+
+    let activeEntries = rangeEntries.filter { ($0.totalTokens ?? 0) > 0 }
+    let totalInput = activeEntries.reduce(0) { $0 + ($1.inputTokens ?? 0) }
+    let totalCacheRead = activeEntries.reduce(0) { $0 + ($1.cacheReadTokens ?? 0) }
+    let totalTokensValue = activeEntries.reduce(0) { $0 + ($1.totalTokens ?? 0) }
+    let hasTokens = totalTokensValue > 0
+    let hasPartialPricing = activeEntries.contains { ($0.totalTokens ?? 0) > 0 && $0.costUSD == nil }
+    let totalCostValue = activeEntries.reduce(0.0) { $0 + ($1.costUSD ?? 0) }
+    let totalCostUSD = hasTokens ? (hasPartialPricing ? nil : totalCostValue) : nil
+    let averageDailyTokens = hasTokens ? Double(totalTokensValue) / Double(windowDays) : nil
+    let averageDailyCostUSD = totalCostUSD.map { $0 / Double(windowDays) }
+    let cacheShare = totalInput > 0 ? Double(totalCacheRead) / Double(totalInput) : nil
+
+    let modelSummaries = buildModelSummaries(
+      from: activeEntries,
+      totalTokens: totalTokensValue,
+      totalCostUSD: totalCostUSD
+    )
+    let hourly = buildHourlyEntries(from: activeEntries)
+    let dominantModelName = modelSummaries.first?.modelName
+    let alerts = deriveAlerts(
+      windowDays: windowDays,
+      activeEntries: activeEntries,
+      cacheShare: cacheShare,
+      dominantModelName: dominantModelName,
+      modelSummaries: modelSummaries,
+      hasPartialPricing: hasPartialPricing,
+      totalCostUSD: totalCostUSD
+    )
+    let narrative = deriveNarrative(
+      windowDays: windowDays,
+      activeEntries: activeEntries,
+      cacheShare: cacheShare,
+      dominantModelName: dominantModelName,
+      modelSummaries: modelSummaries,
+      hasPartialPricing: hasPartialPricing,
+      totalCostUSD: totalCostUSD,
+      totalTokens: hasTokens ? totalTokensValue : nil
+    )
+
+    return TokenCostWindowSummary(
+      windowDays: windowDays,
+      totalTokens: hasTokens ? totalTokensValue : nil,
+      totalCostUSD: totalCostUSD,
+      averageDailyTokens: averageDailyTokens,
+      averageDailyCostUSD: averageDailyCostUSD,
+      activeDayCount: activeEntries.count,
+      cacheShare: cacheShare,
+      dominantModelName: dominantModelName,
+      modelSummaries: modelSummaries,
+      hourly: hourly,
+      alerts: alerts,
+      narrative: narrative,
+      hasPartialPricing: hasPartialPricing
+    )
+  }
+
+  private static func buildModelSummaries(
+    from dailyEntries: [TokenCostDailyEntry],
+    totalTokens: Int,
+    totalCostUSD: Double?
+  ) -> [TokenCostModelSummary] {
+    var states: [String: ModelAggregateState] = [:]
+
+    for entry in dailyEntries {
+      for breakdown in entry.modelBreakdowns ?? [] {
+        var state = states[breakdown.modelName] ?? ModelAggregateState()
+        state.inputTokens += breakdown.inputTokens ?? 0
+        state.cacheReadTokens += breakdown.cacheReadTokens ?? 0
+        state.outputTokens += breakdown.outputTokens ?? 0
+        state.totalTokens += breakdown.totalTokens ?? 0
+        if let costUSD = breakdown.costUSD {
+          state.costUSD += costUSD
+        } else if (breakdown.totalTokens ?? 0) > 0 {
+          state.costKnown = false
+        }
+        states[breakdown.modelName] = state
+      }
+    }
+
+    let hasPartialPricing = totalTokens > 0 && totalCostUSD == nil
+    return states.map { modelName, state in
+      let tokenShare = totalTokens > 0 ? Double(state.totalTokens) / Double(totalTokens) : nil
+      let costValue = state.costKnown ? state.costUSD : nil
+      let costShare: Double?
+      if hasPartialPricing {
+        costShare = nil
+      } else if let totalCostUSD, totalCostUSD > 0, let costValue {
+        costShare = costValue / totalCostUSD
+      } else if let costValue, costValue == 0 {
+        costShare = 0
+      } else {
+        costShare = nil
       }
 
-      if dayCostKnown {
-        totalCost += dayCost
-      } else if dayTotalTokens > 0 {
-        totalCostKnown = false
+      return TokenCostModelSummary(
+        modelName: modelName,
+        inputTokens: state.inputTokens,
+        cacheReadTokens: state.cacheReadTokens,
+        outputTokens: state.outputTokens,
+        totalTokens: state.totalTokens,
+        costUSD: costValue,
+        costShare: costShare,
+        tokenShare: tokenShare
+      )
+    }
+    .sorted { lhs, rhs in
+      let lhsCost = lhs.costUSD ?? -1
+      let rhsCost = rhs.costUSD ?? -1
+      if lhsCost != rhsCost {
+        return lhsCost > rhsCost
       }
+      if lhs.totalTokens != rhs.totalTokens {
+        return lhs.totalTokens > rhs.totalTokens
+      }
+      return lhs.modelName < rhs.modelName
+    }
+  }
 
-      dailyEntries.append(
-        TokenCostDailyEntry(
-          date: dayKey,
-          inputTokens: dayInput,
-          cacheReadTokens: dayCacheRead,
-          outputTokens: dayOutput,
-          totalTokens: dayTotalTokens,
-          costUSD: dayCostKnown ? dayCost : nil,
-          modelsUsed: sortedModels,
-          modelBreakdowns: sortBreakdowns(breakdowns)
+  private static func buildHourlyEntries(from dailyEntries: [TokenCostDailyEntry]) -> [TokenCostHourlyEntry] {
+    var states: [Int: HourAggregateState] = [:]
+
+    for entry in dailyEntries {
+      for hourEntry in entry.hourlyBreakdowns ?? [] {
+        var state = states[hourEntry.hour] ?? HourAggregateState()
+        state.inputTokens += hourEntry.inputTokens ?? 0
+        state.cacheReadTokens += hourEntry.cacheReadTokens ?? 0
+        state.outputTokens += hourEntry.outputTokens ?? 0
+        state.totalTokens += hourEntry.totalTokens ?? 0
+        if let costUSD = hourEntry.costUSD {
+          state.costUSD += costUSD
+        } else if (hourEntry.totalTokens ?? 0) > 0 {
+          state.costKnown = false
+        }
+        states[hourEntry.hour] = state
+      }
+    }
+
+    return states.keys.sorted().map { hour in
+      let state = states[hour] ?? HourAggregateState()
+      return TokenCostHourlyEntry(
+        hour: hour,
+        inputTokens: state.inputTokens,
+        cacheReadTokens: state.cacheReadTokens,
+        outputTokens: state.outputTokens,
+        totalTokens: state.totalTokens,
+        costUSD: state.costKnown ? state.costUSD : nil
+      )
+    }
+  }
+
+  private static func deriveAlerts(
+    windowDays: Int,
+    activeEntries: [TokenCostDailyEntry],
+    cacheShare: Double?,
+    dominantModelName: String?,
+    modelSummaries: [TokenCostModelSummary],
+    hasPartialPricing: Bool,
+    totalCostUSD: Double?
+  ) -> [TokenCostInsight] {
+    var alerts: [TokenCostInsight] = []
+
+    if hasPartialPricing {
+      alerts.append(
+        TokenCostInsight(
+          kind: "partial_pricing",
+          title: "Partial pricing",
+          message: "Some \(windowDays)D usage came from models without pricing, so dollar totals are incomplete.",
+          severity: "warning"
         )
       )
     }
 
-    let todayEntry = dailyEntries.last(where: { $0.date == todayKey })
-    return TokenCostSnapshot(
-      todayTokens: todayEntry?.totalTokens,
-      todayCostUSD: todayEntry?.costUSD,
-      last30DaysTokens: sawTokens ? totalTokens : nil,
-      last30DaysCostUSD: totalCostKnown && sawCost ? totalCost : nil,
-      daily: dailyEntries,
-      updatedAt: now
+    if let cacheShare, cacheShare >= 0.30 {
+      alerts.append(
+        TokenCostInsight(
+          kind: "high_cache_share",
+          title: "Strong cache leverage",
+          message: "Cache reads covered \(percentString(cacheShare)) of input tokens in the last \(windowDays) days.",
+          severity: "positive"
+        )
+      )
+    }
+
+    if let dominant = modelSummaries.first,
+       (dominant.costShare ?? dominant.tokenShare ?? 0) >= 0.75 {
+      let share = dominant.costShare ?? dominant.tokenShare ?? 0
+      alerts.append(
+        TokenCostInsight(
+          kind: "model_concentration",
+          title: "Model concentration",
+          message: "\(dominant.modelName) drove \(percentString(share)) of the visible \(windowDays)D usage mix.",
+          severity: "warning"
+        )
+      )
+    } else if let dominantModelName {
+      _ = dominantModelName
+    }
+
+    let knownDailyCosts = activeEntries.compactMap(\.costUSD)
+    if let peakCost = knownDailyCosts.max(),
+       let totalCostUSD,
+       !activeEntries.isEmpty {
+      let averageActiveDayCost = totalCostUSD / Double(activeEntries.count)
+      if peakCost > max(averageActiveDayCost * 1.5, 0.002),
+         let spikeDay = activeEntries.first(where: { $0.costUSD == peakCost })?.date {
+        alerts.append(
+          TokenCostInsight(
+            kind: "high_burn_day",
+            title: "Burn spike",
+            message: "\(spikeDay) peaked at \(TokenCostFormatting.usd(peakCost)) in a single day.",
+            severity: "warning"
+          )
+        )
+      }
+    }
+
+    return alerts
+  }
+
+  private static func deriveNarrative(
+    windowDays: Int,
+    activeEntries: [TokenCostDailyEntry],
+    cacheShare: Double?,
+    dominantModelName: String?,
+    modelSummaries: [TokenCostModelSummary],
+    hasPartialPricing: Bool,
+    totalCostUSD: Double?,
+    totalTokens: Int?
+  ) -> TokenCostNarrative {
+    guard !activeEntries.isEmpty else {
+      return TokenCostNarrative(
+        whatChanged: ["No local Codex usage landed in the last \(windowDays) days."],
+        whatHelped: ["The dashboard will populate after local Codex sessions write token logs."],
+        whatToWatch: ["Run Codex locally to start collecting cost analytics."]
+      )
+    }
+
+    var whatChanged: [String] = []
+    var whatHelped: [String] = []
+    var whatToWatch: [String] = []
+
+    if let totalCostUSD {
+      whatChanged.append(
+        "\(windowDays)D spend reached \(TokenCostFormatting.usd(totalCostUSD)) across \(activeEntries.count) active days."
+      )
+    } else if let totalTokens {
+      whatChanged.append(
+        "\(windowDays)D activity reached \(TokenCostFormatting.tokenCount(totalTokens)) tokens, with partial pricing coverage."
+      )
+    }
+
+    if let dominantModelName,
+       let dominant = modelSummaries.first,
+       let share = dominant.costShare ?? dominant.tokenShare {
+      whatChanged.append(
+        "\(dominantModelName) remained the dominant model at \(percentString(share)) of the visible mix."
+      )
+    }
+
+    if let cacheShare, cacheShare > 0 {
+      whatHelped.append("Local cache reads covered \(percentString(cacheShare)) of input tokens.")
+    } else {
+      whatHelped.append("No meaningful cache reuse showed up in the current window.")
+    }
+
+    if hasPartialPricing {
+      whatToWatch.append("pricing is incomplete because at least one active model is missing a rate card.")
+    }
+
+    if let dominant = modelSummaries.first,
+       (dominant.costShare ?? dominant.tokenShare ?? 0) >= 0.75 {
+      whatToWatch.append("\(dominant.modelName) is carrying most of the spend mix right now.")
+    }
+
+    if whatToWatch.isEmpty {
+      whatToWatch.append("Watch for burn concentration when one model starts dominating the window.")
+    }
+
+    return TokenCostNarrative(
+      whatChanged: whatChanged,
+      whatHelped: whatHelped,
+      whatToWatch: whatToWatch
     )
   }
 
@@ -301,7 +639,7 @@ public enum TokenCostScanner {
     var sessionID: String?
     var currentModel: String?
     var previousTotals: TokenCostRunningTotals?
-    var days: [String: [String: TokenCostBucket]] = [:]
+    var days: [String: TokenCostCachedDay] = [:]
 
     contents.enumerateLines { line, _ in
       guard let data = line.data(using: .utf8),
@@ -330,7 +668,7 @@ public enum TokenCostScanner {
         guard let payload = object["payload"] as? [String: Any],
               (payload["type"] as? String) == "token_count",
               let timestamp = object["timestamp"] as? String,
-              let dayKey = dayKey(fromTimestamp: timestamp) else {
+              let timestampParts = timestampParts(from: timestamp) else {
           return
         }
 
@@ -378,15 +716,27 @@ public enum TokenCostScanner {
 
         let normalizedModel = TokenCostPricing.normalizeCodexModel(resolvedModel)
         let cachedInputTokens = min(delta.cachedInputTokens, delta.inputTokens)
-        var models = days[dayKey] ?? [:]
-        var bucket = models[normalizedModel] ?? TokenCostBucket()
-        bucket.add(
+
+        var day = days[timestampParts.dayKey] ?? TokenCostCachedDay()
+        var dayBucket = day.models[normalizedModel] ?? TokenCostBucket()
+        dayBucket.add(
           inputTokens: delta.inputTokens,
           cacheReadTokens: cachedInputTokens,
           outputTokens: delta.outputTokens
         )
-        models[normalizedModel] = bucket
-        days[dayKey] = models
+        day.models[normalizedModel] = dayBucket
+
+        var hour = day.hours[timestampParts.hour] ?? TokenCostCachedHour()
+        var hourBucket = hour.models[normalizedModel] ?? TokenCostBucket()
+        hourBucket.add(
+          inputTokens: delta.inputTokens,
+          cacheReadTokens: cachedInputTokens,
+          outputTokens: delta.outputTokens
+        )
+        hour.models[normalizedModel] = hourBucket
+        day.hours[timestampParts.hour] = hour
+
+        days[timestampParts.dayKey] = day
 
       default:
         return
@@ -405,21 +755,37 @@ public enum TokenCostScanner {
   }
 
   private static func merge(
-    days source: [String: [String: TokenCostBucket]],
-    into destination: inout [String: [String: TokenCostBucket]]
+    days source: [String: TokenCostCachedDay],
+    into destination: inout [String: TokenCostCachedDay]
   ) {
-    for (dayKey, sourceModels) in source {
-      var destinationModels = destination[dayKey] ?? [:]
-      for (model, sourceBucket) in sourceModels {
-        var destinationBucket = destinationModels[model] ?? TokenCostBucket()
+    for (dayKey, sourceDay) in source {
+      var destinationDay = destination[dayKey] ?? TokenCostCachedDay()
+
+      for (model, sourceBucket) in sourceDay.models {
+        var destinationBucket = destinationDay.models[model] ?? TokenCostBucket()
         destinationBucket.add(
           inputTokens: sourceBucket.inputTokens,
           cacheReadTokens: sourceBucket.cacheReadTokens,
           outputTokens: sourceBucket.outputTokens
         )
-        destinationModels[model] = destinationBucket
+        destinationDay.models[model] = destinationBucket
       }
-      destination[dayKey] = destinationModels
+
+      for (hourKey, sourceHour) in sourceDay.hours {
+        var destinationHour = destinationDay.hours[hourKey] ?? TokenCostCachedHour()
+        for (model, sourceBucket) in sourceHour.models {
+          var destinationBucket = destinationHour.models[model] ?? TokenCostBucket()
+          destinationBucket.add(
+            inputTokens: sourceBucket.inputTokens,
+            cacheReadTokens: sourceBucket.cacheReadTokens,
+            outputTokens: sourceBucket.outputTokens
+          )
+          destinationHour.models[model] = destinationBucket
+        }
+        destinationDay.hours[hourKey] = destinationHour
+      }
+
+      destination[dayKey] = destinationDay
     }
   }
 
@@ -446,18 +812,25 @@ public enum TokenCostScanner {
     return String(format: "%04d-%02d-%02d", components.year ?? 1970, components.month ?? 1, components.day ?? 1)
   }
 
-  private static func dayKey(fromTimestamp timestamp: String) -> String? {
+  private static func timestampParts(from timestamp: String) -> TimestampParts? {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     if let date = formatter.date(from: timestamp) {
-      return dayKey(from: date)
+      return timestampParts(from: date)
     }
 
     formatter.formatOptions = [.withInternetDateTime]
     if let date = formatter.date(from: timestamp) {
-      return dayKey(from: date)
+      return timestampParts(from: date)
     }
+
     return nil
+  }
+
+  private static func timestampParts(from date: Date) -> TimestampParts {
+    let components = Calendar.current.dateComponents([.year, .month, .day, .hour], from: date)
+    let day = String(format: "%04d-%02d-%02d", components.year ?? 1970, components.month ?? 1, components.day ?? 1)
+    return TimestampParts(dayKey: day, hour: components.hour ?? 0)
   }
 
   private static func dayKey(fromFilename filename: String) -> String? {
@@ -477,6 +850,10 @@ public enum TokenCostScanner {
     return 0
   }
 
+  private static func percentString(_ value: Double) -> String {
+    "\(Int((value * 100).rounded()))%"
+  }
+
   private static func fileMetadata(for fileURL: URL) -> FileMetadata {
     let attributes = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)) ?? [:]
     let modifiedAt = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
@@ -487,6 +864,29 @@ public enum TokenCostScanner {
       size: size
     )
   }
+}
+
+private struct TimestampParts {
+  let dayKey: String
+  let hour: Int
+}
+
+private struct ModelAggregateState {
+  var inputTokens = 0
+  var cacheReadTokens = 0
+  var outputTokens = 0
+  var totalTokens = 0
+  var costUSD = 0.0
+  var costKnown = true
+}
+
+private struct HourAggregateState {
+  var inputTokens = 0
+  var cacheReadTokens = 0
+  var outputTokens = 0
+  var totalTokens = 0
+  var costUSD = 0.0
+  var costKnown = true
 }
 
 private struct FileMetadata {

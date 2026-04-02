@@ -856,146 +856,14 @@ private func runCost(json: Bool) async {
   let snapshot = await LiveTokenCostSnapshotLoader().loadSnapshot(now: Date())
 
   if json {
-    let payload = CostJSONPayload(snapshot: snapshot)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    encoder.dateEncodingStrategy = .iso8601
-    if let jsonData = try? encoder.encode(payload),
+    if let jsonData = try? TokenCostCLIReport.jsonData(snapshot: snapshot),
        let str = String(data: jsonData, encoding: .utf8) {
       print(str)
     }
     return
   }
 
-  // Pretty output
-  let bold = "\u{001B}[1m"
-  let dim = "\u{001B}[2m"
-  let cyan = "\u{001B}[36m"
-  let reset = "\u{001B}[0m"
-
-  print("")
-  print("\(bold)💰 Token Cost\(reset)")
-  print("\(dim)────────────────────────────────────────\(reset)")
-  print("")
-
-  if !snapshot.hasAnyData {
-    print("  \(dim)No local session data yet. Run Codex to collect session logs.\(reset)")
-    print("")
-    return
-  }
-
-  let todayCost = snapshot.todayCostUSD.map {
-    TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
-  } ?? "—"
-  let todayTokens = snapshot.todayTokens.map(TokenCostFormatting.tokenCount) ?? "—"
-  let monthCost = snapshot.last30DaysCostUSD.map {
-    TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
-  } ?? "—"
-  let monthTokens = snapshot.last30DaysTokens.map(TokenCostFormatting.tokenCount) ?? "—"
-
-  print("  \(dim)Today Cost:\(reset)     \(bold)\(todayCost)\(reset)")
-  print("  \(dim)Today Tokens:\(reset)   \(todayTokens)")
-  print("  \(dim)Last 30 Days:\(reset)   \(bold)\(monthCost)\(reset)")
-  print("  \(dim)30d Tokens:\(reset)     \(monthTokens)")
-  print("  \(dim)Active Days:\(reset)    \(snapshot.activeDayCount)")
-  print("")
-
-  let recentDaily = snapshot.daily.suffix(7)
-  if !recentDaily.isEmpty {
-    print("  \(bold)Recent Daily Breakdown\(reset)")
-    print("  \(dim)Date         Cost        Tokens      Models\(reset)")
-    for entry in recentDaily {
-      let cost = entry.costUSD.map {
-        TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
-      } ?? "—"
-      let tokens = entry.totalTokens.map(TokenCostFormatting.tokenCount) ?? "—"
-      let models = (entry.modelsUsed ?? []).joined(separator: ",")
-      print("  \(entry.date)  \(cyan)\(cost)\(reset)   \(tokens.padding(toLength: 9, withPad: " ", startingAt: 0))   \(models)")
-    }
-  }
-
-  print("")
-}
-
-private struct CostJSONPayload: Encodable {
-  let updatedAt: Date
-  let todayTokens: Int?
-  let todayCostUSD: Double?
-  let last30DaysTokens: Int?
-  let last30DaysCostUSD: Double?
-  let activeDays: Int
-  let daily: [CostJSONDailyEntry]
-
-  init(snapshot: TokenCostSnapshot) {
-    self.updatedAt = snapshot.updatedAt
-    self.todayTokens = snapshot.todayTokens
-    self.todayCostUSD = snapshot.todayCostUSD
-    self.last30DaysTokens = snapshot.last30DaysTokens
-    self.last30DaysCostUSD = snapshot.last30DaysCostUSD
-    self.activeDays = snapshot.activeDayCount
-    self.daily = snapshot.daily.map(CostJSONDailyEntry.init)
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case updatedAt = "updated_at"
-    case todayTokens = "today_tokens"
-    case todayCostUSD = "today_cost_usd"
-    case last30DaysTokens = "last_30_days_tokens"
-    case last30DaysCostUSD = "last_30_days_cost_usd"
-    case activeDays = "active_days"
-    case daily
-  }
-}
-
-private struct CostJSONDailyEntry: Encodable {
-  let date: String
-  let inputTokens: Int?
-  let cacheReadTokens: Int?
-  let outputTokens: Int?
-  let totalTokens: Int?
-  let costUSD: Double?
-  let modelsUsed: [String]?
-  let modelBreakdowns: [CostJSONModelBreakdown]?
-
-  init(_ entry: TokenCostDailyEntry) {
-    self.date = entry.date
-    self.inputTokens = entry.inputTokens
-    self.cacheReadTokens = entry.cacheReadTokens
-    self.outputTokens = entry.outputTokens
-    self.totalTokens = entry.totalTokens
-    self.costUSD = entry.costUSD
-    self.modelsUsed = entry.modelsUsed
-    self.modelBreakdowns = entry.modelBreakdowns?.map(CostJSONModelBreakdown.init)
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case date
-    case inputTokens = "input_tokens"
-    case cacheReadTokens = "cache_read_tokens"
-    case outputTokens = "output_tokens"
-    case totalTokens = "total_tokens"
-    case costUSD = "cost_usd"
-    case modelsUsed = "models_used"
-    case modelBreakdowns = "model_breakdowns"
-  }
-}
-
-private struct CostJSONModelBreakdown: Encodable {
-  let modelName: String
-  let costUSD: Double?
-  let totalTokens: Int?
-
-  init(_ breakdown: TokenCostModelBreakdown) {
-    self.modelName = breakdown.modelName
-    self.costUSD = breakdown.costUSD
-    self.totalTokens = breakdown.totalTokens
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case modelName = "model_name"
-    case costUSD = "cost_usd"
-    case totalTokens = "total_tokens"
-  }
+  print(TokenCostCLIReport.renderText(snapshot: snapshot))
 }
 
 private func printHelp() {

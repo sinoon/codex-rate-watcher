@@ -99,6 +99,7 @@ final class PopoverViewController: NSViewController {
   // Cost card
   private var costWrapper: NSView!
   private let costSectionLabel = NSTextField(labelWithString: "")
+  private let costDashboardButton = NSButton()
   private let costHourLabel = NSTextField(labelWithString: "")
   private let costTodayLabel = NSTextField(labelWithString: "")
   private let costUtilLabel = NSTextField(labelWithString: "")
@@ -746,6 +747,15 @@ final class PopoverViewController: NSViewController {
     costSectionLabel.stringValue = Copy.costSectionTitle
     costSectionLabel.translatesAutoresizingMaskIntoConstraints = false
 
+    costDashboardButton.title = Copy.costOpenDashboard
+    costDashboardButton.bezelStyle = .inline
+    costDashboardButton.isBordered = false
+    costDashboardButton.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    costDashboardButton.contentTintColor = LN.blue
+    costDashboardButton.target = self
+    costDashboardButton.action = #selector(openDashboardTapped)
+    costDashboardButton.translatesAutoresizingMaskIntoConstraints = false
+
     // Use smaller font so 3 metrics fit side by side
     costHourLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .semibold)
     costHourLabel.textColor = LN.green
@@ -779,6 +789,7 @@ final class PopoverViewController: NSViewController {
     costSublineLabel.translatesAutoresizingMaskIntoConstraints = false
 
     card.addSubview(costSectionLabel)
+    card.addSubview(costDashboardButton)
     card.addSubview(metricsStack)
     card.addSubview(costSparklineView)
     card.addSubview(costSublineLabel)
@@ -788,7 +799,10 @@ final class PopoverViewController: NSViewController {
     NSLayoutConstraint.activate([
       costSectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       costSectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
-      costSectionLabel.trailingAnchor.constraint(lessThanOrEqualTo: card.trailingAnchor, constant: -cPad),
+      costSectionLabel.trailingAnchor.constraint(lessThanOrEqualTo: costDashboardButton.leadingAnchor, constant: -8),
+
+      costDashboardButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      costDashboardButton.centerYAnchor.constraint(equalTo: costSectionLabel.centerYAnchor),
 
       metricsStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       metricsStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
@@ -1083,6 +1097,11 @@ final class PopoverViewController: NSViewController {
     appDelegate.startAddAccountFlow()
   }
 
+  @objc private func openDashboardTapped() {
+    guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+    appDelegate.showTokenCostDashboard()
+  }
+
   @objc private func recSwitchTapped() {
     guard let pid = recProfileID else { return }
     Task { await monitor.switchToProfile(id: pid) }
@@ -1288,7 +1307,7 @@ final class PopoverViewController: NSViewController {
     costUtilLabel.stringValue = Copy.costLast30DaysMetric(last30CostLabel)
     costUtilLabel.textColor = tokenCostSnapshot.last30DaysCostUSD == nil ? LN.textTertiary : LN.yellow
 
-    drawSparkline(tokenCostSnapshot.daily.map { $0.costUSD ?? 0 })
+    drawSparkline(tokenCostSnapshot.daily.suffix(30).map { $0.costUSD ?? 0 })
 
     var parts: [String] = []
     parts.append(Copy.costLast30DaysMetric(Copy.costTokenMetric(last30TokenLabel)))

@@ -139,6 +139,134 @@ final class TokenCostScannerTests: XCTestCase {
     XCTAssertEqual(snapshot.daily.first?.modelsUsed ?? [], ["gpt-5", "gpt-5-mini"])
   }
 
+  func testScannerBuildsWindowSummariesModelLeaderboardsAndHourlyBuckets() throws {
+    let now = isoDate("2026-04-01T12:00:00+08:00")
+    let codexHome = tempDirectory.appending(path: ".codex", directoryHint: .isDirectory)
+
+    let aprilDay = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "04", directoryHint: .isDirectory)
+      .appending(path: "01", directoryHint: .isDirectory)
+    let marchDay = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "03", directoryHint: .isDirectory)
+      .appending(path: "28", directoryHint: .isDirectory)
+    let januaryDay = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "01", directoryHint: .isDirectory)
+      .appending(path: "15", directoryHint: .isDirectory)
+
+    try FileManager.default.createDirectory(at: aprilDay, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: marchDay, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: januaryDay, withIntermediateDirectories: true)
+
+    try writeLines([
+      #"{"timestamp":"2026-04-01T09:00:00+08:00","type":"session_meta","payload":{"session_id":"session-30d-gpt5"}}"#,
+      #"{"timestamp":"2026-04-01T09:00:01+08:00","type":"turn_context","payload":{"model":"gpt-5"}}"#,
+      #"{"timestamp":"2026-04-01T09:00:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100}}}}"#,
+      #"{"timestamp":"2026-04-01T14:30:00+08:00","type":"session_meta","payload":{"session_id":"session-30d-mini"}}"#,
+      #"{"timestamp":"2026-04-01T14:30:01+08:00","type":"turn_context","payload":{"model":"gpt-5-mini"}}"#,
+      #"{"timestamp":"2026-04-01T14:30:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":500,"cached_input_tokens":100,"output_tokens":50}}}}"#,
+    ], to: aprilDay.appending(path: "rollout-2026-04-01.jsonl"))
+
+    try writeLines([
+      #"{"timestamp":"2026-03-28T09:15:00+08:00","type":"session_meta","payload":{"session_id":"session-7d-gpt5"}}"#,
+      #"{"timestamp":"2026-03-28T09:15:01+08:00","type":"turn_context","payload":{"model":"gpt-5"}}"#,
+      #"{"timestamp":"2026-03-28T09:15:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":2000,"cached_input_tokens":1000,"output_tokens":200}}}}"#,
+    ], to: marchDay.appending(path: "rollout-2026-03-28.jsonl"))
+
+    try writeLines([
+      #"{"timestamp":"2026-01-15T22:00:00+08:00","type":"session_meta","payload":{"session_id":"session-90d-nano"}}"#,
+      #"{"timestamp":"2026-01-15T22:00:01+08:00","type":"turn_context","payload":{"model":"gpt-5-nano"}}"#,
+      #"{"timestamp":"2026-01-15T22:00:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":3000,"cached_input_tokens":1000,"output_tokens":300}}}}"#,
+    ], to: januaryDay.appending(path: "rollout-2026-01-15.jsonl"))
+
+    let snapshot = TokenCostScanner.loadSnapshot(
+      now: now,
+      options: .init(
+        codexHomeURL: codexHome,
+        managedHomesDirectoryURL: tempDirectory.appending(path: "managed-codex-homes", directoryHint: .isDirectory),
+        cacheFileURL: tempDirectory.appending(path: "token-cost-cache.json"),
+        refreshMinIntervalSeconds: 0
+      )
+    )
+
+    XCTAssertEqual(snapshot.todayTokens, 1_650)
+    XCTAssertEqual(snapshot.last7DaysTokens, 3_850)
+    XCTAssertEqual(snapshot.last30DaysTokens, 3_850)
+    XCTAssertEqual(snapshot.last90DaysTokens, 7_150)
+    XCTAssertEqual(snapshot.last7DaysCostUSD ?? 0, 0.0056025, accuracy: 0.0000001)
+    XCTAssertEqual(snapshot.last90DaysCostUSD ?? 0, 0.0058275, accuracy: 0.0000001)
+    XCTAssertEqual(snapshot.averageDailyTokens ?? 0, 128.3333333, accuracy: 0.0001)
+    XCTAssertEqual(snapshot.averageDailyCostUSD ?? 0, 0.00018675, accuracy: 0.0000001)
+
+    let sevenDayWindow = try XCTUnwrap(snapshot.windowSummary(days: 7))
+    XCTAssertEqual(sevenDayWindow.totalTokens, 3_850)
+    XCTAssertEqual(sevenDayWindow.activeDayCount, 2)
+    XCTAssertEqual(sevenDayWindow.dominantModelName, "gpt-5")
+    XCTAssertEqual(sevenDayWindow.cacheShare ?? 0, 0.3714285, accuracy: 0.0001)
+
+    let thirtyDayModels = snapshot.modelSummaries
+    XCTAssertEqual(thirtyDayModels.map(\.modelName), ["gpt-5", "gpt-5-mini"])
+    XCTAssertEqual(thirtyDayModels.first?.inputTokens, 3_000)
+    XCTAssertEqual(thirtyDayModels.first?.cacheReadTokens, 1_200)
+    XCTAssertEqual(thirtyDayModels.first?.outputTokens, 300)
+    XCTAssertEqual(thirtyDayModels.first?.totalTokens, 3_300)
+    XCTAssertEqual(thirtyDayModels.first?.costUSD ?? 0, 0.0054, accuracy: 0.0000001)
+    XCTAssertEqual(thirtyDayModels.first?.costShare ?? 0, 0.9638545, accuracy: 0.0001)
+    XCTAssertEqual(thirtyDayModels.first?.tokenShare ?? 0, 0.8571428, accuracy: 0.0001)
+
+    XCTAssertEqual(snapshot.hourly.map(\.hour), [9, 14])
+    XCTAssertEqual(snapshot.hourly.first?.totalTokens, 3_300)
+    XCTAssertEqual(snapshot.hourly.first?.costUSD ?? 0, 0.0054, accuracy: 0.0000001)
+
+    XCTAssertTrue(snapshot.alerts.contains { $0.kind == "high_cache_share" })
+    XCTAssertTrue(snapshot.alerts.contains { $0.kind == "model_concentration" })
+    XCTAssertTrue(snapshot.narrative.whatChanged.contains { $0.contains("30D") })
+    XCTAssertTrue(snapshot.narrative.whatHelped.contains { $0.contains("cache") })
+    XCTAssertTrue(snapshot.narrative.whatToWatch.contains { $0.contains("gpt-5") })
+  }
+
+  func testScannerSurfacesPartialPricingAcrossSnapshotAlertsAndNarrative() throws {
+    let now = isoDate("2026-04-01T12:00:00+08:00")
+    let codexHome = tempDirectory.appending(path: ".codex", directoryHint: .isDirectory)
+    let sessionsDirectory = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "04", directoryHint: .isDirectory)
+      .appending(path: "01", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
+
+    try writeLines([
+      #"{"timestamp":"2026-04-01T09:00:00+08:00","type":"session_meta","payload":{"session_id":"session-known"}}"#,
+      #"{"timestamp":"2026-04-01T09:00:01+08:00","type":"turn_context","payload":{"model":"gpt-5"}}"#,
+      #"{"timestamp":"2026-04-01T09:00:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":0,"output_tokens":100}}}}"#,
+      #"{"timestamp":"2026-04-01T10:00:00+08:00","type":"session_meta","payload":{"session_id":"session-unknown"}}"#,
+      #"{"timestamp":"2026-04-01T10:00:01+08:00","type":"turn_context","payload":{"model":"mystery-model"}}"#,
+      #"{"timestamp":"2026-04-01T10:00:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":300,"cached_input_tokens":0,"output_tokens":30}}}}"#,
+    ], to: sessionsDirectory.appending(path: "rollout-partial-pricing.jsonl"))
+
+    let snapshot = TokenCostScanner.loadSnapshot(
+      now: now,
+      options: .init(
+        codexHomeURL: codexHome,
+        managedHomesDirectoryURL: tempDirectory.appending(path: "managed-codex-homes", directoryHint: .isDirectory),
+        cacheFileURL: tempDirectory.appending(path: "token-cost-cache.json"),
+        refreshMinIntervalSeconds: 0
+      )
+    )
+
+    XCTAssertTrue(snapshot.hasPartialPricing)
+    XCTAssertNil(snapshot.last30DaysCostUSD)
+    XCTAssertEqual(snapshot.last30DaysTokens, 1_430)
+    XCTAssertNil(snapshot.modelSummaries.first { $0.modelName == "mystery-model" }?.costShare)
+    XCTAssertTrue(snapshot.alerts.contains { $0.kind == "partial_pricing" })
+    XCTAssertTrue(snapshot.narrative.whatToWatch.contains { $0.contains("pricing") })
+  }
+
   private func writeLines(_ lines: [String], to fileURL: URL) throws {
     let payload = lines.joined(separator: "\n") + "\n"
     try payload.write(to: fileURL, atomically: true, encoding: .utf8)

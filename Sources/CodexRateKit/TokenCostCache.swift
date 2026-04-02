@@ -28,6 +28,27 @@ struct TokenCostBucket: Codable, Equatable, Sendable {
   }
 }
 
+struct TokenCostCachedHour: Codable, Equatable, Sendable {
+  var models: [String: TokenCostBucket]
+
+  init(models: [String: TokenCostBucket] = [:]) {
+    self.models = models
+  }
+}
+
+struct TokenCostCachedDay: Codable, Equatable, Sendable {
+  var models: [String: TokenCostBucket]
+  var hours: [Int: TokenCostCachedHour]
+
+  init(
+    models: [String: TokenCostBucket] = [:],
+    hours: [Int: TokenCostCachedHour] = [:]
+  ) {
+    self.models = models
+    self.hours = hours
+  }
+}
+
 struct TokenCostCachedFile: Codable, Equatable, Sendable {
   let path: String
   let modifiedAtUnixMilliseconds: Int64
@@ -35,18 +56,18 @@ struct TokenCostCachedFile: Codable, Equatable, Sendable {
   let sessionID: String?
   let lastModel: String?
   let lastTotals: TokenCostRunningTotals?
-  let days: [String: [String: TokenCostBucket]]
+  let days: [String: TokenCostCachedDay]
 }
 
 struct TokenCostCache: Codable, Equatable, Sendable {
   var lastScanUnixMilliseconds: Int64
   var files: [String: TokenCostCachedFile]
-  var days: [String: [String: TokenCostBucket]]
+  var days: [String: TokenCostCachedDay]
 
   init(
     lastScanUnixMilliseconds: Int64 = 0,
     files: [String: TokenCostCachedFile] = [:],
-    days: [String: [String: TokenCostBucket]] = [:]
+    days: [String: TokenCostCachedDay] = [:]
   ) {
     self.lastScanUnixMilliseconds = lastScanUnixMilliseconds
     self.files = files

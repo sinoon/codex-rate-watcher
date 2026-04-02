@@ -5,13 +5,18 @@ import CodexRateKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+  private static let dashboardDefaultContentSize = NSSize(width: 1240, height: 920)
+  private static let dashboardMinimumContentSize = NSSize(width: 1120, height: 760)
+
   private let popover = NSPopover()
   private var statusItem: NSStatusItem!
   private let monitor = UsageMonitor()
   private let alertManager = AlertManager()
   private var observerID: UUID?
   private let windowMode: Bool
+  private let openDashboardOnLaunch: Bool
   private var debugWindow: NSWindow?
+  private var tokenCostDashboardWindow: NSWindow?
   private var currentTier: StatusBarIcon.Tier = .unknown
   private let codexConfigManager = CodexConfigManager()
 
@@ -24,8 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var proxyStatusTimer: Timer?
   private var addAccountTask: Task<Void, Never>?
 
-  init(windowMode: Bool = false) {
+  init(windowMode: Bool = false, openDashboardOnLaunch: Bool = false) {
     self.windowMode = windowMode
+    self.openDashboardOnLaunch = openDashboardOnLaunch
     super.init()
   }
 
@@ -90,6 +96,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if codexConfigManager.currentMode() == .proxy {
       startProxyServer()
     }
+
+    if openDashboardOnLaunch {
+      DispatchQueue.main.async { [weak self] in
+        self?.showTokenCostDashboard()
+      }
+    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {
@@ -104,6 +116,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return windowMode
+  }
+
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if !flag && !windowMode {
+      showTokenCostDashboard()
+      return false
+    }
+    return true
   }
 
   // MARK: - Popover Toggle
@@ -143,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let openItem = NSMenuItem(title: "打开面板", action: #selector(openPopover), keyEquivalent: "o")
     openItem.target = self
     menu.addItem(openItem)
+
+    let dashboardItem = NSMenuItem(title: "打开 Token Cost Dashboard", action: #selector(openTokenCostDashboard), keyEquivalent: "d")
+    dashboardItem.target = self
+    menu.addItem(dashboardItem)
 
     let refreshItem = NSMenuItem(title: "立即刷新", action: #selector(refreshNow), keyEquivalent: "r")
     refreshItem.target = self
@@ -207,6 +231,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @objc private func refreshNow() {
     Task { await monitor.refresh(manual: true) }
+  }
+
+  @objc private func openTokenCostDashboard() {
+    showTokenCostDashboard()
+  }
+
+  func showTokenCostDashboard() {
+    popover.performClose(nil)
+    NSApp.setActivationPolicy(AppPresentationPolicy.activationPolicyForDashboard(windowMode: windowMode))
+
+    if tokenCostDashboardWindow == nil {
+      let dashboardViewController = TokenCostDashboardViewController(monitor: monitor)
+      let window = NSWindow(
+        contentRect: NSRect(origin: .zero, size: Self.dashboardDefaultContentSize),
+        styleMask: [.titled, .closable, .miniaturizable, .resizable],
+        backing: .buffered,
+        defer: false
+      )
+      window.title = Copy.dashboardTitle
+      window.contentViewController = dashboardViewController
+      window.isReleasedWhenClosed = false
+      normalizeDashboardWindowFrame(window, forceReset: true)
+      window.backgroundColor = NSColor(srgbRed: 0.031, green: 0.047, blue: 0.071, alpha: 1)
+      window.delegate = self
+      tokenCostDashboardWindow = window
+    }
+
+    if let window = tokenCostDashboardWindow {
+      normalizeDashboardWindowFrame(window)
+      window.makeKeyAndOrderFront(nil)
+      window.orderFrontRegardless()
+    }
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  private func normalizeDashboardWindowFrame(_ window: NSWindow, forceReset: Bool = false) {
+    window.contentMinSize = Self.dashboardMinimumContentSize
+
+    let currentContentSize = window.contentRect(forFrameRect: window.frame).size
+    let needsReset =
+      forceReset
+      || currentContentSize.width < Self.dashboardMinimumContentSize.width
+      || currentContentSize.height < Self.dashboardMinimumContentSize.height
+
+    guard needsReset else { return }
+
+    window.setContentSize(Self.dashboardDefaultContentSize)
+    window.center()
   }
 
   @objc private func toggleAlerts() {
@@ -498,5 +570,15 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
   ) {
     // Show notification banner even when app is in foreground
     completionHandler([.banner, .sound])
+  }
+}
+
+extension AppDelegate: NSWindowDelegate {
+  func windowWillClose(_ notification: Notification) {
+    guard let window = notification.object as? NSWindow else { return }
+    if window === tokenCostDashboardWindow {
+      tokenCostDashboardWindow = nil
+      NSApp.setActivationPolicy(AppPresentationPolicy.activationPolicyForDashboard(windowMode: windowMode))
+    }
   }
 }

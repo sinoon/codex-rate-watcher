@@ -291,6 +291,7 @@ enum Copy {
   // MARK: - Cost Dashboard
 
   static let costSectionTitle = "TOKEN COST"
+  static let costOpenDashboard = "Open Dashboard"
 
   static let costNoLocalData = "暂无本地会话数据"
 
@@ -349,5 +350,36 @@ enum Copy {
   static func costMenuBar(pct: Int, costHr: Double) -> String {
     "\(pct)% · $\(String(format: "%.1f", costHr))/h"
   }
+
+  static let dashboardTitle = "Token Cost Research Desk"
+  static let dashboardSubtitle = "Local Codex session analytics for burn, model mix, cache leverage, and daily patterns."
+  static let dashboardRefresh = "Refresh"
+  static let dashboardCopyJSON = "Copy JSON"
+  static let dashboardUpdatedPrefix = "Updated"
+  static let dashboardPartialPricing = "Partial pricing"
+  static let dashboardEmptyTitle = "暂无本地会话数据"
+  static let dashboardEmptyBody = "运行 Codex 后，这里会出现本地 session log 的 token 成本分析。"
+  static let dashboardTodayCost = "Today Cost"
+  static let dashboardRangeCost = "Window Cost"
+  static let dashboardTodayTokens = "Today Tokens"
+  static let dashboardCacheShare = "Cache Share"
+  static let dashboardDominantModel = "Dominant Model"
+  static let dashboardBurnTimeline = "Burn Timeline"
+  static let dashboardAlertRail = "Alert Rail"
+  static let dashboardModelLeaderboard = "Model Leaderboard"
+  static let dashboardCostStructure = "Cost Structure"
+  static let dashboardHourlyHeatmap = "Hourly Heatmap"
+  static let dashboardDailyDetail = "Daily Detail"
+  static let dashboardNarrative = "Narrative"
+  static let dashboardWhatChanged = "What changed"
+  static let dashboardWhatHelped = "What helped"
+  static let dashboardWhatToWatch = "What to watch"
+  static let dashboardNoAlerts = "No material alerts in the selected window."
+  static let dashboardNoNarrative = "No narrative yet."
+  static let dashboardNoRows = "No active days in this range."
+  static let dashboardInput = "Input"
+  static let dashboardCache = "Cache"
+  static let dashboardOutput = "Output"
+  static let dashboardNoDataPlaceholder = "—"
 
 }

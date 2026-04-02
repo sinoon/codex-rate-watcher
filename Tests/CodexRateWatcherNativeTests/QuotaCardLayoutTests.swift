@@ -14,20 +14,17 @@ final class QuotaCardLayoutTests: XCTestCase {
 
   private var vc: PopoverViewController!
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
+    try await super.setUp()
     let monitor = UsageMonitor()
     vc = PopoverViewController(monitor: monitor)
-    // Force view load to trigger buildLayout
-    vc.loadView()
-    vc.viewDidLoad()
-    // Force layout so constraints resolve
+    _ = vc.view
     vc.view.layoutSubtreeIfNeeded()
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     vc = nil
-    super.tearDown()
+    try await super.tearDown()
   }
 
   // MARK: - Helpers
