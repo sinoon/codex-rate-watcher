@@ -570,6 +570,7 @@ final class UsageMonitor {
       rebuildEstimates()
       tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: now)
 
+      profiles = (try? await profileStore.captureCurrentAuthIfNeeded()) ?? profiles
       profiles = await profileStore.updateCurrentProfileValidation(snapshot: freshSnapshot)
       activeProfileID = await profileStore.currentProfileID()
 

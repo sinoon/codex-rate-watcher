@@ -203,6 +203,44 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     XCTAssertEqual(profiles.first?.accountID, "acct_live")
   }
 
+  func testValidateProfilesKeepsCurrentLiveAuthWhenManagedHomeIsStale() async throws {
+    let harness = try makeHarness()
+    let liveData = Self.makeAuthData(
+      email: "current@example.com",
+      accountID: "acct_current",
+      accessTokenSuffix: "live-current"
+    )
+    let staleManagedData = Self.makeAuthData(
+      email: "current@example.com",
+      accountID: "acct_current",
+      accessTokenSuffix: "managed-stale"
+    )
+    try liveData.write(to: harness.liveAuthURL, options: .atomic)
+    try staleManagedData.write(to: harness.managedAuthURL, options: .atomic)
+
+    let managedAccount = ManagedCodexAccount(
+      id: UUID(),
+      email: "current@example.com",
+      managedHomePath: harness.managedHomeURL.path,
+      accountID: "acct_current",
+      createdAt: Date(),
+      updatedAt: Date(),
+      lastAuthenticatedAt: Date()
+    )
+    try harness.accountStore.storeAccounts(ManagedCodexAccountSet(accounts: [managedAccount]))
+
+    let profiles = try await harness.store.captureCurrentAuthIfNeeded()
+    let profile = try XCTUnwrap(profiles.first)
+    let snapshotURL = harness.paths.profilesDirectory.appending(path: profile.snapshotFileName)
+
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), liveData)
+
+    _ = await harness.store.validateProfiles(using: Self.makeUsageAPIClient())
+
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), liveData)
+    XCTAssertEqual(try Data(contentsOf: harness.managedAuthURL), liveData)
+  }
+
   private func makeHarness() throws -> AuthProfileHarness {
     let rootURL = tempDir.appending(path: "app-support", directoryHint: .isDirectory)
     let paths = AuthProfileStorePaths(

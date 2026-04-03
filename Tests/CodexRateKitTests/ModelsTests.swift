@@ -124,6 +124,76 @@ final class ModelsTests: XCTestCase {
     XCTAssertNil(snapshot.rateLimit.secondaryWindow)
   }
 
+  func testDecodeSnapshotWithNullCodeReviewRateLimit() throws {
+    let json = """
+    {
+      "plan_type": "team",
+      "rate_limit": {
+        "allowed": true,
+        "limit_reached": false,
+        "primary_window": {
+          "used_percent": 99.0,
+          "limit_window_seconds": 18000,
+          "reset_after_seconds": 17422,
+          "reset_at": 1775205433
+        },
+        "secondary_window": {
+          "used_percent": 12.0,
+          "limit_window_seconds": 604800,
+          "reset_after_seconds": 604222,
+          "reset_at": 1775792233
+        }
+      },
+      "code_review_rate_limit": null,
+      "credits": {
+        "has_credits": false,
+        "unlimited": false
+      }
+    }
+    """.data(using: .utf8)!
+
+    let snapshot = try JSONDecoder().decode(UsageSnapshot.self, from: json)
+    XCTAssertEqual(snapshot.planType, "team")
+    XCTAssertEqual(snapshot.codeReviewRateLimit.primaryWindow.usedPercent, 0.0, accuracy: 0.001)
+    XCTAssertTrue(snapshot.codeReviewRateLimit.allowed)
+    XCTAssertFalse(snapshot.codeReviewRateLimit.limitReached)
+    XCTAssertEqual(
+      snapshot.codeReviewRateLimit.primaryWindow.resetAt,
+      snapshot.rateLimit.primaryWindow.resetAt,
+      accuracy: 0.1
+    )
+  }
+
+  func testDecodeSnapshotWithEmptyCodeReviewRateLimit() throws {
+    let json = """
+    {
+      "plan_type": "team",
+      "rate_limit": {
+        "allowed": true,
+        "limit_reached": false,
+        "primary_window": {
+          "used_percent": 42.0,
+          "limit_window_seconds": 18000,
+          "reset_after_seconds": 1200,
+          "reset_at": 1775205433
+        }
+      },
+      "code_review_rate_limit": {},
+      "credits": {
+        "has_credits": false,
+        "unlimited": false
+      }
+    }
+    """.data(using: .utf8)!
+
+    let snapshot = try JSONDecoder().decode(UsageSnapshot.self, from: json)
+    XCTAssertEqual(snapshot.codeReviewRateLimit.primaryWindow.usedPercent, 0.0, accuracy: 0.001)
+    XCTAssertEqual(
+      snapshot.codeReviewRateLimit.primaryWindow.limitWindowSeconds,
+      snapshot.rateLimit.primaryWindow.limitWindowSeconds
+    )
+  }
+
   // MARK: - LimitWindow Computed Properties
 
   func testLimitWindowRemainingPercentNormal() {

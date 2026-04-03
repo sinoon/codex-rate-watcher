@@ -17,7 +17,8 @@ public struct UsageSnapshot: Decodable, Sendable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     planType = try container.decode(String.self, forKey: .planType)
     rateLimit = try container.decode(UsageLimit.self, forKey: .rateLimit)
-    codeReviewRateLimit = try container.decode(UsageLimit.self, forKey: .codeReviewRateLimit)
+    codeReviewRateLimit = (try? container.decodeIfPresent(UsageLimit.self, forKey: .codeReviewRateLimit))
+      ?? UsageLimit.reviewFallback(from: rateLimit.primaryWindow)
     credits = try container.decode(Credits.self, forKey: .credits)
   }
 }
@@ -35,12 +36,37 @@ public struct UsageLimit: Decodable, Sendable {
     case secondaryWindow = "secondary_window"
   }
 
+  public init(
+    allowed: Bool,
+    limitReached: Bool,
+    primaryWindow: LimitWindow,
+    secondaryWindow: LimitWindow? = nil
+  ) {
+    self.allowed = allowed
+    self.limitReached = limitReached
+    self.primaryWindow = primaryWindow
+    self.secondaryWindow = secondaryWindow
+  }
+
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     allowed = try container.decode(Bool.self, forKey: .allowed)
     limitReached = try container.decode(Bool.self, forKey: .limitReached)
     primaryWindow = try container.decode(LimitWindow.self, forKey: .primaryWindow)
     secondaryWindow = try container.decodeIfPresent(LimitWindow.self, forKey: .secondaryWindow)
+  }
+
+  static func reviewFallback(from primaryWindow: LimitWindow) -> UsageLimit {
+    UsageLimit(
+      allowed: true,
+      limitReached: false,
+      primaryWindow: LimitWindow(
+        usedPercent: 0,
+        limitWindowSeconds: primaryWindow.limitWindowSeconds,
+        resetAfterSeconds: primaryWindow.resetAfterSeconds,
+        resetAt: primaryWindow.resetAt
+      )
+    )
   }
 }
 
@@ -55,6 +81,18 @@ public struct LimitWindow: Decodable, Sendable {
     case limitWindowSeconds = "limit_window_seconds"
     case resetAfterSeconds = "reset_after_seconds"
     case resetAt = "reset_at"
+  }
+
+  public init(
+    usedPercent: Double,
+    limitWindowSeconds: Int,
+    resetAfterSeconds: Int,
+    resetAt: TimeInterval
+  ) {
+    self.usedPercent = usedPercent
+    self.limitWindowSeconds = limitWindowSeconds
+    self.resetAfterSeconds = resetAfterSeconds
+    self.resetAt = resetAt
   }
 
   public init(from decoder: Decoder) throws {

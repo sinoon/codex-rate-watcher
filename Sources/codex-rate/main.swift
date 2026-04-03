@@ -405,7 +405,9 @@ private func runProfiles(json: Bool) {
   let records: [AuthProfileRecord]
   do {
     let data = try Data(contentsOf: url)
-    records = try JSONDecoder().decode([AuthProfileRecord].self, from: data)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    records = try decoder.decode([AuthProfileRecord].self, from: data)
   } catch {
     exitWithError("Failed to read profiles: \(error.localizedDescription)")
   }
@@ -708,7 +710,9 @@ private func runRelay(strategyName: String, json: Bool) async {
   let records: [AuthProfileRecord]
   do {
     let data = try Data(contentsOf: url)
-    records = try JSONDecoder().decode([AuthProfileRecord].self, from: data)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    records = try decoder.decode([AuthProfileRecord].self, from: data)
   } catch {
     exitWithError("Failed to read profiles: \(error.localizedDescription)")
   }

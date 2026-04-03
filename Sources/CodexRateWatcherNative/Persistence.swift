@@ -291,6 +291,7 @@ actor AuthProfileStore {
 
   private func storeEnvelopeIfNeeded(_ envelope: AuthEnvelope) throws -> [AuthProfileRecord] {
     try createDirectoriesIfNeeded()
+    syncManagedHomeIfNeeded(for: envelope)
     var profiles = try readProfiles()
     let now = Date()
 
@@ -343,6 +344,28 @@ actor AuthProfileStore {
 
     try writeProfiles(profiles)
     return sortProfiles(profiles)
+  }
+
+  private func syncManagedHomeIfNeeded(for envelope: AuthEnvelope) {
+    guard let accountID = normalizeAccountID(envelope.snapshot.accountID),
+          let managedAccounts = try? managedAccountStore.loadAccounts(),
+          let account = managedAccounts.accounts.first(where: {
+            normalizeAccountID($0.accountID) == accountID
+          }) else {
+      return
+    }
+
+    let managedURL = managedAuthURL(for: account)
+    let existingData = try? Data(contentsOf: managedURL)
+    guard existingData != envelope.rawData else {
+      return
+    }
+
+    try? fileManager.createDirectory(
+      at: managedURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true
+    )
+    try? envelope.rawData.write(to: managedURL, options: .atomic)
   }
 
   private func readProfiles() throws -> [AuthProfileRecord] {
