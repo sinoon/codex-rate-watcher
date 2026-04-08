@@ -70,6 +70,14 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 管理多个 ChatGPT Pro 或 Team 账号？应用自动捕获认证快照，并通过**加权可用性算法**为每个配置文件评分（主配额 × 3.2 + 周配额 × 0.45 + 审查 × 0.08，低余额惩罚）。一键切换，当前认证自动备份。
 
+### 🍎 Apple 渠道订阅也能用
+
+如果你的 ChatGPT Plus 是通过 App Store 订阅的，也没问题。Codex Rate Watcher 读取的是你本机的 Codex 登录态，而不是支付渠道。
+
+<p>
+  <img src="docs/apple-receipt.jpg" width="520" alt="Apple 收据：通过 App Store 订阅 ChatGPT Plus（月度）" />
+</p>
+
 ### 🔄 自愈式配置文件存储
 
 **孤儿快照自动整合引擎**在启动时扫描配置文件目录，自动发现未索引的认证快照并注册（SHA256 指纹去重）。即使索引文件损坏，你的账号也不会丢失。

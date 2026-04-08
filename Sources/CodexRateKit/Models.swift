@@ -479,7 +479,41 @@ extension AuthProfileUsageSummary {
   }
 
   public var switchSummaryText: String {
+    let baseText = switchSummaryBaseText
+
+    if isWeeklyExhausted || isPrimaryExhausted {
+      if let resetLabel = nextBlockingResetLabel {
+        return "\(baseText) · \(resetLabel) 重置"
+      }
+      return baseText
+    }
+
+    return baseText
+  }
+
+  public var profileListSummaryText: String {
+    let baseText = switchSummaryBaseText
+
+    guard let resetAt = nextRelevantResetAt,
+          let resetSummary = QuotaTimeFormatter.resetCountdownLabel(
+            for: resetAt,
+            timeZone: .autoupdatingCurrent
+          ) else {
+      return baseText
+    }
+
+    return "\(baseText) · \(resetSummary)"
+  }
+
+  private var switchSummaryBaseText: String {
     if let blockingLabel {
+      if isWeeklyExhausted {
+        return "周额度耗尽"
+      }
+      if isPrimaryExhausted {
+        let weeklyLabel = secondaryRemainingPercentLabel.map { "周 \($0)" } ?? "周 --"
+        return "5h耗尽 · \(weeklyLabel)"
+      }
       return blockingLabel
     }
     if let secondaryRemainingPercentLabel {
@@ -512,32 +546,24 @@ extension AuthProfileUsageSummary {
     return nil
   }
 
+  public var nextRelevantResetAt: TimeInterval? {
+    if let blockingResetAt = nextBlockingResetAt {
+      return blockingResetAt
+    }
+    return primaryResetAt
+  }
+
   /// Format a reset timestamp into a human-readable label.
   /// - Within today: "14:30"
   /// - Tomorrow: "明天 14:30"
   /// - Further: "3月22日"
   private func nextResetLabel(for resetAt: TimeInterval?) -> String? {
     guard let resetAt else { return nil }
-    let date = Date(timeIntervalSince1970: resetAt)
-    let now = Date()
-
-    // Already past
-    guard date > now else { return nil }
-
-    let calendar = Calendar.current
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "zh_Hans_CN")
-
-    if calendar.isDateInToday(date) {
-      formatter.dateFormat = "HH:mm"
-      return formatter.string(from: date)
-    } else if calendar.isDateInTomorrow(date) {
-      formatter.dateFormat = "HH:mm"
-      return "明天 \(formatter.string(from: date))"
-    } else {
-      formatter.dateFormat = "M月d日"
-      return formatter.string(from: date)
-    }
+    return QuotaTimeFormatter.resetLabel(
+      for: resetAt,
+      timeZone: .autoupdatingCurrent,
+      style: .chineseMonthDay
+    )
   }
 }
 

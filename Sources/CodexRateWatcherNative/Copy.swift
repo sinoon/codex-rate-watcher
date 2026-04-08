@@ -1,4 +1,5 @@
 import Foundation
+import CodexRateKit
 
 // MARK: - Centralized Copy (文案统一管理)
 //
@@ -17,37 +18,12 @@ enum Copy {
 
   /// Compact duration: "2h10m", "45m", "3天2h"
   static func duration(_ interval: TimeInterval) -> String {
-    let totalMinutes = max(0, Int(interval / 60))
-    let days = totalMinutes / (60 * 24)
-    let hours = (totalMinutes % (60 * 24)) / 60
-    let minutes = totalMinutes % 60
-
-    if days > 0 {
-      return hours > 0 ? "\(days)天\(hours)h" : "\(days)天"
-    }
-    if hours > 0 {
-      return minutes > 0 ? "\(hours)h\(minutes)m" : "\(hours)h"
-    }
-    return "\(max(1, minutes))m"
+    QuotaTimeFormatter.durationLabel(interval)
   }
 
   /// Compact date: "16:09" (today) / "明天 14:30" / "3/22"
   static func resetDate(_ resetAt: TimeInterval) -> String {
-    let date = Date(timeIntervalSince1970: resetAt)
-    let cal = Calendar.current
-    let fmt = DateFormatter()
-    fmt.locale = Locale(identifier: "zh_Hans_CN")
-
-    if cal.isDateInToday(date) {
-      fmt.dateFormat = "HH:mm"
-      return fmt.string(from: date)
-    }
-    if cal.isDateInTomorrow(date) {
-      fmt.dateFormat = "HH:mm"
-      return "明天 \(fmt.string(from: date))"
-    }
-    fmt.dateFormat = "M/d"
-    return fmt.string(from: date)
+    QuotaTimeFormatter.resetLabel(for: resetAt, timeZone: TimeZone.autoupdatingCurrent) ?? "--"
   }
 
   // MARK: - Primary Hero Area

@@ -86,6 +86,13 @@ Managing multiple ChatGPT Pro or Team accounts? Covered.
 - **Plan badges** — Plus vs. Team clearly labeled in the UI
 - **Self-healing store** — orphaned snapshots are auto-discovered and registered on startup (SHA256-deduplicated)
 
+### 🍎 Apple-Billed Subscriptions Work Too
+
+If your ChatGPT Plus subscription is billed through the App Store, that is fine too. Codex Rate Watcher reads the local Codex auth session on your Mac, not your payment channel.
+
+<p>
+  <img src="docs/apple-receipt.jpg" width="520" alt="Apple receipt showing a ChatGPT Plus monthly subscription billed through the App Store" />
+</p>
 
 ### 🔄 Auto-Switch
 
@@ -406,6 +413,7 @@ codex-rate-watcher/
 │       └── history.tsx
 ├── scripts/build_app.sh
 ├── docs/
+│   ├── apple-receipt.jpg
 │   ├── screenshot.jpg
 │   └── v1.4.0-design.md
 └── README.md

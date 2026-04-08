@@ -1517,7 +1517,7 @@ final class PopoverViewController: NSViewController {
     if rec.kind == .switchNow, let pid = rec.recommendedProfileID {
       recWrapper?.isHidden = false
       recProfileID = pid
-      recLabel.stringValue = rec.headline
+      recLabel.stringValue = recommendationText(headline: rec.headline, detail: rec.detail)
       recBanner.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.08).cgColor
       recBanner.layer?.borderColor = LN.yellow.withAlphaComponent(0.15).cgColor
       recIcon.stringValue = "\u{26A1}"
@@ -1528,24 +1528,36 @@ final class PopoverViewController: NSViewController {
     } else if rec.kind == .noAvailable {
       recWrapper?.isHidden = false
       recProfileID = nil
-      recLabel.stringValue = rec.headline + " \u{00B7} " + rec.detail
+      recLabel.stringValue = recommendationText(headline: rec.headline, detail: rec.detail)
       recBanner.layer?.backgroundColor = LN.red.withAlphaComponent(0.06).cgColor
       recBanner.layer?.borderColor = LN.red.withAlphaComponent(0.12).cgColor
       recIcon.stringValue = "\u{26A0}"
       recIcon.textColor = LN.red
       recBtn.isHidden = true
-    } else if rec.kind == .stay, rec.headline == Copy.recStayLow {
+    } else if rec.kind == .stay {
       recWrapper?.isHidden = false
       recProfileID = nil
-      recLabel.stringValue = rec.headline + " \u{00B7} " + rec.detail
-      recBanner.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.08).cgColor
-      recBanner.layer?.borderColor = LN.yellow.withAlphaComponent(0.15).cgColor
-      recIcon.stringValue = "\u{23ED}"
-      recIcon.textColor = LN.yellow
+      recLabel.stringValue = recommendationText(headline: rec.headline, detail: rec.detail)
+      if rec.headline == Copy.recStayLow {
+        recBanner.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.08).cgColor
+        recBanner.layer?.borderColor = LN.yellow.withAlphaComponent(0.15).cgColor
+        recIcon.stringValue = "\u{23ED}"
+        recIcon.textColor = LN.yellow
+      } else {
+        recBanner.layer?.backgroundColor = LN.blue.withAlphaComponent(0.10).cgColor
+        recBanner.layer?.borderColor = LN.blue.withAlphaComponent(0.16).cgColor
+        recIcon.stringValue = "\u{2713}"
+        recIcon.textColor = LN.blue
+      }
       recBtn.isHidden = true
     } else {
       recWrapper?.isHidden = true
     }
+  }
+
+  private func recommendationText(headline: String, detail: String) -> String {
+    guard !detail.isEmpty else { return headline }
+    return "\(headline)\n\(detail)"
   }
 
   private func renderProfiles(state: UsageMonitor.State) {
@@ -1664,20 +1676,21 @@ private final class ProfileRowView: NSView {
     addSubview(switchBtn)
 
     NSLayoutConstraint.activate([
-      heightAnchor.constraint(equalToConstant: 36),
+      heightAnchor.constraint(equalToConstant: 48),
 
       dot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-      dot.centerYAnchor.constraint(equalTo: centerYAnchor),
+      dot.centerYAnchor.constraint(equalTo: nameLabel.centerYAnchor),
       dot.widthAnchor.constraint(equalToConstant: 6),
       dot.heightAnchor.constraint(equalToConstant: 6),
 
       nameLabel.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 6),
-      nameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-      nameLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 120),
+      nameLabel.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+      nameLabel.trailingAnchor.constraint(lessThanOrEqualTo: switchBtn.leadingAnchor, constant: -6),
 
-      usageLabel.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 6),
-      usageLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+      usageLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+      usageLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 2),
       usageLabel.trailingAnchor.constraint(lessThanOrEqualTo: switchBtn.leadingAnchor, constant: -6),
+      usageLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -7),
 
       switchBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
       switchBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -1702,12 +1715,12 @@ private final class ProfileRowView: NSView {
       switchBtn.isEnabled = false
     case .waitingForReset:
       accent = LN.yellow
-      usageLabel.stringValue = profile.latestUsage?.switchSummaryText ?? profile.statusText
+      usageLabel.stringValue = profile.latestUsage?.profileListSummaryText ?? profile.statusText
       layer?.backgroundColor = LN.yellow.withAlphaComponent(0.08).cgColor
-      switchBtn.title = " Wait "
+      switchBtn.title = " Use "
       switchBtn.layer?.backgroundColor = LN.yellow.withAlphaComponent(0.12).cgColor
       switchBtn.contentTintColor = LN.yellow
-      switchBtn.isEnabled = false
+      switchBtn.isEnabled = !isBusy
     case .ready:
       guard let usage = profile.latestUsage else {
         accent = LN.textMuted
@@ -1722,7 +1735,7 @@ private final class ProfileRowView: NSView {
       }
       let pct = usage.effectiveRemainingPercent
       accent = PopoverViewController.accentColor(for: pct)
-      usageLabel.stringValue = usage.switchSummaryText
+      usageLabel.stringValue = usage.profileListSummaryText
       layer?.backgroundColor = LN.surfaceHover.cgColor
       if isRecommended {
         switchBtn.title = " Recommend "
