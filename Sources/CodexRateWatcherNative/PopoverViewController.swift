@@ -46,6 +46,7 @@ private enum LN {
 final class PopoverViewController: NSViewController {
   private let monitor: UsageMonitor
   private var observerID: UUID?
+  private var latestTokenCostSnapshot: TokenCostSnapshot?
 
   // Header
   private let titleLabel    = NSTextField(labelWithString: "Codex Rate Watcher")
@@ -101,6 +102,7 @@ final class PopoverViewController: NSViewController {
   private var costCardView: HoverTrackingView!
   private let costSectionLabel = NSTextField(labelWithString: "")
   private let costDashboardButton = NSButton()
+  private let costShareButton = NSButton()
   private let costHourLabel = NSTextField(labelWithString: "")
   private let costTodayLabel = NSTextField(labelWithString: "")
   private let costUtilLabel = NSTextField(labelWithString: "")
@@ -113,6 +115,7 @@ final class PopoverViewController: NSViewController {
   private var costSparklineBarFrames: [CGRect] = []
   private var costHoverPanelLeading: NSLayoutConstraint?
   private let costHoverPanelWidth: CGFloat = 268
+  private let costSharePopover = NSPopover()
 
   // Mode card
   private var modeWrapper: NSView!
@@ -764,6 +767,22 @@ final class PopoverViewController: NSViewController {
     costDashboardButton.action = #selector(openDashboardTapped)
     costDashboardButton.translatesAutoresizingMaskIntoConstraints = false
 
+    costShareButton.title = Copy.costShare
+    costShareButton.bezelStyle = .inline
+    costShareButton.isBordered = false
+    costShareButton.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    costShareButton.contentTintColor = LN.purple
+    costShareButton.target = self
+    costShareButton.action = #selector(openCostShareTapped)
+    costShareButton.translatesAutoresizingMaskIntoConstraints = false
+
+    let headerButtons = NSStackView(views: [costDashboardButton, costShareButton])
+    headerButtons.orientation = .horizontal
+    headerButtons.alignment = .centerY
+    headerButtons.spacing = 8
+    headerButtons.translatesAutoresizingMaskIntoConstraints = false
+    headerButtons.setContentHuggingPriority(.required, for: .horizontal)
+
     // Use smaller font so 3 metrics fit side by side
     costHourLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontBody, weight: .semibold)
     costHourLabel.textColor = LN.green
@@ -837,7 +856,7 @@ final class PopoverViewController: NSViewController {
     costHoverBodyLabel.translatesAutoresizingMaskIntoConstraints = false
 
     card.addSubview(costSectionLabel)
-    card.addSubview(costDashboardButton)
+    card.addSubview(headerButtons)
     card.addSubview(metricsStack)
     card.addSubview(costSparklineView)
     card.addSubview(costSublineLabel)
@@ -850,10 +869,10 @@ final class PopoverViewController: NSViewController {
     NSLayoutConstraint.activate([
       costSectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       costSectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
-      costSectionLabel.trailingAnchor.constraint(lessThanOrEqualTo: costDashboardButton.leadingAnchor, constant: -8),
+      costSectionLabel.trailingAnchor.constraint(lessThanOrEqualTo: headerButtons.leadingAnchor, constant: -8),
 
-      costDashboardButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      costDashboardButton.centerYAnchor.constraint(equalTo: costSectionLabel.centerYAnchor),
+      headerButtons.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      headerButtons.centerYAnchor.constraint(equalTo: costSectionLabel.centerYAnchor),
 
       metricsStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       metricsStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
@@ -1166,8 +1185,25 @@ final class PopoverViewController: NSViewController {
   }
 
   @objc private func openDashboardTapped() {
+    costSharePopover.performClose(nil)
     guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
     appDelegate.showTokenCostDashboard()
+  }
+
+  @objc private func openCostShareTapped() {
+    if costSharePopover.isShown {
+      costSharePopover.performClose(nil)
+      return
+    }
+
+    guard let previewController = makeCostSharePreviewController() else {
+      return
+    }
+
+    costSharePopover.behavior = .semitransient
+    costSharePopover.animates = true
+    costSharePopover.contentViewController = previewController
+    costSharePopover.show(relativeTo: costShareButton.bounds, of: costShareButton, preferredEdge: .maxX)
   }
 
   @objc private func recSwitchTapped() {
@@ -1340,15 +1376,20 @@ final class PopoverViewController: NSViewController {
   // MARK: - Render Cost Card
 
   private func renderCost(state: UsageMonitor.State) {
+    latestTokenCostSnapshot = state.tokenCostSnapshot
+
     guard let tokenCostSnapshot = state.tokenCostSnapshot else {
       costWrapper?.isHidden = true
+      costShareButton.isEnabled = false
       costVisibleDailyEntries = []
       costSparklineBarFrames = []
       updateCostToolTip(nil)
       setCostHoverVisible(false)
+      costSharePopover.performClose(nil)
       return
     }
     costWrapper?.isHidden = false
+    costShareButton.isEnabled = tokenCostSnapshot.hasAnyData
 
     guard tokenCostSnapshot.hasAnyData else {
       costHourLabel.stringValue = Copy.costNoLocalData
@@ -1365,6 +1406,7 @@ final class PopoverViewController: NSViewController {
       costHoverTitleLabel.stringValue = Copy.costSectionTitle
       costHoverBodyLabel.stringValue = Copy.costNoLocalData
       setCostHoverVisible(false)
+      costSharePopover.performClose(nil)
       return
     }
 
@@ -1396,6 +1438,18 @@ final class PopoverViewController: NSViewController {
       costHoverBodyLabel.stringValue = Copy.costNoLocalData
       setCostHoverVisible(false)
     }
+  }
+
+  private func makeCostSharePreviewController() -> TokenCostSharePreviewViewController? {
+    guard let latestTokenCostSnapshot, latestTokenCostSnapshot.hasAnyData else {
+      return nil
+    }
+
+    return TokenCostSharePreviewViewController(snapshot: latestTokenCostSnapshot)
+  }
+
+  func makeCostSharePreviewControllerForTesting() -> TokenCostSharePreviewViewController? {
+    makeCostSharePreviewController()
   }
 
   private func costInlineSummaryText(for snapshot: TokenCostSnapshot) -> String {

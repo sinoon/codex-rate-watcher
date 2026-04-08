@@ -53,6 +53,221 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertNotNil(findButton(Copy.costOpenDashboard, in: viewController.view))
   }
 
+  func testPopoverCostCardShowsShareButton() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findButton("Share", in: viewController.view))
+  }
+
+  func testPopoverCanBuildLargeSharePreviewWithCopyImageAction() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState())
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findButton("Copy Image", in: previewController.view))
+
+    let image = try XCTUnwrap(previewController.renderImageForTesting())
+    XCTAssertGreaterThan(image.size.width, 700)
+    XCTAssertGreaterThan(image.size.height, 350)
+  }
+
+  func testSharePreviewUsesFullWidthChartStage() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState())
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let titleLabel = try XCTUnwrap(findLabel("Burn Pattern", in: previewController.view))
+    let chartHeader = try XCTUnwrap(titleLabel.superview)
+    let chartCard = try XCTUnwrap(chartHeader.superview)
+
+    XCTAssertGreaterThan(chartCard.frame.width, 680)
+  }
+
+  func testSharePreviewKeepsWindowCardsTallEnoughToShowMetrics() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let currentTitle = try XCTUnwrap(findLabel("CURRENT", in: previewController.view))
+    let currentCard = try XCTUnwrap(currentTitle.superview)
+
+    XCTAssertGreaterThanOrEqual(currentCard.frame.height, 140)
+  }
+
+  func testSharePreviewAlignsHeaderTitleToCopyButtonTitleCenter() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState())
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let titleLabel = try XCTUnwrap(findLabel(Copy.costSharePreviewTitle, in: previewController.view))
+    let button = try XCTUnwrap(findButton(Copy.costShareCopyImage, in: previewController.view))
+    let cell = try XCTUnwrap(button.cell as? NSButtonCell)
+
+    let titleRect = cell.titleRect(forBounds: button.bounds)
+    let buttonTitleMidY = button.frame.minY + titleRect.midY
+    let delta = abs(titleLabel.frame.midY - buttonTitleMidY)
+
+    XCTAssertLessThanOrEqual(delta, 1.0)
+  }
+
+  func testSharePreviewCentersBrandTextInsideBadgeChip() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState())
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let brandLabel = try XCTUnwrap(findLabel(Copy.costShareBrand.uppercased(), in: previewController.view))
+    let badgeChip = try XCTUnwrap(brandLabel.superview)
+    let delta = abs(brandLabel.frame.midY - badgeChip.bounds.midY)
+
+    XCTAssertLessThanOrEqual(delta, 1.0)
+  }
+
+  func testSharePreviewShowsCurrentSevenAndThirtyDayPeriodCards() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("CURRENT", in: previewController.view))
+    XCTAssertNotNil(findLabel("7D", in: previewController.view))
+    XCTAssertNotNil(findLabel("30D", in: previewController.view))
+
+    XCTAssertNotNil(findLabel("9.2K tokens", in: previewController.view))
+    XCTAssertNotNil(findLabel("40.0K tokens", in: previewController.view))
+    XCTAssertNotNil(findLabel("118.0K tokens", in: previewController.view))
+  }
+
+  func testSharePreviewShowsAverageSublineForWindowCards() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("Avg/day $1.21 · 5.7K tokens", in: previewController.view))
+    XCTAssertNotNil(findLabel("Avg/day $1.14 · 3.9K tokens", in: previewController.view))
+  }
+
+  func testSharePreviewRemovesLegacyThirtyDayHeroCopy() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNil(findLabel("30-DAY COST", in: previewController.view))
+    XCTAssertNil(findLabel("5 active days · Dominant gpt-5", in: previewController.view))
+  }
+
+  func testSharePreviewUsesCompactWindowDetailInsteadOfNarrativeSentence() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("Avg/day $1.14 · 3.9K tokens", in: previewController.view))
+    XCTAssertNil(findLabel("30D spend stayed elevated across 5 active days.", in: previewController.view))
+  }
+
+  func testSharePreviewTokenMetricKeepsFullTextHeightForDescenders() throws {
+    let snapshot = makeFullyPricedSnapshot(dominantModelName: "opt-5.4")
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: snapshot))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let metricLabel = try XCTUnwrap(findLabel("118.0K tokens", in: previewController.view))
+
+    XCTAssertGreaterThanOrEqual(
+      metricLabel.frame.height,
+      metricLabel.intrinsicContentSize.height
+    )
+  }
+
+  func testSharePreviewWindowDetailKeepsBottomPadding() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let detailLabel = try XCTUnwrap(findLabel("Avg/day $1.14 · 3.9K tokens", in: previewController.view))
+    let metricCard = try XCTUnwrap(detailLabel.superview)
+
+    XCTAssertGreaterThanOrEqual(detailLabel.frame.minY, 12)
+    XCTAssertGreaterThanOrEqual(metricCard.frame.height, 140)
+  }
+
   func testPopoverCostCardHoverShowsExpandedTokenCostContext() throws {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
@@ -357,7 +572,23 @@ final class TokenCostDashboardViewTests: XCTestCase {
     return try! JSONDecoder().decode(UsageSnapshot.self, from: data)
   }
 
-  private func makeSnapshot() -> TokenCostSnapshot {
+  private func makeState(snapshot: TokenCostSnapshot? = nil) -> UsageMonitor.State {
+    UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: snapshot ?? makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+  }
+
+  private func makeSnapshot(dominantModelName: String = "gpt-5") -> TokenCostSnapshot {
     let alerts = [
       TokenCostInsight(
         kind: "partial_pricing",
@@ -375,7 +606,7 @@ final class TokenCostDashboardViewTests: XCTestCase {
 
     let modelSummaries = [
       TokenCostModelSummary(
-        modelName: "gpt-5",
+        modelName: dominantModelName,
         inputTokens: 80_000,
         cacheReadTokens: 30_000,
         outputTokens: 12_000,
@@ -427,7 +658,7 @@ final class TokenCostDashboardViewTests: XCTestCase {
         averageDailyCostUSD: 1.21,
         activeDayCount: 4,
         cacheShare: 0.40,
-        dominantModelName: "gpt-5",
+        dominantModelName: dominantModelName,
         modelSummaries: modelSummaries,
         hourly: hourly,
         alerts: [],
@@ -442,7 +673,7 @@ final class TokenCostDashboardViewTests: XCTestCase {
         averageDailyCostUSD: nil,
         activeDayCount: 5,
         cacheShare: 0.38,
-        dominantModelName: "gpt-5",
+        dominantModelName: dominantModelName,
         modelSummaries: modelSummaries,
         hourly: hourly,
         alerts: alerts,
@@ -457,7 +688,7 @@ final class TokenCostDashboardViewTests: XCTestCase {
         averageDailyCostUSD: 1.31,
         activeDayCount: 12,
         cacheShare: 0.31,
-        dominantModelName: "gpt-5",
+        dominantModelName: dominantModelName,
         modelSummaries: modelSummaries,
         hourly: hourly,
         alerts: alerts,
@@ -485,6 +716,84 @@ final class TokenCostDashboardViewTests: XCTestCase {
       hasPartialPricing: true,
       daily: daily,
       updatedAt: Date(timeIntervalSince1970: 1_775_100_000)
+    )
+  }
+
+  private func makeFullyPricedSnapshot(dominantModelName: String = "gpt-5") -> TokenCostSnapshot {
+    let base = makeSnapshot(dominantModelName: dominantModelName)
+
+    let windows = base.windows.map { window in
+      switch window.windowDays {
+      case 30:
+        TokenCostWindowSummary(
+          windowDays: window.windowDays,
+          totalTokens: window.totalTokens,
+          totalCostUSD: 34.2,
+          averageDailyTokens: window.averageDailyTokens,
+          averageDailyCostUSD: 1.14,
+          activeDayCount: window.activeDayCount,
+          cacheShare: window.cacheShare,
+          dominantModelName: window.dominantModelName,
+          modelSummaries: window.modelSummaries,
+          hourly: window.hourly,
+          alerts: [],
+          narrative: window.narrative,
+          hasPartialPricing: false
+        )
+      case 7:
+        TokenCostWindowSummary(
+          windowDays: window.windowDays,
+          totalTokens: window.totalTokens,
+          totalCostUSD: window.totalCostUSD,
+          averageDailyTokens: window.averageDailyTokens,
+          averageDailyCostUSD: 1.21,
+          activeDayCount: window.activeDayCount,
+          cacheShare: window.cacheShare,
+          dominantModelName: window.dominantModelName,
+          modelSummaries: window.modelSummaries,
+          hourly: window.hourly,
+          alerts: window.alerts,
+          narrative: window.narrative,
+          hasPartialPricing: false
+        )
+      default:
+        window
+      }
+    }
+
+    let daily = base.daily.map { entry in
+      TokenCostDailyEntry(
+        date: entry.date,
+        inputTokens: entry.inputTokens,
+        cacheReadTokens: entry.cacheReadTokens,
+        outputTokens: entry.outputTokens,
+        totalTokens: entry.totalTokens,
+        costUSD: 3.4,
+        modelsUsed: entry.modelsUsed,
+        modelBreakdowns: entry.modelBreakdowns,
+        hourlyBreakdowns: entry.hourlyBreakdowns
+      )
+    }
+
+    return TokenCostSnapshot(
+      todayTokens: base.todayTokens,
+      todayCostUSD: 3.4,
+      last7DaysTokens: base.last7DaysTokens,
+      last7DaysCostUSD: 8.5,
+      last30DaysTokens: base.last30DaysTokens,
+      last30DaysCostUSD: 34.2,
+      last90DaysTokens: base.last90DaysTokens,
+      last90DaysCostUSD: base.last90DaysCostUSD,
+      averageDailyTokens: base.averageDailyTokens,
+      averageDailyCostUSD: 1.14,
+      modelSummaries: base.modelSummaries,
+      hourly: base.hourly,
+      alerts: [],
+      narrative: base.narrative,
+      windows: windows,
+      hasPartialPricing: false,
+      daily: daily,
+      updatedAt: base.updatedAt
     )
   }
 }

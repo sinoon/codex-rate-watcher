@@ -278,6 +278,13 @@ enum Copy {
 
   static let costSectionTitle = "TOKEN COST"
   static let costOpenDashboard = "Open Dashboard"
+  static let costShare = "Share"
+  static let costSharePreviewTitle = "Share Preview"
+  static let costSharePreviewSubtitle = "A larger card built from your local Codex session logs."
+  static let costShareCopyImage = "Copy Image"
+  static let costShareCopied = "Image copied to clipboard."
+  static let costShareBrand = "Codex Rate Watcher"
+  static let costShareNoData = "No local token cost data yet."
 
   static let costNoLocalData = "暂无本地会话数据"
   static let costTooltipTitle = "Token Cost Details"
