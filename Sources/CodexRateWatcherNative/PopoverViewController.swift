@@ -98,13 +98,21 @@ final class PopoverViewController: NSViewController {
 
   // Cost card
   private var costWrapper: NSView!
+  private var costCardView: HoverTrackingView!
   private let costSectionLabel = NSTextField(labelWithString: "")
   private let costDashboardButton = NSButton()
   private let costHourLabel = NSTextField(labelWithString: "")
   private let costTodayLabel = NSTextField(labelWithString: "")
   private let costUtilLabel = NSTextField(labelWithString: "")
-  private let costSparklineView = NSView()
+  private let costSparklineView = HoverTrackingView()
   private let costSublineLabel = NSTextField(labelWithString: "")
+  private let costHoverPanel = NSView()
+  private let costHoverTitleLabel = NSTextField(labelWithString: "")
+  private let costHoverBodyLabel = NSTextField(labelWithString: "")
+  private var costVisibleDailyEntries: [TokenCostDailyEntry] = []
+  private var costSparklineBarFrames: [CGRect] = []
+  private var costHoverPanelLeading: NSLayoutConstraint?
+  private let costHoverPanelWidth: CGFloat = 268
 
   // Mode card
   private var modeWrapper: NSView!
@@ -794,18 +802,48 @@ final class PopoverViewController: NSViewController {
 
     costSparklineView.wantsLayer = true
     costSparklineView.translatesAutoresizingMaskIntoConstraints = false
+    costCardView = costSparklineView
+    costSparklineView.onHoverLocationChanged = { [weak self] point in
+      self?.updateCostHover(for: point)
+    }
 
     costSublineLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
     costSublineLabel.textColor = LN.textTertiary
     costSublineLabel.lineBreakMode = .byWordWrapping
-    costSublineLabel.maximumNumberOfLines = 2
+    costSublineLabel.maximumNumberOfLines = 3
     costSublineLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    costHoverPanel.wantsLayer = true
+    costHoverPanel.layer?.backgroundColor = LN.bg.withAlphaComponent(0.98).cgColor
+    costHoverPanel.layer?.cornerRadius = LN.radiusSm
+    costHoverPanel.layer?.borderWidth = 1
+    costHoverPanel.layer?.borderColor = LN.border.cgColor
+    costHoverPanel.layer?.shadowColor = NSColor.black.withAlphaComponent(0.28).cgColor
+    costHoverPanel.layer?.shadowOpacity = 1
+    costHoverPanel.layer?.shadowRadius = 12
+    costHoverPanel.layer?.shadowOffset = CGSize(width: 0, height: -2)
+    costHoverPanel.isHidden = true
+    costHoverPanel.translatesAutoresizingMaskIntoConstraints = false
+
+    costHoverTitleLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    costHoverTitleLabel.textColor = LN.textPrimary
+    costHoverTitleLabel.stringValue = Copy.costTooltipTitle
+    costHoverTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    costHoverBodyLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
+    costHoverBodyLabel.textColor = LN.textSecondary
+    costHoverBodyLabel.lineBreakMode = .byWordWrapping
+    costHoverBodyLabel.maximumNumberOfLines = 0
+    costHoverBodyLabel.translatesAutoresizingMaskIntoConstraints = false
 
     card.addSubview(costSectionLabel)
     card.addSubview(costDashboardButton)
     card.addSubview(metricsStack)
     card.addSubview(costSparklineView)
     card.addSubview(costSublineLabel)
+    card.addSubview(costHoverPanel)
+    costHoverPanel.addSubview(costHoverTitleLabel)
+    costHoverPanel.addSubview(costHoverBodyLabel)
 
     let cPad = LN.cardPad
 
@@ -824,12 +862,29 @@ final class PopoverViewController: NSViewController {
       costSparklineView.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       costSparklineView.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
       costSparklineView.topAnchor.constraint(equalTo: metricsStack.bottomAnchor, constant: LN.gapSm),
-      costSparklineView.heightAnchor.constraint(equalToConstant: 24),
+      costSparklineView.heightAnchor.constraint(equalToConstant: 42),
 
       costSublineLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       costSublineLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
       costSublineLabel.topAnchor.constraint(equalTo: costSparklineView.bottomAnchor, constant: LN.gapXs),
       costSublineLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+
+      costHoverTitleLabel.leadingAnchor.constraint(equalTo: costHoverPanel.leadingAnchor, constant: 8),
+      costHoverTitleLabel.trailingAnchor.constraint(equalTo: costHoverPanel.trailingAnchor, constant: -8),
+      costHoverTitleLabel.topAnchor.constraint(equalTo: costHoverPanel.topAnchor, constant: 8),
+
+      costHoverBodyLabel.leadingAnchor.constraint(equalTo: costHoverPanel.leadingAnchor, constant: 8),
+      costHoverBodyLabel.trailingAnchor.constraint(equalTo: costHoverPanel.trailingAnchor, constant: -8),
+      costHoverBodyLabel.topAnchor.constraint(equalTo: costHoverTitleLabel.bottomAnchor, constant: 4),
+      costHoverBodyLabel.bottomAnchor.constraint(equalTo: costHoverPanel.bottomAnchor, constant: -8),
+    ])
+
+    let hoverLeading = costHoverPanel.leadingAnchor.constraint(equalTo: costSparklineView.leadingAnchor)
+    costHoverPanelLeading = hoverLeading
+    NSLayoutConstraint.activate([
+      hoverLeading,
+      costHoverPanel.widthAnchor.constraint(equalToConstant: costHoverPanelWidth),
+      costHoverPanel.bottomAnchor.constraint(equalTo: costSparklineView.topAnchor, constant: -8),
     ])
 
     wrapper.addSubview(card)
@@ -1287,6 +1342,10 @@ final class PopoverViewController: NSViewController {
   private func renderCost(state: UsageMonitor.State) {
     guard let tokenCostSnapshot = state.tokenCostSnapshot else {
       costWrapper?.isHidden = true
+      costVisibleDailyEntries = []
+      costSparklineBarFrames = []
+      updateCostToolTip(nil)
+      setCostHoverVisible(false)
       return
     }
     costWrapper?.isHidden = false
@@ -1299,8 +1358,13 @@ final class PopoverViewController: NSViewController {
       costUtilLabel.stringValue = "—"
       costHourLabel.textColor = LN.textTertiary
       costUtilLabel.textColor = LN.textTertiary
+      costVisibleDailyEntries = []
       drawSparkline([])
       costSublineLabel.stringValue = "运行 Codex 后会在这里显示本地 token 成本"
+      updateCostToolTip(nil)
+      costHoverTitleLabel.stringValue = Copy.costSectionTitle
+      costHoverBodyLabel.stringValue = Copy.costNoLocalData
+      setCostHoverVisible(false)
       return
     }
 
@@ -1313,10 +1377,6 @@ final class PopoverViewController: NSViewController {
     let last30CostLabel = tokenCostSnapshot.last30DaysCostUSD.map {
       TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
     } ?? "—"
-    let last30TokenLabel = tokenCostSnapshot.last30DaysTokens.map {
-      TokenCostFormatting.tokenCount($0)
-    } ?? "—"
-
     costHourLabel.stringValue = Copy.costTodayMetric(todayCostLabel)
     costHourLabel.textColor = tokenCostSnapshot.todayCostUSD == nil ? LN.textTertiary : LN.green
     costTodayLabel.stringValue = Copy.costTokenMetric(todayTokenLabel)
@@ -1324,38 +1384,209 @@ final class PopoverViewController: NSViewController {
     costUtilLabel.stringValue = Copy.costLast30DaysMetric(last30CostLabel)
     costUtilLabel.textColor = tokenCostSnapshot.last30DaysCostUSD == nil ? LN.textTertiary : LN.yellow
 
-    drawSparkline(tokenCostSnapshot.daily.suffix(30).map { $0.costUSD ?? 0 })
-
-    var parts: [String] = []
-    parts.append(Copy.costLast30DaysMetric(Copy.costTokenMetric(last30TokenLabel)))
-    if tokenCostSnapshot.activeDayCount > 0 {
-      parts.append(Copy.costActiveDays(tokenCostSnapshot.activeDayCount))
+    costVisibleDailyEntries = Array(tokenCostSnapshot.daily.suffix(30))
+    drawSparkline(costVisibleDailyEntries)
+    costSublineLabel.stringValue = costInlineSummaryText(for: tokenCostSnapshot)
+    updateCostToolTip(nil)
+    if let latestIndex = costVisibleDailyEntries.indices.last {
+      applyCostHover(entryAt: latestIndex)
+      setCostHoverVisible(false)
+    } else {
+      costHoverTitleLabel.stringValue = Copy.costSectionTitle
+      costHoverBodyLabel.stringValue = Copy.costNoLocalData
+      setCostHoverVisible(false)
     }
-    if tokenCostSnapshot.last30DaysCostUSD == nil, tokenCostSnapshot.last30DaysTokens != nil {
-      parts.append(Copy.costPartialPricing)
-    }
-    costSublineLabel.stringValue = parts.joined(separator: " · ")
   }
 
-  private func drawSparkline(_ data: [Double]) {
+  private func costInlineSummaryText(for snapshot: TokenCostSnapshot) -> String {
+    let window7 = snapshot.windowSummary(days: 7)
+    let window30 = snapshot.windowSummary(days: 30)
+
+    let line30 = Copy.costInlineRange(
+      days: 30,
+      cost: formattedTooltipUSD(snapshot.last30DaysCostUSD),
+      tokens: formattedTooltipTokens(snapshot.last30DaysTokens),
+      detail: Copy.costActiveDays(window30?.activeDayCount ?? snapshot.activeDayCount)
+    )
+
+    var sevenDayDetail = Copy.costTooltipLine(
+      title: Copy.costHoverCacheShare,
+      detail: formattedTooltipPercent(window7?.cacheShare)
+    )
+    if snapshot.hasPartialPricing {
+      sevenDayDetail += " · \(Copy.costPartialPricing)"
+    }
+
+    let line7 = Copy.costInlineRange(
+      days: 7,
+      cost: formattedTooltipUSD(snapshot.last7DaysCostUSD),
+      tokens: formattedTooltipTokens(snapshot.last7DaysTokens),
+      detail: sevenDayDetail.replacingOccurrences(of: ": ", with: " ")
+    )
+
+    return [line30, line7].joined(separator: "\n")
+  }
+
+  private func tokenCostHoverBody(for entry: TokenCostDailyEntry) -> String {
+    let dominantModel = entry.modelBreakdowns?.first?.modelName ?? "—"
+    let lines = [
+      Copy.costHoverHeadline(
+        date: entry.date,
+        cost: formattedTooltipUSD(entry.costUSD),
+        tokens: formattedTooltipTokens(entry.totalTokens)
+      ),
+      Copy.costHoverFlow(
+        input: formattedTooltipTokens(entry.inputTokens),
+        cache: formattedTooltipTokens(entry.cacheReadTokens),
+        output: formattedTooltipTokens(entry.outputTokens)
+      ),
+      Copy.costHoverContext(
+        cacheShare: formattedTooltipPercent(dailyCacheShare(for: entry)),
+        model: dominantModel
+      ),
+    ]
+    return lines.joined(separator: "\n")
+  }
+
+  private func dailyCacheShare(for entry: TokenCostDailyEntry) -> Double? {
+    guard let inputTokens = entry.inputTokens, inputTokens > 0, let cacheReadTokens = entry.cacheReadTokens else {
+      return nil
+    }
+    return Double(cacheReadTokens) / Double(inputTokens)
+  }
+
+  private func formattedTooltipUSD(_ value: Double?) -> String {
+    guard let value else { return "—" }
+    return TokenCostFormatting.usd(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
+  }
+
+  private func formattedTooltipTokens(_ value: Int?) -> String {
+    guard let value else { return "—" }
+    return TokenCostFormatting.tokenCount(value)
+  }
+
+  private func formattedTooltipPercent(_ value: Double?) -> String {
+    guard let value else { return "—" }
+    return "\(Int((value * 100).rounded()))%"
+  }
+
+  private func formattedTooltipTimestamp(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    formatter.timeZone = .autoupdatingCurrent
+    return formatter.string(from: date)
+  }
+
+  private func updateCostToolTip(_ toolTip: String?) {
+    guard let costCardView else { return }
+    applyToolTip(toolTip, to: costCardView)
+  }
+
+  private func updateCostHover(for point: CGPoint?) {
+    guard let point, let index = hoveredCostEntryIndex(for: point) else {
+      setCostHoverVisible(false)
+      return
+    }
+    applyCostHover(entryAt: index)
+    setCostHoverVisible(true)
+  }
+
+  private func hoveredCostEntryIndex(for point: CGPoint) -> Int? {
+    guard !costSparklineBarFrames.isEmpty else { return nil }
+
+    if let exactIndex = costSparklineBarFrames.firstIndex(where: { $0.insetBy(dx: -1, dy: -4).contains(point) }) {
+      return exactIndex
+    }
+
+    return costSparklineBarFrames.enumerated().min {
+      abs($0.element.midX - point.x) < abs($1.element.midX - point.x)
+    }?.offset
+  }
+
+  private func applyCostHover(entryAt index: Int) {
+    guard costVisibleDailyEntries.indices.contains(index), costSparklineBarFrames.indices.contains(index) else { return }
+
+    let entry = costVisibleDailyEntries[index]
+    let frame = costSparklineBarFrames[index]
+    costHoverTitleLabel.stringValue = entry.date
+    costHoverBodyLabel.stringValue = tokenCostHoverBody(for: entry)
+
+    let availableWidth = max(costSparklineView.bounds.width - costHoverPanelWidth, 0)
+    let targetLeading = max(0, min(frame.midX - (costHoverPanelWidth / 2), availableWidth))
+    costHoverPanelLeading?.constant = targetLeading
+    view.needsLayout = true
+    view.layoutSubtreeIfNeeded()
+  }
+
+  private func setCostHoverVisible(_ visible: Bool) {
+    guard costWrapper?.isHidden == false else {
+      costHoverPanel.isHidden = true
+      return
+    }
+    guard !(costHoverBodyLabel.stringValue.isEmpty || costHoverBodyLabel.stringValue == Copy.costNoLocalData) else {
+      costHoverPanel.isHidden = true
+      return
+    }
+    costHoverPanel.isHidden = !visible
+  }
+
+  @objc func setCostHoverVisibleForTesting(_ value: NSNumber) {
+    setCostHoverVisible(value.boolValue)
+  }
+
+  @objc func setCostHoverIndexForTesting(_ value: NSNumber) {
+    applyCostHover(entryAt: value.intValue)
+    setCostHoverVisible(true)
+  }
+
+  func costHoverPanelFrameForTesting() -> NSRect {
+    costHoverPanel.frame
+  }
+
+  func costSparklineFrameForTesting() -> NSRect {
+    costSparklineView.frame
+  }
+
+  func costHoverTargetFrameForTesting() -> NSRect {
+    costCardView?.frame ?? .zero
+  }
+
+  func costSublineTextForTesting() -> String {
+    costSublineLabel.stringValue
+  }
+
+  private func applyToolTip(_ toolTip: String?, to view: NSView) {
+    view.toolTip = toolTip
+    for subview in view.subviews {
+      applyToolTip(toolTip, to: subview)
+    }
+  }
+
+  private func drawSparkline(_ entries: [TokenCostDailyEntry]) {
     costSparklineView.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
-    guard !data.isEmpty else { return }
+    costSparklineBarFrames = []
+    guard !entries.isEmpty else { return }
+
+    let data = entries.map { max($0.costUSD ?? 0, 0) }
 
     let maxVal = max(data.max() ?? 1, 0.001)
     let w = costSparklineView.bounds.width
     let h = costSparklineView.bounds.height
     guard w > 0, h > 0 else { return }
 
-    let barWidth = max(2, (w - CGFloat(data.count - 1)) / CGFloat(data.count))
-    let spacing: CGFloat = 1
+    let spacing: CGFloat = data.count > 20 ? 2 : 3
+    let totalSpacing = spacing * CGFloat(max(data.count - 1, 0))
+    let barWidth = max(4, (w - totalSpacing) / CGFloat(data.count))
 
     for (i, val) in data.enumerated() {
-      let barH = max(1, CGFloat(val / maxVal) * h)
+      let barH = max(3, CGFloat(val / maxVal) * (h - 2))
       let x = CGFloat(i) * (barWidth + spacing)
+      let barFrame = CGRect(x: x, y: 0, width: barWidth, height: barH)
+      costSparklineBarFrames.append(barFrame)
       let bar = CALayer()
-      bar.frame = CGRect(x: x, y: 0, width: barWidth, height: barH)
+      bar.frame = barFrame
       bar.backgroundColor = val > 0 ? LN.green.withAlphaComponent(0.6).cgColor : LN.borderSubtle.cgColor
-      bar.cornerRadius = 1
+      bar.cornerRadius = 2
       costSparklineView.layer?.addSublayer(bar)
     }
   }
@@ -1761,4 +1992,43 @@ private final class ProfileRowView: NSView {
   }
 
   @objc private func tapped() { onSwitch?() }
+}
+
+final class HoverTrackingView: NSView {
+  var onHoverChanged: ((Bool) -> Void)?
+  var onHoverLocationChanged: ((CGPoint?) -> Void)?
+  private var trackingAreaRef: NSTrackingArea?
+
+  override func updateTrackingAreas() {
+    if let trackingAreaRef {
+      removeTrackingArea(trackingAreaRef)
+    }
+
+    let trackingArea = NSTrackingArea(
+      rect: bounds,
+      options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+      owner: self,
+      userInfo: nil
+    )
+    addTrackingArea(trackingArea)
+    trackingAreaRef = trackingArea
+    super.updateTrackingAreas()
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    super.mouseEntered(with: event)
+    onHoverLocationChanged?(convert(event.locationInWindow, from: nil))
+    onHoverChanged?(true)
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    super.mouseMoved(with: event)
+    onHoverLocationChanged?(convert(event.locationInWindow, from: nil))
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    super.mouseExited(with: event)
+    onHoverLocationChanged?(nil)
+    onHoverChanged?(false)
+  }
 }

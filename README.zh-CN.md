@@ -78,6 +78,14 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
   <img src="docs/apple-receipt.jpg" width="520" alt="Apple 收据：通过 App Store 订阅 ChatGPT Plus（月度）" />
 </p>
 
+### 💸 Token Cost 悬停详情
+
+现在 `Token Cost` 卡片已经支持按天悬停查看详情。鼠标沿着柱状图横向移动时，可以直接看到对应日期、当天成本、token 总量、cache 占比和主模型，不用再额外打开完整 dashboard。
+
+<p>
+  <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost 卡片悬停详情：展示单日日期、成本、tokens、cache 占比与主模型" />
+</p>
+
 ### 🔄 自愈式配置文件存储
 
 **孤儿快照自动整合引擎**在启动时扫描配置文件目录，自动发现未索引的认证快照并注册（SHA256 指纹去重）。即使索引文件损坏，你的账号也不会丢失。

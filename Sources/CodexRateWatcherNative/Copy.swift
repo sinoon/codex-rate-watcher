@@ -280,6 +280,25 @@ enum Copy {
   static let costOpenDashboard = "Open Dashboard"
 
   static let costNoLocalData = "暂无本地会话数据"
+  static let costTooltipTitle = "Token Cost Details"
+  static let costTooltipToday = "Today"
+  static let costTooltip7Days = "7d"
+  static let costTooltip30Days = "30d"
+  static let costTooltip90Days = "90d"
+  static let costTooltipAverageDay = "Avg/day (30d)"
+  static let costTooltipCacheShare = "Cache share (30d)"
+  static let costTooltipActiveDays = "Active days (30d)"
+  static let costTooltipDominantModel = "Dominant model (30d)"
+  static let costTooltipUpdated = "Updated"
+  static let costTooltipPartialPricing = "Partial pricing"
+  static let costHoverCost = "成本"
+  static let costHoverDate = "日期"
+  static let costHoverTokens = "Tokens"
+  static let costHoverInput = "输入"
+  static let costHoverCache = "Cache"
+  static let costHoverOutput = "输出"
+  static let costHoverCacheShare = "Cache 占比"
+  static let costHoverDominantModel = "主模型"
 
   static func costTodayMetric(_ value: String) -> String {
     "Today \(value)"
@@ -291,6 +310,30 @@ enum Copy {
 
   static func costTokenMetric(_ value: String) -> String {
     "\(value) tokens"
+  }
+
+  static func costTooltipLine(title: String, detail: String) -> String {
+    "\(title): \(detail)"
+  }
+
+  static func costTooltipMetricLine(title: String, cost: String, tokens: String) -> String {
+    "\(title): \(cost) · \(costTokenMetric(tokens))"
+  }
+
+  static func costInlineRange(days: Int, cost: String, tokens: String, detail: String) -> String {
+    "\(days)d \(cost) · \(costTokenMetric(tokens)) · \(detail)"
+  }
+
+  static func costHoverHeadline(date: String, cost: String, tokens: String) -> String {
+    "\(costHoverDate): \(date) · \(costHoverCost): \(cost) · \(costHoverTokens): \(tokens)"
+  }
+
+  static func costHoverFlow(input: String, cache: String, output: String) -> String {
+    "\(costHoverInput): \(input) · \(costHoverCache): \(cache) · \(costHoverOutput): \(output)"
+  }
+
+  static func costHoverContext(cacheShare: String, model: String) -> String {
+    "\(costHoverCacheShare): \(cacheShare) · \(costHoverDominantModel): \(model)"
   }
 
   static func costActiveDays(_ days: Int) -> String {

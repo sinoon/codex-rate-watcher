@@ -53,6 +53,220 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertNotNil(findButton(Copy.costOpenDashboard, in: viewController.view))
   }
 
+  func testPopoverCostCardHoverShowsExpandedTokenCostContext() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(
+      allViews(in: viewController.view)
+        .map(\.toolTip)
+        .allSatisfy { $0 == nil || $0?.isEmpty == true }
+    )
+  }
+
+  func testPopoverCostCardHoverPanelCanBeToggledForVisibleDetail() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let selector = NSSelectorFromString("setCostHoverIndexForTesting:")
+    XCTAssertTrue(viewController.responds(to: selector))
+
+    _ = viewController.perform(selector, with: 0)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("2026-04-01", in: viewController.view))
+    XCTAssertTrue(
+      allTextFields(in: viewController.view)
+        .map(\.stringValue)
+        .contains { $0.contains("日期: 2026-04-01 · 成本:") }
+    )
+    XCTAssertTrue(
+      allTextFields(in: viewController.view)
+        .map(\.stringValue)
+        .contains { $0.contains("主模型: gpt-5") }
+    )
+  }
+
+  func testPopoverCostHoverPanelFloatsNearSparklineInsteadOfCoveringIt() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    _ = viewController.perform(NSSelectorFromString("setCostHoverVisibleForTesting:"), with: true)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let panelFrame = viewController.costHoverPanelFrameForTesting()
+    let sparklineFrame = viewController.costSparklineFrameForTesting()
+
+    XCTAssertFalse(panelFrame.intersects(sparklineFrame))
+    XCTAssertLessThan(panelFrame.width, sparklineFrame.width - 40)
+  }
+
+  func testPopoverCostHoverTracksSparklineInsteadOfModeCard() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertEqual(
+      viewController.costHoverTargetFrameForTesting(),
+      viewController.costSparklineFrameForTesting()
+    )
+  }
+
+  func testPopoverCostCardShowsSevenDaySummaryInline() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(viewController.costSublineTextForTesting().contains("7d"))
+  }
+
+  func testPopoverCostSparklineUsesTallerChartForDailyHovering() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertGreaterThanOrEqual(viewController.costSparklineFrameForTesting().height, 40)
+  }
+
+  func testPopoverCostHoverCanFocusSpecificDay() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let selector = NSSelectorFromString("setCostHoverIndexForTesting:")
+    XCTAssertTrue(viewController.responds(to: selector))
+
+    _ = viewController.perform(selector, with: 0)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("2026-04-01", in: viewController.view))
+    XCTAssertTrue(
+      allTextFields(in: viewController.view)
+        .map(\.stringValue)
+        .contains { $0.contains("主模型") || $0.contains("gpt-5") }
+    )
+  }
+
   private func allTextFields(in view: NSView) -> [NSTextField] {
     var result: [NSTextField] = []
     for subview in view.subviews {
@@ -89,12 +303,58 @@ final class TokenCostDashboardViewTests: XCTestCase {
     return nil
   }
 
+  private func allViews(in view: NSView) -> [NSView] {
+    [view] + view.subviews.flatMap(allViews)
+  }
+
   private func findLabel(_ text: String, in view: NSView) -> NSTextField? {
     allTextFields(in: view).first { $0.stringValue == text }
   }
 
   private func findButton(_ title: String, in view: NSView) -> NSButton? {
     allButtons(in: view).first { $0.title == title }
+  }
+
+  private func makeUsageSnapshot() -> UsageSnapshot {
+    let data = Data(
+      """
+      {
+        "plan_type": "plus",
+        "rate_limit": {
+          "allowed": true,
+          "limit_reached": false,
+          "primary_window": {
+            "used_percent": 18,
+            "limit_window_seconds": 18000,
+            "reset_after_seconds": 7200,
+            "reset_at": 4102444800
+          },
+          "secondary_window": {
+            "used_percent": 22,
+            "limit_window_seconds": 604800,
+            "reset_after_seconds": 86400,
+            "reset_at": 4102444800
+          }
+        },
+        "code_review_rate_limit": {
+          "allowed": true,
+          "limit_reached": false,
+          "primary_window": {
+            "used_percent": 5,
+            "limit_window_seconds": 18000,
+            "reset_after_seconds": 7200,
+            "reset_at": 4102444800
+          }
+        },
+        "credits": {
+          "has_credits": false,
+          "unlimited": false
+        }
+      }
+      """.utf8
+    )
+
+    return try! JSONDecoder().decode(UsageSnapshot.self, from: data)
   }
 
   private func makeSnapshot() -> TokenCostSnapshot {

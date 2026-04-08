@@ -94,6 +94,14 @@ If your ChatGPT Plus subscription is billed through the App Store, that is fine 
   <img src="docs/apple-receipt.jpg" width="520" alt="Apple receipt showing a ChatGPT Plus monthly subscription billed through the App Store" />
 </p>
 
+### 💸 Token Cost Hover Detail
+
+The Token Cost card now exposes day-level hover detail right inside the popover. Move your cursor across the sparkline and you can inspect the exact day, spend, token volume, cache ratio, and dominant model without opening the full dashboard.
+
+<p>
+  <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost hover detail showing the exact day, spend, tokens, cache ratio, and dominant model for a single sparkline bar" />
+</p>
+
 ### 🔄 Auto-Switch
 
 v1.5.0 introduces automatic account switching — the app detects when your current account is running low and seamlessly switches to the best available profile.
@@ -414,6 +422,7 @@ codex-rate-watcher/
 ├── scripts/build_app.sh
 ├── docs/
 │   ├── apple-receipt.jpg
+│   ├── screenshot-token-cost-hover.jpg
 │   ├── screenshot.jpg
 │   └── v1.4.0-design.md
 └── README.md
