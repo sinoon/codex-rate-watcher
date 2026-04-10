@@ -192,8 +192,30 @@ final class TokenCostDashboardViewTests: XCTestCase {
     _ = previewController.view
     previewController.view.layoutSubtreeIfNeeded()
 
-    XCTAssertNotNil(findLabel("Avg/day $1.21 · 5.7K tokens", in: previewController.view))
-    XCTAssertNotNil(findLabel("Avg/day $1.14 · 3.9K tokens", in: previewController.view))
+    XCTAssertNotNil(findLabel("Avg/day 5.7K tokens", in: previewController.view))
+    XCTAssertNotNil(findLabel("Avg/day 3.9K tokens", in: previewController.view))
+  }
+
+  func testSharePreviewShowsApiPricedSpendAsSmallerDetailBelowTokenHeadline() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeFullyPricedSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let previewController = try XCTUnwrap(viewController.makeCostSharePreviewControllerForTesting())
+    _ = previewController.view
+    previewController.view.layoutSubtreeIfNeeded()
+
+    let currentCard = try XCTUnwrap(findLabel("CURRENT", in: previewController.view)?.superview)
+    let currentTokenLabel = try XCTUnwrap(findLabel("9.2K tokens", in: currentCard))
+    let currentCostLabel = try XCTUnwrap(findLabel("API priced $3.40", in: currentCard))
+
+    XCTAssertGreaterThan(currentTokenLabel.font?.pointSize ?? 0, currentCostLabel.font?.pointSize ?? 0)
+
+    XCTAssertNotNil(findLabel("API priced $8.50 · 4 active days", in: previewController.view))
+    XCTAssertNotNil(findLabel("API priced $34.20 · 5 active days", in: previewController.view))
   }
 
   func testSharePreviewRemovesLegacyThirtyDayHeroCopy() throws {
@@ -224,7 +246,7 @@ final class TokenCostDashboardViewTests: XCTestCase {
     _ = previewController.view
     previewController.view.layoutSubtreeIfNeeded()
 
-    XCTAssertNotNil(findLabel("Avg/day $1.14 · 3.9K tokens", in: previewController.view))
+    XCTAssertNotNil(findLabel("API priced $34.20 · 5 active days", in: previewController.view))
     XCTAssertNil(findLabel("30D spend stayed elevated across 5 active days.", in: previewController.view))
   }
 
@@ -261,7 +283,7 @@ final class TokenCostDashboardViewTests: XCTestCase {
     _ = previewController.view
     previewController.view.layoutSubtreeIfNeeded()
 
-    let detailLabel = try XCTUnwrap(findLabel("Avg/day $1.14 · 3.9K tokens", in: previewController.view))
+    let detailLabel = try XCTUnwrap(findLabel("API priced $34.20 · 5 active days", in: previewController.view))
     let metricCard = try XCTUnwrap(detailLabel.superview)
 
     XCTAssertGreaterThanOrEqual(detailLabel.frame.minY, 12)

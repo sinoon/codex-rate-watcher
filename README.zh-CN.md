@@ -82,6 +82,8 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 现在 `Token Cost` 卡片已经支持按天悬停查看详情。鼠标沿着柱状图横向移动时，可以直接看到对应日期、当天成本、token 总量、cache 占比和主模型，不用再额外打开完整 dashboard。
 
+分享预览卡片现在也改成了 **token 消耗优先** 的展示方式：大字主指标直接显示 token burn，按 API 价格估算出的金额下沉到小字说明里，导出的图片会先强调使用量，再补充价格语境。
+
 <p>
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost 卡片悬停详情：展示单日日期、成本、tokens、cache 占比与主模型" />
 </p>

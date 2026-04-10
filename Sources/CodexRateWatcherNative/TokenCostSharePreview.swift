@@ -362,32 +362,32 @@ private final class TokenCostShareCardView: NSView {
     let window30 = snapshot.windowSummary(days: 30)
     let hottestEntry = snapshot.daily
       .suffix(30)
-      .max { ($0.costUSD ?? 0) < ($1.costUSD ?? 0) }
+      .max { ($0.totalTokens ?? 0) < ($1.totalTokens ?? 0) }
 
     partialBadgeView.isHidden = !snapshot.hasPartialPricing
     updatedLabel.stringValue = "Updated \(formattedTimestamp(snapshot.updatedAt))"
 
     currentWindowView.configure(
       title: "CURRENT",
-      value: formattedUSD(snapshot.todayCostUSD),
-      metric: formattedTokensLabel(snapshot.todayTokens),
-      detail: "Local session burn today",
+      value: formattedTokensLabel(snapshot.todayTokens),
+      metric: "Local session burn",
+      detail: apiPricedSpendDetail(cost: snapshot.todayCostUSD),
       accent: ShareDesk.green
     )
 
     weekWindowView.configure(
       title: "7D",
-      value: formattedUSD(snapshot.last7DaysCostUSD),
-      metric: formattedTokensLabel(snapshot.last7DaysTokens),
-      detail: averageSummary(window: window7),
+      value: formattedTokensLabel(snapshot.last7DaysTokens),
+      metric: averageTokensSummary(window: window7),
+      detail: apiPricedSpendDetail(cost: snapshot.last7DaysCostUSD, activeDays: window7?.activeDayCount),
       accent: ShareDesk.accent
     )
 
     monthWindowView.configure(
       title: "30D",
-      value: formattedUSD(snapshot.last30DaysCostUSD),
-      metric: formattedTokensLabel(snapshot.last30DaysTokens),
-      detail: averageSummary(window: window30),
+      value: formattedTokensLabel(snapshot.last30DaysTokens),
+      metric: averageTokensSummary(window: window30),
+      detail: apiPricedSpendDetail(cost: snapshot.last30DaysCostUSD, activeDays: window30?.activeDayCount),
       accent: ShareDesk.yellow
     )
 
@@ -401,16 +401,16 @@ private final class TokenCostShareCardView: NSView {
   ) -> String {
     var parts: [String] = []
 
-    if let average = window?.averageDailyCostUSD {
-      parts.append("Avg \(formattedUSD(average)) / day")
-    } else if let averageTokens = window?.averageDailyTokens {
+    if let averageTokens = window?.averageDailyTokens {
       parts.append("Avg \(formattedAverageTokens(averageTokens)) tokens / day")
     }
 
-    if let hottestEntry,
-       let cost = hottestEntry.costUSD,
-       cost > 0 {
-      parts.append("Peak \(trimmedDate(hottestEntry.date)) \(formattedUSD(cost))")
+    if let average = window?.averageDailyCostUSD {
+      parts.append("API priced \(formattedUSD(average)) / day")
+    }
+
+    if let hottestEntry, (hottestEntry.totalTokens ?? 0) > 0 {
+      parts.append("Peak \(trimmedDate(hottestEntry.date)) \(formattedTokens(hottestEntry.totalTokens)) tokens")
     }
 
     if let activeDays = window?.activeDayCount {
@@ -446,26 +446,26 @@ private final class TokenCostShareCardView: NSView {
     return TokenCostFormatting.tokenCount(Int(value.rounded()))
   }
 
-  private func averageSummary(window: TokenCostWindowSummary?) -> String {
-    var parts: [String] = []
-
-    if let averageCost = window?.averageDailyCostUSD {
-      parts.append("Avg/day \(formattedUSD(averageCost))")
-    }
-
+  private func averageTokensSummary(window: TokenCostWindowSummary?) -> String {
     if let averageTokens = window?.averageDailyTokens {
-      parts.append("\(formattedAverageTokens(averageTokens)) tokens")
-    }
-
-    if !parts.isEmpty {
-      return parts.joined(separator: " · ")
+      return "Avg/day \(formattedAverageTokens(averageTokens)) tokens"
     }
 
     if let activeDays = window?.activeDayCount {
       return "\(activeDays) active days"
     }
 
-    return "Local session summary"
+    return "Local token summary"
+  }
+
+  private func apiPricedSpendDetail(cost: Double?, activeDays: Int? = nil) -> String {
+    var parts = ["API priced \(formattedUSD(cost))"]
+
+    if let activeDays {
+      parts.append("\(activeDays) active days")
+    }
+
+    return parts.joined(separator: " · ")
   }
 
   private func formattedTimestamp(_ value: Date) -> String {
@@ -628,16 +628,16 @@ private final class TokenCostShareBarChartView: NSView {
 
     guard !entries.isEmpty else { return }
 
-    let values = entries.map { max($0.costUSD ?? 0, 0) }
-    let maxValue = max(values.max() ?? 0, 0.001)
+    let values = entries.map { Double(Swift.max($0.totalTokens ?? 0, 0)) }
+    let maxValue = Swift.max(values.max() ?? 0, 1)
     let gap: CGFloat = entries.count > 18 ? 5 : 7
     let availableWidth = insetRect.width - gap * CGFloat(max(entries.count - 1, 0))
     let barWidth = max(10, availableWidth / CGFloat(entries.count))
 
     for (index, entry) in entries.enumerated() {
       let x = insetRect.minX + CGFloat(index) * (barWidth + gap)
-      let value = max(entry.costUSD ?? 0, 0)
-      let barHeight = max(8, CGFloat(value / maxValue) * maxHeight)
+      let value = Double(Swift.max(entry.totalTokens ?? 0, 0))
+      let barHeight = Swift.max(8, CGFloat(value / maxValue) * maxHeight)
       let barRect = CGRect(x: x, y: baseline, width: barWidth, height: barHeight)
 
       let baseColor = value > 0

@@ -98,6 +98,8 @@ If your ChatGPT Plus subscription is billed through the App Store, that is fine 
 
 The Token Cost card now exposes day-level hover detail right inside the popover. Move your cursor across the sparkline and you can inspect the exact day, spend, token volume, cache ratio, and dominant model without opening the full dashboard.
 
+The Share Preview now leads with token burn as the headline metric. API-priced spend is still included, but pushed into the smaller supporting line so the exported card reads like usage first and pricing context second.
+
 <p>
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost hover detail showing the exact day, spend, tokens, cache ratio, and dominant model for a single sparkline bar" />
 </p>
