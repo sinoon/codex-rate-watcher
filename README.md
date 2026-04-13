@@ -29,9 +29,31 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
   <img src="docs/screenshot-relay.jpg" width="440" alt="Codex Rate Watcher — Intelligent relay planning across multiple accounts" />
 </p>
 
-**Real-time quota monitoring · Burn-rate prediction · Intelligent relay · Multi-account switching · CLI + Raycast**
+**Real-time quota monitoring · Burn-rate prediction · Intelligent relay · Multi-account switching · iCloud all-device token sync · CLI + Raycast**
 
 </div>
+
+---
+
+## ☁️ NEW IN v2.7.0: ICLOUD DEVICE LEDGER SYNC
+
+> **ALL DEVICES. ONE TOKEN VIEW.**
+>
+> Codex Rate Watcher now merges compact token ledgers across your Macs through your own iCloud Drive.
+> You see all-device totals, per-account burn, and local-device context in one place.
+> Auth, raw session logs, skills, and MCP configs still stay local.
+
+```mermaid
+flowchart LR
+  A["This Mac<br/>Compact token ledger"] --> C["iCloud Drive<br/>Codex Rate Watcher / token-ledgers"]
+  B["Other Mac<br/>Compact token ledger"] --> C
+  C --> D["Merged snapshot"]
+  D --> E["All Devices<br/>Today / 7D / 30D / 90D"]
+  D --> F["Accounts rail<br/>Per-account burn"]
+  D --> G["This Mac<br/>Local supporting line"]
+```
+
+If you are signed into the same Apple ID on another Mac, run the app there once and the Token Cost view can upgrade itself from `Local Device` to `All Devices`.
 
 ---
 
@@ -75,6 +97,15 @@ Codex rate monitoring available on to every surface you work on.
 - **⌨️ Global Hotkey** — `⇧⌃⌥K` toggles the popover from any app (customizable)
 - **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
 - **🔍 Raycast extension** — search "Codex" for instant quota checks without leaving your keyboard
+
+### ☁️ Merge Macs, Not Risk
+
+Need one token picture across multiple machines? The Token Cost stack can sync low-risk ledgers through iCloud Drive and merge them into one dashboard view.
+
+- **All-device totals** — roll today / 7D / 30D / 90D usage up across your Macs
+- **Per-account detail** — keep the account rail and burn attribution visible
+- **Local context survives** — merged views still show the local-device supporting line
+- **Boundary stays strict** — only compact token ledgers sync; `~/.codex/auth.json`, raw `~/.codex/sessions/**/*.jsonl`, skills, and MCP configs stay local
 
 ### 👥 Multiple Accounts
 
