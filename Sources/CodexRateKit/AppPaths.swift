@@ -13,6 +13,18 @@ public enum AppPaths {
   public static let managedCodexHomesDirectory = rootDirectory.appending(path: "managed-codex-homes")
   public static let managedCodexAccountsFile = rootDirectory.appending(path: "managed-codex-accounts.json")
   public static let tokenCostCacheFile = rootDirectory.appending(path: "token-cost-cache.json")
+  public static let tokenCostDeviceFile = rootDirectory.appending(path: "token-cost-device.json")
+  public static let tokenCostLocalLedgerFile = rootDirectory.appending(path: "token-cost-ledger.json")
+
+  public static let iCloudDriveRootDirectory: URL = {
+    FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library", directoryHint: .isDirectory)
+      .appending(path: "Mobile Documents", directoryHint: .isDirectory)
+      .appending(path: "com~apple~CloudDocs", directoryHint: .isDirectory)
+      .appending(path: "Codex Rate Watcher", directoryHint: .isDirectory)
+  }()
+
+  public static let iCloudLedgerDirectory = iCloudDriveRootDirectory.appending(path: "token-ledgers")
 }
 
 public struct UsageSample: Codable, Sendable {

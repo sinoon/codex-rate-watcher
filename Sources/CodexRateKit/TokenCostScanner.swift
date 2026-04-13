@@ -87,43 +87,7 @@ public enum TokenCostScanner {
   }
 
   private static func buildSnapshot(from cache: TokenCostCache, now: Date) -> TokenCostSnapshot {
-    let calendar = Calendar.current
-    let todayKey = dayKey(from: now)
-    let earliestDate = calendar.date(byAdding: .day, value: -89, to: now) ?? now
-    let earliestKey = dayKey(from: earliestDate)
-
-    let dayKeys = cache.days.keys.sorted().filter { $0 >= earliestKey && $0 <= todayKey }
-    let dailyEntries = dayKeys.compactMap { buildDailyEntry(dayKey: $0, cachedDay: cache.days[$0]) }
-
-    let windows = [7, 30, 90].map {
-      buildWindowSummary(from: dailyEntries, windowDays: $0, now: now)
-    }
-
-    let sevenDayWindow = windows.first { $0.windowDays == 7 }
-    let thirtyDayWindow = windows.first { $0.windowDays == 30 }
-    let ninetyDayWindow = windows.first { $0.windowDays == 90 }
-    let todayEntry = dailyEntries.last { $0.date == todayKey }
-
-    return TokenCostSnapshot(
-      todayTokens: todayEntry?.totalTokens,
-      todayCostUSD: todayEntry?.costUSD,
-      last7DaysTokens: sevenDayWindow?.totalTokens,
-      last7DaysCostUSD: sevenDayWindow?.totalCostUSD,
-      last30DaysTokens: thirtyDayWindow?.totalTokens,
-      last30DaysCostUSD: thirtyDayWindow?.totalCostUSD,
-      last90DaysTokens: ninetyDayWindow?.totalTokens,
-      last90DaysCostUSD: ninetyDayWindow?.totalCostUSD,
-      averageDailyTokens: thirtyDayWindow?.averageDailyTokens,
-      averageDailyCostUSD: thirtyDayWindow?.averageDailyCostUSD,
-      modelSummaries: thirtyDayWindow?.modelSummaries ?? [],
-      hourly: thirtyDayWindow?.hourly ?? [],
-      alerts: thirtyDayWindow?.alerts ?? [],
-      narrative: thirtyDayWindow?.narrative ?? .init(),
-      windows: windows,
-      hasPartialPricing: thirtyDayWindow?.hasPartialPricing ?? false,
-      daily: dailyEntries,
-      updatedAt: now
-    )
+    TokenCostSnapshotBuilder.buildSnapshot(days: cache.days, now: now)
   }
 
   private static func buildDailyEntry(dayKey: String, cachedDay: TokenCostCachedDay?) -> TokenCostDailyEntry? {

@@ -31,6 +31,18 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertNotNil(findButton(Copy.dashboardCopyJSON, in: viewController.view))
   }
 
+  func testDashboardMergedSnapshotShowsAllDeviceAndAccountContext() {
+    let viewController = TokenCostDashboardViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+    viewController.renderForTesting(snapshot: makeFullyPricedSnapshot())
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("ALL DEVICES TOKEN COST", in: viewController.view))
+    XCTAssertNotNil(findLabel("alpha@example.com", in: viewController.view))
+    XCTAssertNotNil(findLabel("Local / Unknown", in: viewController.view))
+  }
+
   func testDashboardWindowCreatesScrollableDocumentHeight() throws {
     let viewController = TokenCostDashboardViewController(monitor: UsageMonitor())
     _ = viewController.view
@@ -443,6 +455,31 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertTrue(viewController.costSublineTextForTesting().contains("7d"))
   }
 
+  func testPopoverCostCardShowsLocalSupportingDetailWhenMergedSnapshotExists() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeFullyPricedSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(viewController.costSublineTextForTesting().contains("Local"))
+  }
+
   func testPopoverCostSparklineUsesTallerChartForDailyHovering() {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
@@ -737,6 +774,41 @@ final class TokenCostDashboardViewTests: XCTestCase {
       windows: windows,
       hasPartialPricing: true,
       daily: daily,
+      source: TokenCostSourceSummary(
+        mode: .iCloudMerged,
+        syncedDeviceCount: 2,
+        localDeviceID: "device-a",
+        localDeviceName: "Mac A",
+        updatedAt: Date(timeIntervalSince1970: 1_775_100_000)
+      ),
+      localSummary: TokenCostLocalSummary(
+        todayTokens: 4_200,
+        todayCostUSD: 1.1,
+        last30DaysTokens: 39_000,
+        last30DaysCostUSD: 10.8
+      ),
+      accountSummaries: [
+        TokenCostAccountSummary(
+          accountKey: "managed:acct-1",
+          displayName: "alpha@example.com",
+          todayTokens: 6_400,
+          todayCostUSD: 2.3,
+          last30DaysTokens: 72_000,
+          last30DaysCostUSD: 22.1,
+          sessionCount: 12,
+          deviceCount: 2
+        ),
+        TokenCostAccountSummary(
+          accountKey: "local_unknown",
+          displayName: "Local / Unknown",
+          todayTokens: 2_800,
+          todayCostUSD: nil,
+          last30DaysTokens: 46_000,
+          last30DaysCostUSD: nil,
+          sessionCount: 7,
+          deviceCount: 1
+        ),
+      ],
       updatedAt: Date(timeIntervalSince1970: 1_775_100_000)
     )
   }
@@ -815,6 +887,9 @@ final class TokenCostDashboardViewTests: XCTestCase {
       windows: windows,
       hasPartialPricing: false,
       daily: daily,
+      source: base.source,
+      localSummary: base.localSummary,
+      accountSummaries: base.accountSummaries,
       updatedAt: base.updatedAt
     )
   }

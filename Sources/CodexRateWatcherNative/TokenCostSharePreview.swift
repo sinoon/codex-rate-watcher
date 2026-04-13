@@ -363,6 +363,7 @@ private final class TokenCostShareCardView: NSView {
     let hottestEntry = snapshot.daily
       .suffix(30)
       .max { ($0.totalTokens ?? 0) < ($1.totalTokens ?? 0) }
+    let isMerged = snapshot.source?.mode == .iCloudMerged
 
     partialBadgeView.isHidden = !snapshot.hasPartialPricing
     updatedLabel.stringValue = "Updated \(formattedTimestamp(snapshot.updatedAt))"
@@ -370,7 +371,7 @@ private final class TokenCostShareCardView: NSView {
     currentWindowView.configure(
       title: "CURRENT",
       value: formattedTokensLabel(snapshot.todayTokens),
-      metric: "Local session burn",
+      metric: isMerged ? "All-device burn" : "Local session burn",
       detail: apiPricedSpendDetail(cost: snapshot.todayCostUSD),
       accent: ShareDesk.green
     )
@@ -417,7 +418,7 @@ private final class TokenCostShareCardView: NSView {
       parts.append("\(activeDays) active days")
     }
 
-    return parts.isEmpty ? "30-day local session cost trend" : parts.joined(separator: " · ")
+    return parts.isEmpty ? "30-day token cost trend" : parts.joined(separator: " · ")
   }
 
   private func trimmedDate(_ value: String) -> String {
@@ -455,7 +456,7 @@ private final class TokenCostShareCardView: NSView {
       return "\(activeDays) active days"
     }
 
-    return "Local token summary"
+    return snapshot.source?.mode == .iCloudMerged ? "All-device token summary" : "Local token summary"
   }
 
   private func apiPricedSpendDetail(cost: Double?, activeDays: Int? = nil) -> String {

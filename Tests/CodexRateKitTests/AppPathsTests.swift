@@ -76,6 +76,40 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(cachePath.hasPrefix(rootPath), "Token cost cache file should be under root directory")
   }
 
+  func testTokenCostDeviceFileName() {
+    XCTAssertEqual(AppPaths.tokenCostDeviceFile.lastPathComponent, "token-cost-device.json")
+  }
+
+  func testTokenCostDeviceFileIsUnderRoot() {
+    let devicePath = AppPaths.tokenCostDeviceFile.path
+    let rootPath = AppPaths.rootDirectory.path
+    XCTAssertTrue(devicePath.hasPrefix(rootPath), "Token cost device file should be under root directory")
+  }
+
+  func testTokenCostLedgerFileName() {
+    XCTAssertEqual(AppPaths.tokenCostLocalLedgerFile.lastPathComponent, "token-cost-ledger.json")
+  }
+
+  func testTokenCostLedgerFileIsUnderRoot() {
+    let ledgerPath = AppPaths.tokenCostLocalLedgerFile.path
+    let rootPath = AppPaths.rootDirectory.path
+    XCTAssertTrue(ledgerPath.hasPrefix(rootPath), "Token cost ledger file should be under root directory")
+  }
+
+  func testICloudDriveRootTargetsCloudDocsDirectory() {
+    let path = AppPaths.iCloudDriveRootDirectory.path
+    XCTAssertTrue(path.contains("Mobile Documents/com~apple~CloudDocs"), "iCloud root should point to CloudDocs, got: \(path)")
+    XCTAssertTrue(path.hasSuffix("Codex Rate Watcher"), "iCloud root should end with Codex Rate Watcher, got: \(path)")
+  }
+
+  func testICloudLedgerDirectoryLivesUnderICloudRoot() {
+    XCTAssertTrue(
+      AppPaths.iCloudLedgerDirectory.path.hasPrefix(AppPaths.iCloudDriveRootDirectory.path),
+      "iCloud ledger directory should be under the iCloud root directory"
+    )
+    XCTAssertEqual(AppPaths.iCloudLedgerDirectory.lastPathComponent, "token-ledgers")
+  }
+
   func testAllPathsAreAbsolute() {
     // All paths should be absolute (start with /)
     XCTAssertTrue(AppPaths.rootDirectory.path.hasPrefix("/"))
@@ -86,5 +120,9 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(AppPaths.managedCodexHomesDirectory.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.managedCodexAccountsFile.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.tokenCostCacheFile.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.tokenCostDeviceFile.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.tokenCostLocalLedgerFile.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.iCloudDriveRootDirectory.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.iCloudLedgerDirectory.path.hasPrefix("/"))
   }
 }

@@ -29,9 +29,31 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
   <img src="docs/screenshot-relay.jpg" width="440" alt="Codex Rate Watcher — Intelligent relay planning across multiple accounts" />
 </p>
 
-**Real-time quota monitoring · Burn-rate prediction · Intelligent relay · Multi-account switching · CLI + Raycast**
+**Real-time quota monitoring · Burn-rate prediction · Intelligent relay · Multi-account switching · iCloud all-device token sync · CLI + Raycast**
 
 </div>
+
+---
+
+## ☁️ NEW IN v2.7.0: ICLOUD DEVICE LEDGER SYNC
+
+> **ALL DEVICES. ONE TOKEN VIEW.**
+>
+> Codex Rate Watcher now merges compact token ledgers across your Macs through your own iCloud Drive.
+> You see all-device totals, per-account burn, and local-device context in one place.
+> Auth, raw session logs, skills, and MCP configs still stay local.
+
+```mermaid
+flowchart LR
+  A["This Mac<br/>Compact token ledger"] --> C["iCloud Drive<br/>Codex Rate Watcher / token-ledgers"]
+  B["Other Mac<br/>Compact token ledger"] --> C
+  C --> D["Merged snapshot"]
+  D --> E["All Devices<br/>Today / 7D / 30D / 90D"]
+  D --> F["Accounts rail<br/>Per-account burn"]
+  D --> G["This Mac<br/>Local supporting line"]
+```
+
+If you are signed into the same Apple ID on another Mac, run the app there once and the Token Cost view can upgrade itself from `Local Device` to `All Devices`.
 
 ---
 
@@ -76,6 +98,15 @@ Codex rate monitoring available on to every surface you work on.
 - **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
 - **🔍 Raycast extension** — search "Codex" for instant quota checks without leaving your keyboard
 
+### ☁️ Merge Macs, Not Risk
+
+Need one token picture across multiple machines? The Token Cost stack can sync low-risk ledgers through iCloud Drive and merge them into one dashboard view.
+
+- **All-device totals** — roll today / 7D / 30D / 90D usage up across your Macs
+- **Per-account detail** — keep the account rail and burn attribution visible
+- **Local context survives** — merged views still show the local-device supporting line
+- **Boundary stays strict** — only compact token ledgers sync; `~/.codex/auth.json`, raw `~/.codex/sessions/**/*.jsonl`, skills, and MCP configs stay local
+
 ### 👥 Multiple Accounts
 
 Managing multiple ChatGPT Pro or Team accounts? Covered.
@@ -103,6 +134,16 @@ The Share Preview now leads with token burn as the headline metric. API-priced s
 <p>
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost hover detail showing the exact day, spend, tokens, cache ratio, and dominant model for a single sparkline bar" />
 </p>
+
+### ☁️ iCloud Device Ledger Sync
+
+When iCloud Drive is enabled, Codex Rate Watcher can merge low-risk token usage across your Macs through your own iCloud Drive.
+
+- **All-device totals** — the Token Cost dashboard can roll today / 7D / 30D / 90D usage up across multiple Macs
+- **Per-account detail** — the account rail still shows which account generated the burn
+- **This Mac context** — merged views keep a local-device supporting line so you can separate local usage from the fleet total
+- **Automatic pickup** — sign into the same Apple ID, run the app on another Mac, and the dashboard switches from `Local Device` to `All Devices` when another ledger appears
+- **Clear boundary** — only compact token ledgers sync; `~/.codex/auth.json`, raw `~/.codex/sessions/**/*.jsonl`, skills, and MCP configs stay local
 
 ### 🔄 Auto-Switch
 
@@ -294,7 +335,7 @@ Launches as a standalone window instead of a menu bar popover — useful for scr
 - **No more guessing games** — burn-rate prediction replaces "I think I have some quota left"
 - **Multi-account workflows** — heavy Codex users run multiple accounts; smart switching makes it seamless
 - **Terminal-native** — the CLI fits into existing workflows, scripts, and automation
-- **Privacy-first** — all data stays on your machine. No analytics, no telemetry, no third-party services. Auth tokens never leave localhost
+- **Privacy-first** — no analytics, no telemetry, no third-party services. Auth tokens never leave localhost, and iCloud sync only mirrors compact token ledgers through your own iCloud Drive
 - **Zero dependencies** — pure Apple system frameworks. No `node_modules`, no Electron, no bloat
 
 ---

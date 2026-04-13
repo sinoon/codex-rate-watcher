@@ -280,11 +280,11 @@ enum Copy {
   static let costOpenDashboard = "Open Dashboard"
   static let costShare = "Share"
   static let costSharePreviewTitle = "Share Preview"
-  static let costSharePreviewSubtitle = "A larger card built from your local Codex session logs."
+  static let costSharePreviewSubtitle = "A larger card built from your Codex token ledger."
   static let costShareCopyImage = "Copy Image"
   static let costShareCopied = "Image copied to clipboard."
   static let costShareBrand = "Codex Rate Watcher"
-  static let costShareNoData = "No local token cost data yet."
+  static let costShareNoData = "No token cost data yet."
 
   static let costNoLocalData = "暂无本地会话数据"
   static let costTooltipTitle = "Token Cost Details"
@@ -389,6 +389,9 @@ enum Copy {
 
   static let dashboardTitle = "Token Cost Research Desk"
   static let dashboardSubtitle = "Local Codex session analytics for burn, model mix, cache leverage, and daily patterns."
+  static let dashboardSubtitleAllDevices = "All-device Codex session analytics for merged burn, model mix, cache leverage, and daily patterns."
+  static let dashboardEyebrowLocal = "LOCAL SESSION COST"
+  static let dashboardEyebrowAllDevices = "ALL DEVICES TOKEN COST"
   static let dashboardRefresh = "Refresh"
   static let dashboardCopyJSON = "Copy JSON"
   static let dashboardUpdatedPrefix = "Updated"
@@ -403,6 +406,7 @@ enum Copy {
   static let dashboardBurnTimeline = "Burn Timeline"
   static let dashboardAlertRail = "Alert Rail"
   static let dashboardModelLeaderboard = "Model Leaderboard"
+  static let dashboardAccountLeaderboard = "Account Breakdown"
   static let dashboardCostStructure = "Cost Structure"
   static let dashboardHourlyHeatmap = "Hourly Heatmap"
   static let dashboardDailyDetail = "Daily Detail"
@@ -417,5 +421,16 @@ enum Copy {
   static let dashboardCache = "Cache"
   static let dashboardOutput = "Output"
   static let dashboardNoDataPlaceholder = "—"
+
+  static func costScopeSummary(isMerged: Bool, syncedDevices: Int?) -> String {
+    if isMerged {
+      return "All Devices" + (syncedDevices.map { " · \($0) Macs" } ?? "")
+    }
+    return "Local Device"
+  }
+
+  static func costLocalSupportingLine(cost: String, tokens: String) -> String {
+    "Local \(cost) · \(costTokenMetric(tokens))"
+  }
 
 }

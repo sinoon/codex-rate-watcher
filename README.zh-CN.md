@@ -23,9 +23,31 @@
   <img src="docs/screenshot.jpg" width="440" alt="Codex Rate Watcher — 实时监控 OpenAI Codex ChatGPT 速率限制的 macOS 菜单栏应用" />
 </p>
 
-*实时配额监控 · 消耗速率预测 · 多账号切换 · 重置倒计时*
+*实时配额监控 · 消耗速率预测 · 多账号切换 · iCloud 多设备 token 同步 · 重置倒计时*
 
 </div>
+
+---
+
+## ☁️ v2.7.0 重点功能：ICLOUD 多设备 TOKEN LEDGER 同步
+
+> **多台 Mac，一份总账。**
+>
+> Codex Rate Watcher 现在可以通过你自己的 iCloud Drive，把多台 Mac 上的精简 token ledger 自动合并。
+> 你会同时看到全部设备总览、按账号拆分的 burn，以及当前电脑的本机补充行。
+> 认证信息、原始 session 日志、skill、MCP 配置仍然只保存在本机。
+
+```mermaid
+flowchart LR
+  A["本机<br/>精简 token ledger"] --> C["iCloud Drive<br/>Codex Rate Watcher / token-ledgers"]
+  B["另一台 Mac<br/>精简 token ledger"] --> C
+  C --> D["合并后的快照"]
+  D --> E["All Devices<br/>今日 / 7D / 30D / 90D"]
+  D --> F["账号榜单<br/>按账号看 burn"]
+  D --> G["This Mac<br/>本机补充行"]
+```
+
+只要另一台 Mac 也登录了同一个 Apple ID，并至少运行过一次应用，`Token Cost` 视图就可以从 `Local Device` 自动切到 `All Devices`。
 
 ---
 
@@ -48,6 +70,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 | **⏰ 重置倒计时** | 每张配额卡片都显示重置时间——不仅仅是被封锁时 |
 | **👥 多账号管理** | 自动捕获账号快照；Plus 和 Team 账号并行管理 |
 | **🧠 智能切换** | 加权评分算法推荐最佳切换目标 |
+| **☁️ iCloud 多设备同步** | 多台 Mac 的低风险 token ledger 自动合并，auth 和原始 session 继续只留本机 |
 | **🔄 孤儿快照自动整合** | 启动时自动发现并注册未索引的认证快照 |
 | **🏷️ 套餐标识** | UI 中清晰标注 Plus / Team |
 | **🎨 深色主题 UI** | Linear 风格设计，配额卡片颜色编码 |
@@ -88,6 +111,16 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost 卡片悬停详情：展示单日日期、成本、tokens、cache 占比与主模型" />
 </p>
 
+### ☁️ iCloud 多设备 Token Ledger 同步
+
+开启 iCloud Drive 后，Codex Rate Watcher 会通过你自己的 iCloud Drive，把低风险的 token 消耗账本在多台 Mac 之间自动合并。
+
+- **总览看全部设备** —— `Token Cost` dashboard 可以把今日、7 天、30 天、90 天的用量汇总成多设备总值
+- **细项按账号拆开** —— 账号榜单仍然会告诉你是哪一个账号贡献了主要 burn
+- **保留本机上下文** —— 合并视图里仍然会保留 `This Mac` / 本机补充行，方便区分“当前电脑”和“所有设备”的差异
+- **自动生效** —— 同一个 Apple ID 下，在另一台 Mac 上运行应用后，只要出现新的 ledger，界面就会从 `Local Device` 自动切到 `All Devices`
+- **边界明确** —— 目前只同步精简后的 token ledger；`~/.codex/auth.json`、原始 `~/.codex/sessions/**/*.jsonl`、skill 和 MCP 配置仍然只保存在本机
+
 ### 🔄 自愈式配置文件存储
 
 **孤儿快照自动整合引擎**在启动时扫描配置文件目录，自动发现未索引的认证快照并注册（SHA256 指纹去重）。即使索引文件损坏，你的账号也不会丢失。
@@ -102,7 +135,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 ### 🛡️ 隐私优先架构
 
-所有数据保存在本地。应用仅与官方 ChatGPT Usage API 通信（`chatgpt.com/backend-api/wham/usage`）。无分析、无遥测、无第三方服务。你的认证令牌绝不离开本机。
+所有数据默认保存在本地。应用仅与官方 ChatGPT Usage API 通信（`chatgpt.com/backend-api/wham/usage`）。无分析、无遥测、无第三方服务。你的认证令牌绝不离开本机；iCloud 同步也只会镜像精简后的 token ledger，不会同步认证信息、原始会话日志、skill 或 MCP 配置。
 
 ### 更多亮点
 
