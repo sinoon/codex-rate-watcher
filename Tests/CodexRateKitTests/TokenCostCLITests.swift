@@ -19,6 +19,18 @@ final class TokenCostCLITests: XCTestCase {
     XCTAssertEqual(payload.activeDayCount, 5)
   }
 
+  func testJSONPayloadIncludesMergedSourceLocalAndAccountSummaries() {
+    let snapshot = makeSnapshot()
+
+    let payload = TokenCostCLIPayload(snapshot: snapshot)
+
+    XCTAssertEqual(payload.source?.mode, .iCloudMerged)
+    XCTAssertEqual(payload.source?.syncedDeviceCount, 2)
+    XCTAssertEqual(payload.localSummary?.todayTokens, 4_200)
+    XCTAssertEqual(payload.accountSummaries.map(\.displayName), ["alpha@example.com", "Local / Unknown"])
+    XCTAssertEqual(payload.accountSummaries.first?.last30DaysTokens, 72_000)
+  }
+
   func testRenderTextShowsExecutiveMetricsAlertsAndModelLeaderboard() {
     let snapshot = makeSnapshot()
 
@@ -33,6 +45,54 @@ final class TokenCostCLITests: XCTestCase {
     XCTAssertTrue(report.contains("Top Models"))
     XCTAssertTrue(report.contains("gpt-5"))
     XCTAssertTrue(report.contains("Partial pricing"))
+  }
+
+  func testRenderTextShowsAllDeviceAndLocalScope() {
+    let snapshot = makeSnapshot()
+
+    let report = TokenCostCLIReport.renderText(snapshot: snapshot, colorized: false)
+
+    XCTAssertTrue(report.contains("All Devices"))
+    XCTAssertTrue(report.contains("Local Device"))
+    XCTAssertTrue(report.contains("alpha@example.com"))
+  }
+
+  func testRenderTextDoesNotDuplicateLocalDeviceSectionForLocalOnlySnapshot() {
+    var snapshot = makeSnapshot()
+    snapshot = TokenCostSnapshot(
+      todayTokens: snapshot.todayTokens,
+      todayCostUSD: snapshot.todayCostUSD,
+      last7DaysTokens: snapshot.last7DaysTokens,
+      last7DaysCostUSD: snapshot.last7DaysCostUSD,
+      last30DaysTokens: snapshot.last30DaysTokens,
+      last30DaysCostUSD: snapshot.last30DaysCostUSD,
+      last90DaysTokens: snapshot.last90DaysTokens,
+      last90DaysCostUSD: snapshot.last90DaysCostUSD,
+      averageDailyTokens: snapshot.averageDailyTokens,
+      averageDailyCostUSD: snapshot.averageDailyCostUSD,
+      modelSummaries: snapshot.modelSummaries,
+      hourly: snapshot.hourly,
+      alerts: snapshot.alerts,
+      narrative: snapshot.narrative,
+      windows: snapshot.windows,
+      hasPartialPricing: snapshot.hasPartialPricing,
+      daily: snapshot.daily,
+      source: TokenCostSourceSummary(
+        mode: .localOnly,
+        syncedDeviceCount: 1,
+        localDeviceID: "device-a",
+        localDeviceName: "Mac A",
+        updatedAt: Date(timeIntervalSince1970: 1_775_100_000)
+      ),
+      localSummary: snapshot.localSummary,
+      accountSummaries: snapshot.accountSummaries,
+      updatedAt: snapshot.updatedAt
+    )
+
+    let report = TokenCostCLIReport.renderText(snapshot: snapshot, colorized: false)
+    let localDeviceOccurrences = report.components(separatedBy: "Local Device").count - 1
+
+    XCTAssertEqual(localDeviceOccurrences, 1)
   }
 
   private func makeSnapshot() -> TokenCostSnapshot {
@@ -153,6 +213,41 @@ final class TokenCostCLITests: XCTestCase {
           modelsUsed: ["gpt-5", "gpt-5-mini"],
           modelBreakdowns: [],
           hourlyBreakdowns: []
+        ),
+      ],
+      source: TokenCostSourceSummary(
+        mode: .iCloudMerged,
+        syncedDeviceCount: 2,
+        localDeviceID: "device-a",
+        localDeviceName: "Mac A",
+        updatedAt: Date(timeIntervalSince1970: 1_775_100_000)
+      ),
+      localSummary: TokenCostLocalSummary(
+        todayTokens: 4_200,
+        todayCostUSD: 0.98,
+        last30DaysTokens: 38_500,
+        last30DaysCostUSD: 9.4
+      ),
+      accountSummaries: [
+        TokenCostAccountSummary(
+          accountKey: "managed:acct-1",
+          displayName: "alpha@example.com",
+          todayTokens: 3_200,
+          todayCostUSD: 0.77,
+          last30DaysTokens: 72_000,
+          last30DaysCostUSD: 18.6,
+          sessionCount: 14,
+          deviceCount: 2
+        ),
+        TokenCostAccountSummary(
+          accountKey: "local_unknown",
+          displayName: "Local / Unknown",
+          todayTokens: 1_000,
+          todayCostUSD: 0.21,
+          last30DaysTokens: 48_000,
+          last30DaysCostUSD: nil,
+          sessionCount: 8,
+          deviceCount: 1
         ),
       ],
       updatedAt: Date(timeIntervalSince1970: 1_775_100_000)

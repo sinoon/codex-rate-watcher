@@ -1401,7 +1401,7 @@ final class PopoverViewController: NSViewController {
       costUtilLabel.textColor = LN.textTertiary
       costVisibleDailyEntries = []
       drawSparkline([])
-      costSublineLabel.stringValue = "运行 Codex 后会在这里显示本地 token 成本"
+      costSublineLabel.stringValue = "运行 Codex 后会在这里显示 token 成本"
       updateCostToolTip(nil)
       costHoverTitleLabel.stringValue = Copy.costSectionTitle
       costHoverBodyLabel.stringValue = Copy.costNoLocalData
@@ -1455,6 +1455,10 @@ final class PopoverViewController: NSViewController {
   private func costInlineSummaryText(for snapshot: TokenCostSnapshot) -> String {
     let window7 = snapshot.windowSummary(days: 7)
     let window30 = snapshot.windowSummary(days: 30)
+    let scopeLine = Copy.costScopeSummary(
+      isMerged: snapshot.source?.mode == .iCloudMerged,
+      syncedDevices: snapshot.source?.syncedDeviceCount
+    )
 
     let line30 = Copy.costInlineRange(
       days: 30,
@@ -1478,7 +1482,17 @@ final class PopoverViewController: NSViewController {
       detail: sevenDayDetail.replacingOccurrences(of: ": ", with: " ")
     )
 
-    return [line30, line7].joined(separator: "\n")
+    var lines = [scopeLine, line30, line7]
+    if snapshot.source?.mode == .iCloudMerged, let localSummary = snapshot.localSummary {
+      lines.append(
+        Copy.costLocalSupportingLine(
+          cost: formattedTooltipUSD(localSummary.todayCostUSD),
+          tokens: formattedTooltipTokens(localSummary.todayTokens)
+        )
+      )
+    }
+
+    return lines.joined(separator: "\n")
   }
 
   private func tokenCostHoverBody(for entry: TokenCostDailyEntry) -> String {

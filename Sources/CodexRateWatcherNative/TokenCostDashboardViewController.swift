@@ -62,7 +62,7 @@ final class TokenCostDashboardViewController: NSViewController {
   private let titleLabel = NSTextField(labelWithString: Copy.dashboardTitle)
   private let subtitleLabel = NSTextField(labelWithString: Copy.dashboardSubtitle)
   private let updatedLabel = NSTextField(labelWithString: "")
-  private let headerEyebrowLabel = NSTextField(labelWithString: "LOCAL SESSION COST")
+  private let headerEyebrowLabel = NSTextField(labelWithString: Copy.dashboardEyebrowLocal)
   private let headerSummaryLabel = NSTextField(labelWithString: "")
   private let partialBadge = NSTextField(labelWithString: Copy.dashboardPartialPricing)
   private let rangeControl = NSSegmentedControl(labels: RangeSelection.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
@@ -84,6 +84,9 @@ final class TokenCostDashboardViewController: NSViewController {
 
   private let alertCard = DeskCardView(title: Copy.dashboardAlertRail)
   private let alertStack = NSStackView()
+
+  private let accountCard = DeskCardView(title: Copy.dashboardAccountLeaderboard)
+  private let accountStack = NSStackView()
 
   private let modelCard = DeskCardView(title: Copy.dashboardModelLeaderboard)
   private let modelStack = NSStackView()
@@ -207,6 +210,7 @@ final class TokenCostDashboardViewController: NSViewController {
     configureDigestCard()
     configureTimelineCard()
     configureAlertCard()
+    configureAccountCard()
     configureModelCard()
     configureStructureCard()
     configureHourlyCard()
@@ -219,6 +223,7 @@ final class TokenCostDashboardViewController: NSViewController {
 
     sideRailStack.addArrangedSubview(digestCard)
     sideRailStack.addArrangedSubview(alertCard)
+    sideRailStack.addArrangedSubview(accountCard)
     sideRailStack.addArrangedSubview(modelCard)
     sideRailStack.addArrangedSubview(hourlyCard)
     sideRailStack.addArrangedSubview(structureCard)
@@ -407,6 +412,14 @@ final class TokenCostDashboardViewController: NSViewController {
     alertCard.widthAnchor.constraint(equalToConstant: Desk.railWidth).isActive = true
   }
 
+  private func configureAccountCard() {
+    accountStack.orientation = .vertical
+    accountStack.spacing = 10
+    accountStack.translatesAutoresizingMaskIntoConstraints = false
+    accountCard.contentStack.addArrangedSubview(accountStack)
+    accountCard.widthAnchor.constraint(equalToConstant: Desk.railWidth).isActive = true
+  }
+
   private func configureModelCard() {
     modelStack.orientation = .vertical
     modelStack.spacing = 10
@@ -536,6 +549,10 @@ final class TokenCostDashboardViewController: NSViewController {
 
     let rangeDays = selectedRange.days
     let window = snapshot.windowSummary(days: rangeDays)
+    let isMerged = snapshot.source?.mode == .iCloudMerged
+
+    headerEyebrowLabel.stringValue = isMerged ? Copy.dashboardEyebrowAllDevices : Copy.dashboardEyebrowLocal
+    subtitleLabel.stringValue = isMerged ? Copy.dashboardSubtitleAllDevices : Copy.dashboardSubtitle
 
     updatedLabel.stringValue = "\(Copy.dashboardUpdatedPrefix) \(timestampString(snapshot.updatedAt))"
     partialBadge.isHidden = !(window?.hasPartialPricing ?? false)
@@ -544,7 +561,7 @@ final class TokenCostDashboardViewController: NSViewController {
     todayCostCard.configure(
       title: Copy.dashboardTodayCost,
       value: usd(snapshot.todayCostUSD),
-      detail: "Latest local burn"
+      detail: isMerged ? "All-device burn" : "Latest local burn"
     )
 
     windowCostCard.configure(
@@ -556,7 +573,7 @@ final class TokenCostDashboardViewController: NSViewController {
     todayTokensCard.configure(
       title: Copy.dashboardTodayTokens,
       value: tokenCount(snapshot.todayTokens),
-      detail: "Local log total"
+      detail: isMerged ? "All-device total" : "Local log total"
     )
 
     let dominantShare = window?.modelSummaries.first?.costShare ?? window?.modelSummaries.first?.tokenShare
@@ -572,9 +589,10 @@ final class TokenCostDashboardViewController: NSViewController {
     timelineChartView.points = buildTimelinePoints(snapshot: snapshot, rangeDays: rangeDays)
 
     renderAlerts(window)
+    renderAccountLeaderboard(snapshot.accountSummaries)
     renderModelLeaderboard(window)
     renderCostStructure(window)
-    hourlyCaptionLabel.stringValue = "\(rangeDays)D local-hour aggregation"
+    hourlyCaptionLabel.stringValue = "\(rangeDays)D \(isMerged ? "all-device" : "local-hour") aggregation"
     heatmapView.entries = window?.hourly ?? []
     renderDailyTable(snapshot: snapshot, rangeDays: rangeDays)
     renderNarrative(window?.narrative ?? .init())
@@ -609,6 +627,27 @@ final class TokenCostDashboardViewController: NSViewController {
 
     for alert in alerts {
       alertStack.addArrangedSubview(DeskAlertView(alert: alert))
+    }
+  }
+
+  private func renderAccountLeaderboard(_ summaries: [TokenCostAccountSummary]) {
+    clearArrangedSubviews(accountStack)
+
+    if summaries.isEmpty {
+      accountStack.addArrangedSubview(makePlaceholderLabel(Copy.dashboardNoRows))
+      return
+    }
+
+    let maxTokens = max(summaries.compactMap(\.last30DaysTokens).max() ?? 1, 1)
+    for summary in summaries.prefix(6) {
+      let fraction = Double(summary.last30DaysTokens ?? 0) / Double(maxTokens)
+      accountStack.addArrangedSubview(
+        DeskLeaderboardRowView(
+          title: summary.displayName,
+          subtitle: "\(usd(summary.last30DaysCostUSD)) · \(TokenCostFormatting.tokenCount(summary.last30DaysTokens ?? 0))",
+          fraction: fraction
+        )
+      )
     }
   }
 
@@ -757,7 +796,11 @@ final class TokenCostDashboardViewController: NSViewController {
 
   private func headerSummary(window: TokenCostWindowSummary?) -> String {
     guard let window else { return Copy.dashboardNoNarrative }
-    return "\(selectedRange.days) day reading window · \(window.activeDayCount) active days · dominant \(window.dominantModelName ?? Copy.dashboardNoDataPlaceholder)"
+    let scope = Copy.costScopeSummary(
+      isMerged: latestSnapshot?.source?.mode == .iCloudMerged,
+      syncedDevices: latestSnapshot?.source?.syncedDeviceCount
+    )
+    return "\(scope) · \(selectedRange.days) day reading window · \(window.activeDayCount) active days · dominant \(window.dominantModelName ?? Copy.dashboardNoDataPlaceholder)"
   }
 
   private func clearArrangedSubviews(_ stack: NSStackView) {

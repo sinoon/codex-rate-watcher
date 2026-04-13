@@ -1,5 +1,82 @@
 import Foundation
 
+public enum TokenCostSourceMode: String, Codable, Equatable, Sendable {
+  case localOnly = "local_only"
+  case iCloudMerged = "icloud_merged"
+}
+
+public struct TokenCostSourceSummary: Codable, Equatable, Sendable {
+  public let mode: TokenCostSourceMode
+  public let syncedDeviceCount: Int
+  public let localDeviceID: String?
+  public let localDeviceName: String?
+  public let updatedAt: Date?
+
+  public init(
+    mode: TokenCostSourceMode,
+    syncedDeviceCount: Int,
+    localDeviceID: String? = nil,
+    localDeviceName: String? = nil,
+    updatedAt: Date? = nil
+  ) {
+    self.mode = mode
+    self.syncedDeviceCount = syncedDeviceCount
+    self.localDeviceID = localDeviceID
+    self.localDeviceName = localDeviceName
+    self.updatedAt = updatedAt
+  }
+}
+
+public struct TokenCostLocalSummary: Codable, Equatable, Sendable {
+  public let todayTokens: Int?
+  public let todayCostUSD: Double?
+  public let last30DaysTokens: Int?
+  public let last30DaysCostUSD: Double?
+
+  public init(
+    todayTokens: Int?,
+    todayCostUSD: Double?,
+    last30DaysTokens: Int?,
+    last30DaysCostUSD: Double?
+  ) {
+    self.todayTokens = todayTokens
+    self.todayCostUSD = todayCostUSD
+    self.last30DaysTokens = last30DaysTokens
+    self.last30DaysCostUSD = last30DaysCostUSD
+  }
+}
+
+public struct TokenCostAccountSummary: Codable, Equatable, Sendable {
+  public let accountKey: String
+  public let displayName: String
+  public let todayTokens: Int?
+  public let todayCostUSD: Double?
+  public let last30DaysTokens: Int?
+  public let last30DaysCostUSD: Double?
+  public let sessionCount: Int
+  public let deviceCount: Int
+
+  public init(
+    accountKey: String,
+    displayName: String,
+    todayTokens: Int?,
+    todayCostUSD: Double?,
+    last30DaysTokens: Int?,
+    last30DaysCostUSD: Double?,
+    sessionCount: Int,
+    deviceCount: Int
+  ) {
+    self.accountKey = accountKey
+    self.displayName = displayName
+    self.todayTokens = todayTokens
+    self.todayCostUSD = todayCostUSD
+    self.last30DaysTokens = last30DaysTokens
+    self.last30DaysCostUSD = last30DaysCostUSD
+    self.sessionCount = sessionCount
+    self.deviceCount = deviceCount
+  }
+}
+
 public struct TokenCostHourlyEntry: Codable, Equatable, Sendable {
   public let hour: Int
   public let inputTokens: Int?
@@ -209,6 +286,9 @@ public struct TokenCostSnapshot: Codable, Equatable, Sendable {
   public let windows: [TokenCostWindowSummary]
   public let hasPartialPricing: Bool
   public let daily: [TokenCostDailyEntry]
+  public let source: TokenCostSourceSummary?
+  public let localSummary: TokenCostLocalSummary?
+  public let accountSummaries: [TokenCostAccountSummary]
   public let updatedAt: Date
 
   public init(
@@ -229,6 +309,9 @@ public struct TokenCostSnapshot: Codable, Equatable, Sendable {
     windows: [TokenCostWindowSummary] = [],
     hasPartialPricing: Bool = false,
     daily: [TokenCostDailyEntry],
+    source: TokenCostSourceSummary? = nil,
+    localSummary: TokenCostLocalSummary? = nil,
+    accountSummaries: [TokenCostAccountSummary] = [],
     updatedAt: Date
   ) {
     self.todayTokens = todayTokens
@@ -248,6 +331,9 @@ public struct TokenCostSnapshot: Codable, Equatable, Sendable {
     self.windows = windows
     self.hasPartialPricing = hasPartialPricing
     self.daily = daily
+    self.source = source
+    self.localSummary = localSummary
+    self.accountSummaries = accountSummaries
     self.updatedAt = updatedAt
   }
 }

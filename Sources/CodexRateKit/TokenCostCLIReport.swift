@@ -20,6 +20,9 @@ public struct TokenCostCLIPayload: Codable, Equatable, Sendable {
   public let windows: [TokenCostWindowSummary]
   public let hasPartialPricing: Bool
   public let daily: [TokenCostDailyEntry]
+  public let source: TokenCostSourceSummary?
+  public let localSummary: TokenCostLocalSummary?
+  public let accountSummaries: [TokenCostAccountSummary]
 
   public init(snapshot: TokenCostSnapshot) {
     self.updatedAt = snapshot.updatedAt
@@ -41,6 +44,9 @@ public struct TokenCostCLIPayload: Codable, Equatable, Sendable {
     self.windows = snapshot.windows
     self.hasPartialPricing = snapshot.hasPartialPricing
     self.daily = snapshot.daily
+    self.source = snapshot.source
+    self.localSummary = snapshot.localSummary
+    self.accountSummaries = snapshot.accountSummaries
   }
 }
 
@@ -68,6 +74,8 @@ public enum TokenCostCLIReport {
       return lines.joined(separator: "\n")
     }
 
+    let sourceMode = snapshot.source?.mode == .iCloudMerged ? "All Devices" : "Local Device"
+    lines.append("  \(styles.bold)\(sourceMode)\(styles.reset)")
     lines.append("  \(styles.dim)Today Cost:\(styles.reset)     \(styles.bold)\(usd(snapshot.todayCostUSD))\(styles.reset)")
     lines.append("  \(styles.dim)Today Tokens:\(styles.reset)   \(tokenCount(snapshot.todayTokens))")
     lines.append("  \(styles.dim)7 Day Cost:\(styles.reset)     \(styles.bold)\(usd(snapshot.last7DaysCostUSD))\(styles.reset)")
@@ -77,6 +85,19 @@ public enum TokenCostCLIReport {
     lines.append("  \(styles.dim)Active Days:\(styles.reset)    \(snapshot.activeDayCount)")
     lines.append("  \(styles.dim)Cache Share:\(styles.reset)    \(cacheShareLabel(snapshot))")
     lines.append("  \(styles.dim)Dominant Model:\(styles.reset) \(snapshot.modelSummaries.first?.modelName ?? "—")")
+
+    if let source = snapshot.source {
+      lines.append("  \(styles.dim)Synced Devices:\(styles.reset) \(source.syncedDeviceCount)")
+    }
+
+    if snapshot.source?.mode == .iCloudMerged, let localSummary = snapshot.localSummary {
+      lines.append("")
+      lines.append("  \(styles.bold)Local Device\(styles.reset)")
+      lines.append("  \(styles.dim)Today Cost:\(styles.reset)     \(styles.bold)\(usd(localSummary.todayCostUSD))\(styles.reset)")
+      lines.append("  \(styles.dim)Today Tokens:\(styles.reset)   \(tokenCount(localSummary.todayTokens))")
+      lines.append("  \(styles.dim)30 Day Cost:\(styles.reset)    \(styles.bold)\(usd(localSummary.last30DaysCostUSD))\(styles.reset)")
+      lines.append("  \(styles.dim)30 Day Tokens:\(styles.reset)  \(tokenCount(localSummary.last30DaysTokens))")
+    }
 
     if snapshot.hasPartialPricing {
       lines.append("  \(styles.yellow)Partial pricing: some active models are missing rate cards.\(styles.reset)")
@@ -98,6 +119,17 @@ public enum TokenCostCLIReport {
         let share = percent(model.costShare ?? model.tokenShare)
         lines.append(
           "  \(pad(model.modelName, to: 14)) \(pad(usd(model.costUSD), to: 10)) \(pad(TokenCostFormatting.tokenCount(model.totalTokens), to: 11)) \(share)"
+        )
+      }
+    }
+
+    if !snapshot.accountSummaries.isEmpty {
+      lines.append("")
+      lines.append("  \(styles.bold)Accounts\(styles.reset)")
+      lines.append("  \(styles.dim)Account                30D Cost     30D Tokens   Sessions\(styles.reset)")
+      for account in snapshot.accountSummaries.prefix(5) {
+        lines.append(
+          "  \(pad(account.displayName, to: 22)) \(pad(usd(account.last30DaysCostUSD), to: 12)) \(pad(tokenCount(account.last30DaysTokens), to: 12)) \(account.sessionCount)"
         )
       }
     }
