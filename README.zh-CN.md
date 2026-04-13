@@ -4,7 +4,7 @@
 
 ### 再也不会在编程途中被限速打断
 
-一款极速 macOS 菜单栏应用，实时监控 [OpenAI Codex](https://openai.com/index/codex/)（ChatGPT Pro / Team）的速率限制用量 —— 支持多账号管理、消耗速率预测和智能切换。
+一款面向并行 agent 时代的 macOS 菜单栏应用，实时监控 [OpenAI Codex](https://openai.com/index/codex/)（ChatGPT Pro / Team）的额度健康度 —— 支持多账号运营、智能接力，以及通过 iCloud 汇总多设备 token 总账。
 
 [![en](https://img.shields.io/badge/lang-English-blue.svg)](README.md)
 [![zh-CN](https://img.shields.io/badge/lang-简体中文-red.svg)](README.zh-CN.md)
@@ -23,7 +23,7 @@
   <img src="docs/screenshot.jpg" width="440" alt="Codex Rate Watcher — 实时监控 OpenAI Codex ChatGPT 速率限制的 macOS 菜单栏应用" />
 </p>
 
-*实时配额监控 · 消耗速率预测 · 多账号切换 · iCloud 多设备 token 同步 · 重置倒计时*
+*实时配额监控 · 消耗速率预测 · 多账号运营 · iCloud 多设备总账 · 重置倒计时*
 
 </div>
 
@@ -51,6 +51,21 @@ flowchart LR
 
 ---
 
+## 🧭 并行 Agent 让额度问题变成“账号运营问题”
+
+当 Codex 同时跑在多台 Mac、多个账号上时，问题就不再只是“今天花了多少 token”。
+
+你真正需要知道的是：
+
+- **现在该让哪个账号继续顶住**
+- **今天的 burn 到底来自本机还是别的设备**
+- **整个账号池能不能撑到下一次 reset**
+- **应该继续 stay，还是立刻 switch / relay**
+
+Codex Rate Watcher 就是围绕这套运营闭环设计的：盯当前账号、给下一个账号排序、预测接力 runway，现在再把低风险 token ledger 合并成一份多设备总览。
+
+---
+
 ## 🤯 痛点
 
 你正处于心流状态，和 Codex 结对编程，重构一个关键模块——然后突然，**速率限制的墙迎面撞来**。没有警告，没有倒计时，只有一个冰冷的 `429 Too Many Requests`。
@@ -68,7 +83,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 | **📊 实时配额追踪** | 同时监控 5 小时主配额、周配额和代码审查配额 |
 | **🔥 消耗速率预测** | 精确预测配额耗尽时间（如"预计 1h32min 后耗尽，14:30 重置"） |
 | **⏰ 重置倒计时** | 每张配额卡片都显示重置时间——不仅仅是被封锁时 |
-| **👥 多账号管理** | 自动捕获账号快照；Plus 和 Team 账号并行管理 |
+| **👥 多账号运营** | 自动捕获账号快照，支持推荐切换与账号接力 |
 | **🧠 智能切换** | 加权评分算法推荐最佳切换目标 |
 | **☁️ iCloud 多设备同步** | 多台 Mac 的低风险 token ledger 自动合并，auth 和原始 session 继续只留本机 |
 | **🔄 孤儿快照自动整合** | 启动时自动发现并注册未索引的认证快照 |
@@ -89,9 +104,9 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 重置时间不只在你被封锁时才显示。**每张配额卡片始终显示重置时间**，即使你正在活跃编程中。你随时知道还有多少余量，以及下一个窗口何时开启。
 
-### 👥 多账号管理 + 智能切换
+### 👥 多账号运营 + 智能切换
 
-管理多个 ChatGPT Pro 或 Team 账号？应用自动捕获认证快照，并通过**加权可用性算法**为每个配置文件评分（主配额 × 3.2 + 周配额 × 0.45 + 审查 × 0.08，低余额惩罚）。一键切换，当前认证自动备份。
+重度用户通常不是“一台电脑、一个账号”的模型，而是多个 Codex 身份、多台 Mac、还要尽量不断流地继续干活。应用会自动捕获认证快照，并通过**加权可用性算法**为每个配置文件评分（主配额 × 3.2 + 周配额 × 0.45 + 审查 × 0.08，低余额惩罚）。一键切换，当前认证自动备份；这些账号池也会直接喂给接力规划和切换建议。
 
 ### 🍎 Apple 渠道订阅也能用
 

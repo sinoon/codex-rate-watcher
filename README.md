@@ -6,7 +6,7 @@
 
 **That never has to happen again.**
 
-A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/codex/) (ChatGPT Pro / Team) rate-limit usage in real time — with burn-rate predictions, intelligent multi-account relay, a CLI tool, and Raycast integration.
+A macOS menu bar app for the parallel-agent era: real-time [OpenAI Codex](https://openai.com/index/codex/) (ChatGPT Pro / Team) quota visibility, intelligent multi-account relay, and now one all-device token view through iCloud.
 
 [![en](https://img.shields.io/badge/lang-English-blue.svg)](README.md)
 [![zh-CN](https://img.shields.io/badge/lang-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-red.svg)](README.zh-CN.md)
@@ -29,7 +29,7 @@ A macOS menu bar app that monitors your [OpenAI Codex](https://openai.com/index/
   <img src="docs/screenshot-relay.jpg" width="440" alt="Codex Rate Watcher — Intelligent relay planning across multiple accounts" />
 </p>
 
-**Real-time quota monitoring · Burn-rate prediction · Intelligent relay · Multi-account switching · iCloud all-device token sync · CLI + Raycast**
+**Real-time quota monitoring · Burn-rate prediction · Multi-account ops · All-device token view · CLI + Raycast**
 
 </div>
 
@@ -54,6 +54,21 @@ flowchart LR
 ```
 
 If you are signed into the same Apple ID on another Mac, run the app there once and the Token Cost view can upgrade itself from `Local Device` to `All Devices`.
+
+---
+
+## 🧭 Parallel Agents Turn Quota Into Ops
+
+Once Codex is running across multiple Macs and multiple accounts, quota stops being a single-number problem.
+
+You need to know:
+
+- **Which account is healthiest right now**
+- **Whether today’s burn is local or came from another machine**
+- **How long the whole account pool lasts before the next reset**
+- **When to stay, when to switch, and when to relay**
+
+Codex Rate Watcher is built for that operational loop: watch the current account, rank the next one, project the relay runway, and now merge low-risk token ledgers into one all-device view.
 
 ---
 
@@ -92,7 +107,7 @@ Don't just monitor — predict. The burn-rate engine uses linear regression over
 
 ### 🌐 Work Anywhere
 
-Codex rate monitoring available on to every surface you work on.
+Codex rate visibility on every surface you work on.
 
 - **⌨️ Global Hotkey** — `⇧⌃⌥K` toggles the popover from any app (customizable)
 - **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
@@ -107,13 +122,14 @@ Need one token picture across multiple machines? The Token Cost stack can sync l
 - **Local context survives** — merged views still show the local-device supporting line
 - **Boundary stays strict** — only compact token ledgers sync; `~/.codex/auth.json`, raw `~/.codex/sessions/**/*.jsonl`, skills, and MCP configs stay local
 
-### 👥 Multiple Accounts
+### 👥 Multi-Account Ops
 
-Managing multiple ChatGPT Pro or Team accounts? Covered.
+Power users usually do not have one account on one laptop. They have several Codex identities, several Macs, and a workflow that cannot pause for guesswork.
 
 - **Auto-capture** — auth snapshots are saved automatically on detection
 - **Smart scoring** — weighted algorithm recommends the best account to switch to
 - **One-click switch** — current auth is auto-backed up before swapping
+- **Relay-ready pool** — saved accounts feed the relay planner and switch recommendations
 - **Plan badges** — Plus vs. Team clearly labeled in the UI
 - **Self-healing store** — orphaned snapshots are auto-discovered and registered on startup (SHA256-deduplicated)
 
