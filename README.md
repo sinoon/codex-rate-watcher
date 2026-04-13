@@ -104,6 +104,16 @@ The Share Preview now leads with token burn as the headline metric. API-priced s
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost hover detail showing the exact day, spend, tokens, cache ratio, and dominant model for a single sparkline bar" />
 </p>
 
+### ☁️ iCloud Device Ledger Sync
+
+When iCloud Drive is enabled, Codex Rate Watcher can merge low-risk token usage across your Macs through your own iCloud Drive.
+
+- **All-device totals** — the Token Cost dashboard can roll today / 7D / 30D / 90D usage up across multiple Macs
+- **Per-account detail** — the account rail still shows which account generated the burn
+- **This Mac context** — merged views keep a local-device supporting line so you can separate local usage from the fleet total
+- **Automatic pickup** — sign into the same Apple ID, run the app on another Mac, and the dashboard switches from `Local Device` to `All Devices` when another ledger appears
+- **Clear boundary** — only compact token ledgers sync; `~/.codex/auth.json`, raw `~/.codex/sessions/**/*.jsonl`, skills, and MCP configs stay local
+
 ### 🔄 Auto-Switch
 
 v1.5.0 introduces automatic account switching — the app detects when your current account is running low and seamlessly switches to the best available profile.
@@ -294,7 +304,7 @@ Launches as a standalone window instead of a menu bar popover — useful for scr
 - **No more guessing games** — burn-rate prediction replaces "I think I have some quota left"
 - **Multi-account workflows** — heavy Codex users run multiple accounts; smart switching makes it seamless
 - **Terminal-native** — the CLI fits into existing workflows, scripts, and automation
-- **Privacy-first** — all data stays on your machine. No analytics, no telemetry, no third-party services. Auth tokens never leave localhost
+- **Privacy-first** — no analytics, no telemetry, no third-party services. Auth tokens never leave localhost, and iCloud sync only mirrors compact token ledgers through your own iCloud Drive
 - **Zero dependencies** — pure Apple system frameworks. No `node_modules`, no Electron, no bloat
 
 ---

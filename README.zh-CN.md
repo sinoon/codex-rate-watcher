@@ -88,6 +88,16 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost 卡片悬停详情：展示单日日期、成本、tokens、cache 占比与主模型" />
 </p>
 
+### ☁️ iCloud 多设备 Token Ledger 同步
+
+开启 iCloud Drive 后，Codex Rate Watcher 会通过你自己的 iCloud Drive，把低风险的 token 消耗账本在多台 Mac 之间自动合并。
+
+- **总览看全部设备** —— `Token Cost` dashboard 可以把今日、7 天、30 天、90 天的用量汇总成多设备总值
+- **细项按账号拆开** —— 账号榜单仍然会告诉你是哪一个账号贡献了主要 burn
+- **保留本机上下文** —— 合并视图里仍然会保留 `This Mac` / 本机补充行，方便区分“当前电脑”和“所有设备”的差异
+- **自动生效** —— 同一个 Apple ID 下，在另一台 Mac 上运行应用后，只要出现新的 ledger，界面就会从 `Local Device` 自动切到 `All Devices`
+- **边界明确** —— 目前只同步精简后的 token ledger；`~/.codex/auth.json`、原始 `~/.codex/sessions/**/*.jsonl`、skill 和 MCP 配置仍然只保存在本机
+
 ### 🔄 自愈式配置文件存储
 
 **孤儿快照自动整合引擎**在启动时扫描配置文件目录，自动发现未索引的认证快照并注册（SHA256 指纹去重）。即使索引文件损坏，你的账号也不会丢失。
@@ -102,7 +112,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 ### 🛡️ 隐私优先架构
 
-所有数据保存在本地。应用仅与官方 ChatGPT Usage API 通信（`chatgpt.com/backend-api/wham/usage`）。无分析、无遥测、无第三方服务。你的认证令牌绝不离开本机。
+所有数据默认保存在本地。应用仅与官方 ChatGPT Usage API 通信（`chatgpt.com/backend-api/wham/usage`）。无分析、无遥测、无第三方服务。你的认证令牌绝不离开本机；iCloud 同步也只会镜像精简后的 token ledger，不会同步认证信息、原始会话日志、skill 或 MCP 配置。
 
 ### 更多亮点
 
