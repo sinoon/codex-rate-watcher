@@ -23,7 +23,7 @@
   <img src="docs/screenshot.jpg" width="440" alt="Codex Rate Watcher — 实时监控 OpenAI Codex ChatGPT 速率限制的 macOS 菜单栏应用" />
 </p>
 
-*实时配额监控 · 消耗速率预测 · 多账号运营 · iCloud 多设备总账 · 重置倒计时*
+*实时配额监控 · 消耗速率预测 · 多账号运营 · iCloud 多设备总账 · 飞书签名自动同步*
 
 </div>
 
@@ -86,6 +86,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 | **👥 多账号运营** | 自动捕获账号快照，支持推荐切换与账号接力 |
 | **🧠 智能切换** | 加权评分算法推荐最佳切换目标 |
 | **☁️ iCloud 多设备同步** | 多台 Mac 的低风险 token ledger 自动合并，auth 和原始 session 继续只留本机 |
+| **🔗 飞书 URL Preview 签名同步** | 可把 token 汇总写进飞书自定义 slot，并跟随菜单栏应用刷新自动更新 |
 | **🔄 孤儿快照自动整合** | 启动时自动发现并注册未索引的认证快照 |
 | **🏷️ 套餐标识** | UI 中清晰标注 Plus / Team |
 | **🎨 深色主题 UI** | Linear 风格设计，配额卡片颜色编码 |
@@ -125,6 +126,16 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 <p>
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost 卡片悬停详情：展示单日日期、成本、tokens、cache 占比与主模型" />
 </p>
+
+### 🔗 飞书 URL Preview 签名自动同步
+
+如果你想把同一份 token 视图带到应用外面，Codex Rate Watcher 现在可以把精简摘要写进飞书自定义 URL Preview slot，并由菜单栏应用持续维护最新值。
+
+- **一次写入或持续同步都支持** —— 可以用 `codex-rate lark-signature` 手动写一次，也可以保存配置后让应用自动同步
+- **跟随刷新链路自动更新** —— 菜单栏应用在正常刷新和认证变化后都会尝试回写，不需要额外 cron
+- **自动控噪** —— 值没变就不写；值变了也会限制为最多每分钟同步一次
+- **摘要足够紧凑** —— 默认包含今日、30 日累计、主模型和更新时间，适合签名栏位
+- **全设备或本机都能选** —— 默认写合并后的总量，也可以切成仅本机视角
 
 ### ☁️ iCloud 多设备 Token Ledger 同步
 
@@ -230,6 +241,8 @@ swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id
 swift run codex-rate lark-signature --show-auto-sync
 swift run codex-rate lark-signature --disable-auto-sync
 ```
+
+启用自动同步后，菜单栏应用会复用这份配置，在每次刷新后自动更新飞书 slot。实际行为是：启动时先同步一次，之后每 60 秒刷新一次，检测到认证变化后也会再触发一次同步。
 
 ## 🔬 工作原理
 

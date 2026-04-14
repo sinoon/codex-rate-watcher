@@ -29,7 +29,7 @@ A macOS menu bar app for the parallel-agent era: real-time [OpenAI Codex](https:
   <img src="docs/screenshot-relay.jpg" width="440" alt="Codex Rate Watcher — Intelligent relay planning across multiple accounts" />
 </p>
 
-**Real-time quota monitoring · Burn-rate prediction · Multi-account ops · All-device token view · CLI + Raycast**
+**Real-time quota monitoring · Burn-rate prediction · Multi-account ops · All-device token view · Lark URL preview sync**
 
 </div>
 
@@ -109,9 +109,9 @@ Don't just monitor — predict. The burn-rate engine uses linear regression over
 
 Codex rate visibility on every surface you work on.
 
-- **⌨️ Global Hotkey** — `⇧⌃⌥K` toggles the popover from any app (customizable)
 - **🖥️ CLI tool** — `codex-rate` for terminal-first monitoring, JSON output, and scripting
 - **🔍 Raycast extension** — search "Codex" for instant quota checks without leaving your keyboard
+- **🔗 Lark URL preview sync** — publish a compact token summary into your custom slot for signatures and status surfaces
 
 ### ☁️ Merge Macs, Not Risk
 
@@ -150,6 +150,16 @@ The Share Preview now leads with token burn as the headline metric. API-priced s
 <p>
   <img src="docs/screenshot-token-cost-hover.jpg" width="520" alt="Token Cost hover detail showing the exact day, spend, tokens, cache ratio, and dominant model for a single sparkline bar" />
 </p>
+
+### 🔗 Lark URL Preview Signature Sync
+
+Need the same token picture outside the app? Codex Rate Watcher can write a compact summary into a Lark custom URL preview slot and keep it fresh from the menu bar app.
+
+- **One-shot or continuous** — use `codex-rate lark-signature` for a single write, or save the config once and let the app sync automatically
+- **Refresh-driven updates** — the menu bar app pushes after its normal refresh loop and after auth changes, so no extra cron job is required
+- **Noise control built in** — unchanged values are skipped, and changed values are rate-limited to at most one sync per minute
+- **Compact summary format** — today, 30-day total, dominant model, and timestamp fit cleanly into signatures
+- **Merged or local scope** — choose all-device totals by default or force a local-only summary when you want machine-specific status
 
 ### ☁️ iCloud Device Ledger Sync
 
@@ -241,6 +251,8 @@ codex-rate lark-signature --credential <credential> --slot-id <slot-id> --enable
 codex-rate lark-signature --show-auto-sync
 codex-rate lark-signature --disable-auto-sync
 ```
+
+Once auto-sync is enabled, the menu bar app reuses the saved config and updates the Lark slot after each refresh cycle. In practice, that means an initial sync on launch, periodic refreshes every 60 seconds, and another sync after detected auth changes.
 
 ### Example Output
 
