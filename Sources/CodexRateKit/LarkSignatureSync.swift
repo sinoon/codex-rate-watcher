@@ -12,6 +12,8 @@ public enum LarkSignatureFormatter {
     let sourceLabel = sourceLabel(for: snapshot, useLocalSummary: useLocalSummary)
     let todayTokens = useLocalSummary ? (snapshot.localSummary?.todayTokens ?? snapshot.todayTokens) : snapshot.todayTokens
     let todayCost = useLocalSummary ? (snapshot.localSummary?.todayCostUSD ?? snapshot.todayCostUSD) : snapshot.todayCostUSD
+    let last7Tokens = useLocalSummary ? (snapshot.localSummary?.last7DaysTokens ?? snapshot.last7DaysTokens) : snapshot.last7DaysTokens
+    let last7Cost = useLocalSummary ? (snapshot.localSummary?.last7DaysCostUSD ?? snapshot.last7DaysCostUSD) : snapshot.last7DaysCostUSD
     let last30Tokens = useLocalSummary ? (snapshot.localSummary?.last30DaysTokens ?? snapshot.last30DaysTokens) : snapshot.last30DaysTokens
     let last30Cost = useLocalSummary ? (snapshot.localSummary?.last30DaysCostUSD ?? snapshot.last30DaysCostUSD) : snapshot.last30DaysCostUSD
     let updatedAt = updatedTimeLabel(snapshot.updatedAt, timeZone: timeZone)
@@ -26,24 +28,23 @@ public enum LarkSignatureFormatter {
       }
     }
 
-    let hasAnyUsage = todayTokens != nil || todayCost != nil || last30Tokens != nil || last30Cost != nil
+    let hasAnyUsage = todayTokens != nil || todayCost != nil || last7Tokens != nil || last7Cost != nil || last30Tokens != nil || last30Cost != nil
     if !hasAnyUsage {
       parts.append("暂无 token 数据")
       parts.append(updatedAt)
       return fitted(parts: parts, maxLength: maxLength)
     }
 
-    if let todayPart = metricPart(windowLabel: "今日", tokens: todayTokens, costUSD: todayCost) {
+    let todayLabel = trimmedLabel.isEmpty ? "Token 今日" : "今日"
+    if let todayPart = metricPart(windowLabel: todayLabel, tokens: todayTokens, costUSD: todayCost) {
       parts.append(todayPart)
     }
-    if let thirtyDayPart = metricPart(windowLabel: "30日", tokens: last30Tokens, costUSD: last30Cost) {
+    if let sevenDayPart = metricPart(windowLabel: "7天", tokens: last7Tokens, costUSD: last7Cost) {
+      parts.append(sevenDayPart)
+    }
+    if let thirtyDayPart = metricPart(windowLabel: "30天", tokens: last30Tokens, costUSD: last30Cost) {
       parts.append(thirtyDayPart)
     }
-
-    if let dominantModel = snapshot.modelSummaries.first?.modelName, !dominantModel.isEmpty {
-      parts.append(dominantModel)
-    }
-    parts.append(updatedAt)
 
     return fitted(parts: parts, maxLength: maxLength)
   }
@@ -59,17 +60,55 @@ public enum LarkSignatureFormatter {
   }
 
   private static func metricPart(windowLabel: String, tokens: Int?, costUSD: Double?) -> String? {
-    var details: [String] = []
-    if let tokens {
-      details.append("\(TokenCostFormatting.tokenCount(tokens)) tok")
+    let tokenPart = tokens.map(TokenCostFormatting.tokenCount)
+    let costPart = costUSD.map(compactUSD)
+
+    let detail: String?
+    switch (tokenPart, costPart) {
+    case let (.some(tokenPart), .some(costPart)):
+      detail = "\(tokenPart)/\(costPart)"
+    case let (.some(tokenPart), .none):
+      detail = tokenPart
+    case let (.none, .some(costPart)):
+      detail = costPart
+    case (.none, .none):
+      detail = nil
     }
-    if let costUSD {
-      details.append(TokenCostFormatting.usd(costUSD))
-    }
-    guard !details.isEmpty else {
+
+    guard let detail else {
       return nil
     }
-    return "\(windowLabel) " + details.joined(separator: " ")
+    return "\(windowLabel)\(detail)"
+  }
+
+  private static func compactUSD(_ value: Double) -> String {
+    let absolute = abs(value)
+    let sign = value < 0 ? "-" : ""
+
+    switch absolute {
+    case 1_000_000...:
+      return sign + "$" + compactNumber(absolute / 1_000_000, suffix: "m")
+    case 1_000...:
+      return sign + "$" + compactNumber(absolute / 1_000, suffix: "k")
+    case 10...:
+      return sign + "$" + String(Int(absolute.rounded()))
+    case 1...:
+      return sign + "$" + decimalString(absolute, maximumFractionDigits: 1)
+    default:
+      return sign + "$" + decimalString(absolute, maximumFractionDigits: 2)
+    }
+  }
+
+  private static func compactNumber(_ value: Double, suffix: String) -> String {
+    decimalString(value, maximumFractionDigits: 1) + suffix
+  }
+
+  private static func decimalString(_ value: Double, maximumFractionDigits: Int) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = maximumFractionDigits
+    return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.\(maximumFractionDigits)f", value)
   }
 
   private static func updatedTimeLabel(_ date: Date, timeZone: TimeZone) -> String {
@@ -87,8 +126,8 @@ public enum LarkSignatureFormatter {
       return text
     }
 
-    if working.count >= 4 {
-      working.remove(at: working.count - 2)
+    if working.count > 3 {
+      working.removeFirst()
       text = working.joined(separator: " · ")
     }
     if text.count <= maxLength {

@@ -158,8 +158,38 @@ Need the same token picture outside the app? Codex Rate Watcher can write a comp
 - **One-shot or continuous** — use `codex-rate lark-signature` for a single write, or save the config once and let the app sync automatically
 - **Refresh-driven updates** — the menu bar app pushes after its normal refresh loop and after auth changes, so no extra cron job is required
 - **Noise control built in** — unchanged values are skipped, and changed values are rate-limited to at most one sync per minute
-- **Compact summary format** — today, 30-day total, dominant model, and timestamp fit cleanly into signatures
+- **Readable compact format** — the default output now reads like `Token 今日268.6M/$94 · 7天3.4B/$1.3k · 30天8.2B/$3.3k`
 - **Merged or local scope** — choose all-device totals by default or force a local-only summary when you want machine-specific status
+
+<p>
+  <img src="docs/screenshot-lark-signature.svg" width="780" alt="Lark URL preview signature showing Token today, 7-day, and 30-day token usage plus spend in a compact dark badge" />
+</p>
+
+#### Quick setup
+
+1. Create or locate your Lark custom slot and keep both the `credential` and `slot-id`.
+2. Use the **dynamic slot link** in your Lark signature instead of a literal text URL:
+
+   ```text
+   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D
+   ```
+
+3. Preview what Codex Rate Watcher will write:
+
+   ```bash
+   codex-rate lark-signature --slot-id <slot-id> --dry-run
+   ```
+
+4. Push once, or save the config for continuous sync from the menu bar app:
+
+   ```bash
+   codex-rate lark-signature --credential <credential> --slot-id <slot-id>
+   codex-rate lark-signature --credential <credential> --slot-id <slot-id> --enable-auto-sync
+   ```
+
+#### Common pitfall
+
+If your Lark signature link looks like `https://l.garyyang.work/?t=Token%20...`, that link is **static** and will never auto-update. Auto-sync only works when the link itself reads from `{{slot id="..."}}`.
 
 ### ☁️ iCloud Device Ledger Sync
 
@@ -506,6 +536,7 @@ codex-rate-watcher/
 ├── scripts/build_app.sh
 ├── docs/
 │   ├── apple-receipt.jpg
+│   ├── screenshot-lark-signature.svg
 │   ├── screenshot-token-cost-hover.jpg
 │   ├── screenshot.jpg
 │   └── v1.4.0-design.md

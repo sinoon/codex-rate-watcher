@@ -134,8 +134,38 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 - **一次写入或持续同步都支持** —— 可以用 `codex-rate lark-signature` 手动写一次，也可以保存配置后让应用自动同步
 - **跟随刷新链路自动更新** —— 菜单栏应用在正常刷新和认证变化后都会尝试回写，不需要额外 cron
 - **自动控噪** —— 值没变就不写；值变了也会限制为最多每分钟同步一次
-- **摘要足够紧凑** —— 默认包含今日、30 日累计、主模型和更新时间，适合签名栏位
+- **紧凑但能看懂** —— 默认文案现在是 `Token 今日268.6M/$94 · 7天3.4B/$1.3k · 30天8.2B/$3.3k`
 - **全设备或本机都能选** —— 默认写合并后的总量，也可以切成仅本机视角
+
+<p>
+  <img src="docs/screenshot-lark-signature.svg" width="780" alt="飞书 URL Preview 签名效果图：展示今日、7天、30天 token 用量和金额" />
+</p>
+
+#### 快速配置
+
+1. 先准备好飞书自定义 slot 的 `credential` 和 `slot-id`。
+2. 飞书签名里要放的是 **动态 slot 链接**，不是把文案直接写死的静态链接：
+
+   ```text
+   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D
+   ```
+
+3. 先在本地预览这次会写入什么内容：
+
+   ```bash
+   swift run codex-rate lark-signature --slot-id <slot-id> --dry-run
+   ```
+
+4. 手动写一次，或者保存配置让菜单栏应用后续自动同步：
+
+   ```bash
+   swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id>
+   swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id> --enable-auto-sync
+   ```
+
+#### 常见坑
+
+如果你的飞书签名链接长这样：`https://l.garyyang.work/?t=Token%20...`，那它是**静态链接**，后面不会自动更新。要想让菜单栏应用持续改值，签名链接本身必须读取 `{{slot id="..."}}`。
 
 ### ☁️ iCloud 多设备 Token Ledger 同步
 

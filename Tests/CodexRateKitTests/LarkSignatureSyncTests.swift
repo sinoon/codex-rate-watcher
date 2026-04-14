@@ -12,10 +12,9 @@ final class LarkSignatureSyncTests: XCTestCase {
     )
 
     XCTAssertTrue(summary.contains("Codex 全设备"))
-    XCTAssertTrue(summary.contains("今日 149.7M tok $51.89"))
-    XCTAssertTrue(summary.contains("30日 8.1B tok $3,209.99"))
-    XCTAssertTrue(summary.contains("gpt-5.4"))
-    XCTAssertTrue(summary.hasSuffix("16:08"))
+    XCTAssertTrue(summary.contains("今日149.7M/$52"))
+    XCTAssertTrue(summary.contains("7天1.2B/$412"))
+    XCTAssertTrue(summary.contains("30天8.1B/$3.2k"))
   }
 
   func testSummaryCanUseLocalSummaryWhenRequested() {
@@ -27,9 +26,9 @@ final class LarkSignatureSyncTests: XCTestCase {
     )
 
     XCTAssertTrue(summary.contains("Codex 本机"))
-    XCTAssertTrue(summary.contains("今日 12.3M tok $4.56"))
-    XCTAssertTrue(summary.contains("30日 456.8M tok $123.45"))
-    XCTAssertTrue(summary.contains("gpt-5.4"))
+    XCTAssertTrue(summary.contains("今日12.3M/$4.6"))
+    XCTAssertTrue(summary.contains("7天98.8M/$33"))
+    XCTAssertTrue(summary.contains("30天456.8M/$123"))
   }
 
   func testSummaryOmitsHeaderWhenLabelIsEmpty() {
@@ -43,7 +42,7 @@ final class LarkSignatureSyncTests: XCTestCase {
     XCTAssertFalse(summary.contains("Codex"))
     XCTAssertFalse(summary.contains("本机"))
     XCTAssertFalse(summary.contains("全设备"))
-    XCTAssertTrue(summary.hasPrefix("今日 149.7M tok $51.89"))
+    XCTAssertEqual(summary, "Token 今日149.7M/$52 · 7天1.2B/$412 · 30天8.1B/$3.2k")
   }
 
   func testSummaryFallsBackWhenSnapshotHasNoData() {
@@ -51,6 +50,8 @@ final class LarkSignatureSyncTests: XCTestCase {
       snapshot: TokenCostSnapshot(
         todayTokens: nil,
         todayCostUSD: nil,
+        last7DaysTokens: nil,
+        last7DaysCostUSD: nil,
         last30DaysTokens: nil,
         last30DaysCostUSD: nil,
         daily: [],
@@ -119,6 +120,8 @@ final class LarkSignatureSyncTests: XCTestCase {
     TokenCostSnapshot(
       todayTokens: 149_736_619,
       todayCostUSD: 51.89210695,
+      last7DaysTokens: 1_234_567_890,
+      last7DaysCostUSD: 412.34,
       last30DaysTokens: 8_103_521_272,
       last30DaysCostUSD: 3209.99094295,
       modelSummaries: [
@@ -144,6 +147,8 @@ final class LarkSignatureSyncTests: XCTestCase {
       localSummary: TokenCostLocalSummary(
         todayTokens: 12_345_678,
         todayCostUSD: 4.56,
+        last7DaysTokens: 98_765_432,
+        last7DaysCostUSD: 33.21,
         last30DaysTokens: 456_789_012,
         last30DaysCostUSD: 123.45
       ),

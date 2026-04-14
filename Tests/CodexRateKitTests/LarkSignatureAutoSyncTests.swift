@@ -52,7 +52,7 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
     let saved = await store.load()
     XCTAssertEqual(
       saved.lastSyncedValue,
-      "今日 149.7M tok $51.89 · 30日 8.1B tok $3,209.99 · gpt-5.4 · 16:08"
+      "Token 今日149.7M/$52 · 7天1.2B/$412 · 30天8.1B/$3.2k"
     )
   }
 
@@ -87,7 +87,7 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
     let saved = await store.load()
     XCTAssertEqual(
       saved.lastSyncedValue,
-      "今日 149.7M tok $51.89 · 30日 8.1B tok $3,209.99 · gpt-5.4 · 16:08"
+      "Token 今日149.7M/$52 · 7天1.2B/$412 · 30天8.1B/$3.2k"
     )
   }
 
@@ -122,7 +122,7 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
     let saved = await store.load()
     XCTAssertEqual(
       saved.lastSyncedValue,
-      "今日 180.0M tok $51.89 · 30日 8.1B tok $3,209.99 · gpt-5.4 · 16:09"
+      "Token 今日180.0M/$52 · 7天1.2B/$412 · 30天8.1B/$3.2k"
     )
   }
 
@@ -140,6 +140,8 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
     TokenCostSnapshot(
       todayTokens: todayTokens,
       todayCostUSD: 51.89210695,
+      last7DaysTokens: 1_234_567_890,
+      last7DaysCostUSD: 412.34,
       last30DaysTokens: 8_103_521_272,
       last30DaysCostUSD: 3209.99094295,
       modelSummaries: [

@@ -30,17 +30,23 @@ public struct TokenCostSourceSummary: Codable, Equatable, Sendable {
 public struct TokenCostLocalSummary: Codable, Equatable, Sendable {
   public let todayTokens: Int?
   public let todayCostUSD: Double?
+  public let last7DaysTokens: Int?
+  public let last7DaysCostUSD: Double?
   public let last30DaysTokens: Int?
   public let last30DaysCostUSD: Double?
 
   public init(
     todayTokens: Int?,
     todayCostUSD: Double?,
+    last7DaysTokens: Int? = nil,
+    last7DaysCostUSD: Double? = nil,
     last30DaysTokens: Int?,
     last30DaysCostUSD: Double?
   ) {
     self.todayTokens = todayTokens
     self.todayCostUSD = todayCostUSD
+    self.last7DaysTokens = last7DaysTokens
+    self.last7DaysCostUSD = last7DaysCostUSD
     self.last30DaysTokens = last30DaysTokens
     self.last30DaysCostUSD = last30DaysCostUSD
   }

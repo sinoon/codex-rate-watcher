@@ -74,6 +74,8 @@ public struct LiveTokenCostSnapshotLoader: TokenCostSnapshotLoading {
           localSummary: TokenCostLocalSummary(
             todayTokens: localSnapshot.todayTokens,
             todayCostUSD: localSnapshot.todayCostUSD,
+            last7DaysTokens: localSnapshot.last7DaysTokens,
+            last7DaysCostUSD: localSnapshot.last7DaysCostUSD,
             last30DaysTokens: localSnapshot.last30DaysTokens,
             last30DaysCostUSD: localSnapshot.last30DaysCostUSD
           ),
