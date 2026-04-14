@@ -359,6 +359,7 @@ final class UsageMonitor {
   private let apiClient: UsageAPIClient
   private let tokenRefresher = TokenRefresher()
   private let tokenCostLoader: TokenCostSnapshotLoading
+  private let larkSignatureAutoSync: LarkSignatureAutoSyncing
   private let sampleStore: SampleStore
   private let profileStore: AuthProfileStore
   private let managedAccountService: ManagedCodexAccountService
@@ -395,6 +396,7 @@ final class UsageMonitor {
     authStore: AuthStore = AuthStore(),
     apiClient: UsageAPIClient = UsageAPIClient(),
     tokenCostLoader: TokenCostSnapshotLoading = LiveTokenCostSnapshotLoader(),
+    larkSignatureAutoSync: LarkSignatureAutoSyncing = LarkSignatureAutoSyncService(),
     sampleStore: SampleStore = SampleStore(),
     profileStore: AuthProfileStore? = nil,
     managedAccountService: ManagedCodexAccountService = ManagedCodexAccountService(),
@@ -403,6 +405,7 @@ final class UsageMonitor {
     self.authStore = authStore
     self.apiClient = apiClient
     self.tokenCostLoader = tokenCostLoader
+    self.larkSignatureAutoSync = larkSignatureAutoSync
     self.sampleStore = sampleStore
     self.profileStore = profileStore ?? AuthProfileStore(authStore: authStore)
     self.managedAccountService = managedAccountService
@@ -569,6 +572,9 @@ final class UsageMonitor {
       samples = await sampleStore.append(snapshot: freshSnapshot, capturedAt: now)
       rebuildEstimates()
       tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: now)
+      if let tokenCostSnapshot {
+        await larkSignatureAutoSync.syncIfNeeded(snapshot: tokenCostSnapshot, now: now)
+      }
 
       profiles = (try? await profileStore.captureCurrentAuthIfNeeded()) ?? profiles
       profiles = await profileStore.updateCurrentProfileValidation(snapshot: freshSnapshot)
@@ -581,9 +587,13 @@ final class UsageMonitor {
       }
     } catch {
       errorMessage = error.localizedDescription
-      tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: Date())
+      let fallbackNow = Date()
+      tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: fallbackNow)
+      if let tokenCostSnapshot {
+        await larkSignatureAutoSync.syncIfNeeded(snapshot: tokenCostSnapshot, now: fallbackNow)
+      }
       if manual {
-        lastUpdatedAt = Date()
+        lastUpdatedAt = fallbackNow
       }
 
       if refreshProfiles {

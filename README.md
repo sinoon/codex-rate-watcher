@@ -227,6 +227,19 @@ codex-rate history --hours 6
 codex-rate relay
 codex-rate relay --strategy greedy
 codex-rate relay --json
+
+# Preview the Lark URL preview signature text
+codex-rate lark-signature --slot-id <slot-id> --dry-run
+
+# Push the latest token summary into a Lark custom slot
+codex-rate lark-signature --credential <credential> --slot-id <slot-id>
+
+# Save Lark slot config so the menu bar app auto-syncs after each refresh
+codex-rate lark-signature --credential <credential> --slot-id <slot-id> --enable-auto-sync
+
+# Inspect or disable the saved auto-sync config
+codex-rate lark-signature --show-auto-sync
+codex-rate lark-signature --disable-auto-sync
 ```
 
 ### Example Output

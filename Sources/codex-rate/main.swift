@@ -189,6 +189,7 @@ private struct CLIOptions {
     case history
     case relay
     case cost
+    case larkSignature
     case proxy
     case mode
     case help
@@ -203,6 +204,15 @@ private struct CLIOptions {
   var noAutoRelay: Bool = false
   var proxyVerbose: Bool = false
   var modeTarget: String = ""
+  var larkCredential: String = ""
+  var larkSlotID: String = ""
+  var larkLabel: String = ""
+  var larkBaseURL: String = "https://l.garyyang.work"
+  var larkUseLocalSummary: Bool = false
+  var larkDryRun: Bool = false
+  var larkEnableAutoSync: Bool = false
+  var larkDisableAutoSync: Bool = false
+  var larkShowAutoSync: Bool = false
 }
 
 private func parseArguments() -> CLIOptions {
@@ -226,6 +236,8 @@ private func parseArguments() -> CLIOptions {
     opts.command = .history; idx = 1
   case "cost":
     opts.command = .cost; idx = 1
+  case "lark-signature":
+    opts.command = .larkSignature; idx = 1
   case "proxy":
     opts.command = .proxy; idx = 1
   case "mode":
@@ -287,6 +299,40 @@ private func parseArguments() -> CLIOptions {
         exitWithError("--upstream requires a URL")
       }
       opts.proxyUpstream = args[idx]
+    case "--credential":
+      idx += 1
+      guard idx < args.count, !args[idx].isEmpty else {
+        exitWithError("--credential requires a non-empty value")
+      }
+      opts.larkCredential = args[idx]
+    case "--slot-id":
+      idx += 1
+      guard idx < args.count, !args[idx].isEmpty else {
+        exitWithError("--slot-id requires a non-empty value")
+      }
+      opts.larkSlotID = args[idx]
+    case "--label":
+      idx += 1
+      guard idx < args.count else {
+        exitWithError("--label requires a value")
+      }
+      opts.larkLabel = args[idx]
+    case "--base-url":
+      idx += 1
+      guard idx < args.count, !args[idx].isEmpty else {
+        exitWithError("--base-url requires a value")
+      }
+      opts.larkBaseURL = args[idx]
+    case "--local-only":
+      opts.larkUseLocalSummary = true
+    case "--dry-run":
+      opts.larkDryRun = true
+    case "--enable-auto-sync":
+      opts.larkEnableAutoSync = true
+    case "--disable-auto-sync":
+      opts.larkDisableAutoSync = true
+    case "--show-auto-sync":
+      opts.larkShowAutoSync = true
     case "--no-relay":
       opts.noAutoRelay = true
     case "--verbose":
@@ -870,6 +916,141 @@ private func runCost(json: Bool) async {
   print(TokenCostCLIReport.renderText(snapshot: snapshot))
 }
 
+private func runLarkSignature(opts: CLIOptions) async {
+  let store = LarkSignatureAutoSyncStore()
+
+  if opts.larkShowAutoSync {
+    let config = await store.load()
+    var payload: [String: Any] = [
+      "base_url": config.baseURL,
+      "enabled": config.enabled,
+      "has_credential": !config.credential.isEmpty,
+      "label": config.label,
+      "local_only": config.useLocalSummary,
+      "slot_id": config.slotID
+    ]
+    if let lastSyncedAt = config.lastSyncedAt {
+      payload["last_synced_at"] = lastSyncedAt.ISO8601Format()
+    }
+    if let lastSyncedValue = config.lastSyncedValue {
+      payload["last_synced_value"] = lastSyncedValue
+    }
+    if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+       let text = String(data: data, encoding: .utf8) {
+      print(text)
+    }
+    return
+  }
+
+  if opts.larkDisableAutoSync {
+    await store.disable()
+    if opts.jsonOutput {
+      print(#"{"enabled":false}"#)
+    } else {
+      print(ANSI.c(ANSI.green, "Disabled app auto-sync for Lark signature."))
+    }
+    return
+  }
+
+  guard !opts.larkSlotID.isEmpty else {
+    exitWithError("--slot-id is required for lark-signature")
+  }
+
+  let timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .autoupdatingCurrent
+  let now = Date()
+  let snapshot = await LiveTokenCostSnapshotLoader().loadSnapshot(now: now)
+  let value = LarkSignatureFormatter.summary(
+    snapshot: snapshot,
+    label: opts.larkLabel,
+    useLocalSummary: opts.larkUseLocalSummary,
+    timeZone: timeZone
+  )
+
+  if opts.larkEnableAutoSync {
+    guard !opts.larkCredential.isEmpty else {
+      exitWithError("--credential is required when using --enable-auto-sync")
+    }
+    let config = LarkSignatureAutoSyncConfig(
+      enabled: true,
+      credential: opts.larkCredential,
+      slotID: opts.larkSlotID,
+      label: opts.larkLabel,
+      baseURL: opts.larkBaseURL,
+      useLocalSummary: opts.larkUseLocalSummary
+    )
+    await store.save(config)
+  }
+
+  if opts.larkDryRun {
+    if opts.jsonOutput {
+      let payload: [String: Any] = [
+        "base_url": opts.larkBaseURL,
+        "dry_run": true,
+        "auto_sync_enabled": opts.larkEnableAutoSync,
+        "local_only": opts.larkUseLocalSummary,
+        "slot_id": opts.larkSlotID,
+        "value": value
+      ]
+      if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+         let text = String(data: data, encoding: .utf8) {
+        print(text)
+      }
+    } else {
+      print(value)
+    }
+    return
+  }
+
+  guard !opts.larkCredential.isEmpty else {
+    exitWithError("--credential is required unless you use --dry-run")
+  }
+
+  guard let baseURL = URL(string: opts.larkBaseURL) else {
+    exitWithError("--base-url must be a valid URL")
+  }
+
+  let client = LarkSlotClient(baseURL: baseURL)
+  do {
+    try await client.updateSlot(
+      credential: opts.larkCredential,
+      slotID: opts.larkSlotID,
+      value: value
+    )
+  } catch {
+    exitWithError("Failed to update Lark slot: \(error.localizedDescription)")
+  }
+
+  if opts.larkEnableAutoSync {
+    var config = await store.load()
+    config.lastSyncedValue = value
+    config.lastSyncedAt = now
+    await store.save(config)
+  }
+
+  if opts.jsonOutput {
+    let payload: [String: Any] = [
+      "base_url": opts.larkBaseURL,
+      "dry_run": false,
+      "auto_sync_enabled": opts.larkEnableAutoSync,
+      "local_only": opts.larkUseLocalSummary,
+      "slot_id": opts.larkSlotID,
+      "value": value
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+       let text = String(data: data, encoding: .utf8) {
+      print(text)
+    }
+    return
+  }
+
+  print(ANSI.c(ANSI.green, "Updated Lark signature slot."))
+  print(ANSI.c(ANSI.dim, "  Slot:  \(opts.larkSlotID)"))
+  print(ANSI.c(ANSI.dim, "  Value: \(value)"))
+  if opts.larkEnableAutoSync {
+    print(ANSI.c(ANSI.dim, "  Auto-sync: enabled in Codex Rate Watcher"))
+  }
+}
+
 private func printHelp() {
   let help = """
   \(ANSI.c(ANSI.bold + ANSI.cyan, "codex-rate")) \u{2014} Codex CLI Usage Monitor
@@ -884,6 +1065,7 @@ private func printHelp() {
     history     Show usage history with sparklines
     relay       Show relay plan across accounts
     cost        Show local token cost from Codex session logs
+    lark-signature  Sync token cost summary into a Lark URL preview slot
     proxy       Start local HTTP proxy for Codex API
     mode        Switch Codex between proxy and direct modes
     help        Show this help message
@@ -895,6 +1077,15 @@ private func printHelp() {
     --strategy <name>    Relay strategy: reset-aware (default), greedy, max-runway
     --port <N>           Proxy listen port (default: 19876)
     --upstream <url>     Proxy upstream URL (default: https://api.openai.com)
+    --credential <str>   Lark custom slot credential
+    --slot-id <str>      Lark custom slot ID
+    --label <str>        Prefix label for signature summary (default: empty)
+    --base-url <url>     Lark slot API base URL (default: https://l.garyyang.work)
+    --local-only         Use local-device totals instead of merged totals
+    --dry-run            Print signature text without writing slot
+    --enable-auto-sync   Save Lark sync config for the menu bar app
+    --disable-auto-sync  Remove saved app auto-sync config
+    --show-auto-sync     Show saved app auto-sync status
     --no-relay           Disable automatic 429 failover
     --verbose            Verbose proxy logging
     -v, --version        Show version
@@ -910,6 +1101,10 @@ private func printHelp() {
     codex-rate relay --strategy greedy  Use greedy strategy
     codex-rate cost              Show local token cost
     codex-rate cost --json       Local token cost as JSON
+    codex-rate lark-signature --slot-id <id> --dry-run
+    codex-rate lark-signature --credential <cred> --slot-id <id>
+    codex-rate lark-signature --credential <cred> --slot-id <id> --enable-auto-sync
+    codex-rate lark-signature --show-auto-sync
     codex-rate proxy             Start proxy on port 19876
     codex-rate proxy --port 8080 Start proxy on custom port
     codex-rate proxy --verbose   Proxy with request logging
@@ -1013,6 +1208,8 @@ case .history:
   runHistory(hours: opts.historyHours, json: opts.jsonOutput)
 case .cost:
   await runCost(json: opts.jsonOutput)
+case .larkSignature:
+  await runLarkSignature(opts: opts)
 case .proxy:
   await runProxy(opts: opts)
 case .mode:

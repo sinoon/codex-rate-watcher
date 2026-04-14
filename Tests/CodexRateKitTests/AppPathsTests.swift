@@ -96,6 +96,16 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(ledgerPath.hasPrefix(rootPath), "Token cost ledger file should be under root directory")
   }
 
+  func testLarkSignatureSyncConfigFileName() {
+    XCTAssertEqual(AppPaths.larkSignatureSyncConfigFile.lastPathComponent, "lark-signature-sync.json")
+  }
+
+  func testLarkSignatureSyncConfigFileIsUnderRoot() {
+    let configPath = AppPaths.larkSignatureSyncConfigFile.path
+    let rootPath = AppPaths.rootDirectory.path
+    XCTAssertTrue(configPath.hasPrefix(rootPath), "Lark signature sync config file should be under root directory")
+  }
+
   func testICloudDriveRootTargetsCloudDocsDirectory() {
     let path = AppPaths.iCloudDriveRootDirectory.path
     XCTAssertTrue(path.contains("Mobile Documents/com~apple~CloudDocs"), "iCloud root should point to CloudDocs, got: \(path)")
@@ -122,6 +132,7 @@ final class AppPathsTests: XCTestCase {
     XCTAssertTrue(AppPaths.tokenCostCacheFile.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.tokenCostDeviceFile.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.tokenCostLocalLedgerFile.path.hasPrefix("/"))
+    XCTAssertTrue(AppPaths.larkSignatureSyncConfigFile.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.iCloudDriveRootDirectory.path.hasPrefix("/"))
     XCTAssertTrue(AppPaths.iCloudLedgerDirectory.path.hasPrefix("/"))
   }

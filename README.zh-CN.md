@@ -214,6 +214,23 @@ swift run CodexRateWatcherNative -- --window
 
 以独立窗口启动，而非菜单栏弹窗——适合截图和 UI 调试。
 
+### CLI 补充命令
+
+```bash
+# 预览准备写入飞书 URL Preview 签名槽位的文案
+swift run codex-rate lark-signature --slot-id <slot-id> --dry-run
+
+# 将最新 token 汇总写入飞书自定义 slot
+swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id>
+
+# 保存飞书 slot 配置，让菜单栏应用在每次刷新后自动同步
+swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id> --enable-auto-sync
+
+# 查看或关闭已保存的自动同步配置
+swift run codex-rate lark-signature --show-auto-sync
+swift run codex-rate lark-signature --disable-auto-sync
+```
+
 ## 🔬 工作原理
 
 ```

@@ -15,6 +15,7 @@ public enum AppPaths {
   public static let tokenCostCacheFile = rootDirectory.appending(path: "token-cost-cache.json")
   public static let tokenCostDeviceFile = rootDirectory.appending(path: "token-cost-device.json")
   public static let tokenCostLocalLedgerFile = rootDirectory.appending(path: "token-cost-ledger.json")
+  public static let larkSignatureSyncConfigFile = rootDirectory.appending(path: "lark-signature-sync.json")
 
   public static let iCloudDriveRootDirectory: URL = {
     FileManager.default.homeDirectoryForCurrentUser

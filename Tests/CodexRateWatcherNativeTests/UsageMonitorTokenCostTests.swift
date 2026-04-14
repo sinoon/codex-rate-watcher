@@ -49,6 +49,47 @@ final class UsageMonitorTokenCostTests: XCTestCase {
     XCTAssertEqual(observedState?.tokenCostSnapshot, expectedSnapshot)
   }
 
+  func testRefreshTriggersLarkSignatureAutoSyncAfterLoadingTokenCostSnapshot() async throws {
+    let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let liveAuthURL = tempDir.appending(path: "auth.json")
+    try Self.makeAuthData(
+      email: "current@example.com",
+      accountID: "acct_current",
+      accessTokenSuffix: "current"
+    ).write(to: liveAuthURL, options: .atomic)
+
+    TokenCostMonitorURLProtocol.responseStatusCode = 200
+    TokenCostMonitorURLProtocol.responseData = Self.makeUsageResponseData()
+    let sessionConfig = URLSessionConfiguration.ephemeral
+    sessionConfig.protocolClasses = [TokenCostMonitorURLProtocol.self]
+    let apiClient = UsageAPIClient(session: URLSession(configuration: sessionConfig))
+
+    let expectedSnapshot = TokenCostSnapshot(
+      todayTokens: 12_345,
+      todayCostUSD: 1.23,
+      last30DaysTokens: 67_890,
+      last30DaysCostUSD: 4.56,
+      daily: [],
+      updatedAt: Date(timeIntervalSince1970: 1_775_000_000)
+    )
+    let autoSync = StubLarkSignatureAutoSync()
+
+    let monitor = UsageMonitor(
+      authStore: AuthStore(fileURL: liveAuthURL),
+      apiClient: apiClient,
+      tokenCostLoader: StubTokenCostLoader(snapshot: expectedSnapshot),
+      larkSignatureAutoSync: autoSync
+    )
+
+    await monitor.refresh(manual: true)
+
+    let syncedSnapshots = await autoSync.snapshots
+    XCTAssertEqual(syncedSnapshots, [expectedSnapshot])
+  }
+
   nonisolated private static func makeAuthData(
     email: String,
     accountID: String,
@@ -120,6 +161,14 @@ private struct StubTokenCostLoader: TokenCostSnapshotLoading {
 
   func loadSnapshot(now _: Date) async -> TokenCostSnapshot {
     snapshot
+  }
+}
+
+private actor StubLarkSignatureAutoSync: LarkSignatureAutoSyncing {
+  private(set) var snapshots: [TokenCostSnapshot] = []
+
+  func syncIfNeeded(snapshot: TokenCostSnapshot, now _: Date) async {
+    snapshots.append(snapshot)
   }
 }
 
