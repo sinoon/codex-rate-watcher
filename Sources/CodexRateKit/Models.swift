@@ -100,7 +100,12 @@ public struct LimitWindow: Decodable, Sendable {
     usedPercent = try container.decode(Double.self, forKey: .usedPercent)
     limitWindowSeconds = try container.decode(Int.self, forKey: .limitWindowSeconds)
     resetAfterSeconds = try container.decode(Int.self, forKey: .resetAfterSeconds)
-    resetAt = try container.decode(TimeInterval.self, forKey: .resetAt)
+    let rawResetAt = try container.decode(TimeInterval.self, forKey: .resetAt)
+    resetAt = Self.sanitizeFutureResetAt(
+      rawResetAt,
+      fallbackSeconds: resetAfterSeconds,
+      maxExpectedWindowSeconds: max(limitWindowSeconds, resetAfterSeconds)
+    )
   }
 
   public var remainingPercent: Double {
@@ -113,6 +118,24 @@ public struct LimitWindow: Decodable, Sendable {
 
   public var remainingPercentLabel: String {
     "\(Int(remainingPercent.rounded()))%"
+  }
+
+  private static func sanitizeFutureResetAt(
+    _ rawResetAt: TimeInterval,
+    fallbackSeconds: Int,
+    maxExpectedWindowSeconds: Int,
+    now: Date = Date()
+  ) -> TimeInterval {
+    let safeFallbackSeconds = max(0, fallbackSeconds)
+    let fallback = now.addingTimeInterval(TimeInterval(safeFallbackSeconds)).timeIntervalSince1970
+    let maxExpected = max(60, maxExpectedWindowSeconds)
+    let tolerance = TimeInterval(max(300, min(maxExpected * 2, 14 * 24 * 60 * 60)))
+
+    guard rawResetAt > fallback + tolerance else {
+      return rawResetAt
+    }
+
+    return fallback
   }
 }
 
@@ -173,11 +196,34 @@ public struct AuthProfileUsageSummary: Codable, Sendable {
     isAllowed = try container.decodeIfPresent(Bool.self, forKey: .isAllowed) ?? true
     limitReached = try container.decodeIfPresent(Bool.self, forKey: .limitReached) ?? false
     primaryUsedPercent = try container.decode(Double.self, forKey: .primaryUsedPercent)
-    primaryResetAt = try container.decode(TimeInterval.self, forKey: .primaryResetAt)
+    primaryResetAt = Self.sanitizeStoredResetAt(
+      try container.decode(TimeInterval.self, forKey: .primaryResetAt),
+      fallbackSeconds: 18_000
+    )
     secondaryUsedPercent = try container.decodeIfPresent(Double.self, forKey: .secondaryUsedPercent)
-    secondaryResetAt = try container.decodeIfPresent(TimeInterval.self, forKey: .secondaryResetAt)
+    secondaryResetAt = try container.decodeIfPresent(TimeInterval.self, forKey: .secondaryResetAt).map {
+      Self.sanitizeStoredResetAt($0, fallbackSeconds: 604_800)
+    }
     reviewUsedPercent = try container.decode(Double.self, forKey: .reviewUsedPercent)
-    reviewResetAt = try container.decode(TimeInterval.self, forKey: .reviewResetAt)
+    reviewResetAt = Self.sanitizeStoredResetAt(
+      try container.decode(TimeInterval.self, forKey: .reviewResetAt),
+      fallbackSeconds: 18_000
+    )
+  }
+
+  private static func sanitizeStoredResetAt(
+    _ rawResetAt: TimeInterval,
+    fallbackSeconds: Int,
+    now: Date = Date()
+  ) -> TimeInterval {
+    let fallback = now.addingTimeInterval(TimeInterval(max(0, fallbackSeconds))).timeIntervalSince1970
+    let tolerance = TimeInterval(max(300, min(fallbackSeconds * 2, 14 * 24 * 60 * 60)))
+
+    guard rawResetAt > fallback + tolerance else {
+      return rawResetAt
+    }
+
+    return fallback
   }
 }
 

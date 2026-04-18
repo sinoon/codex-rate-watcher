@@ -90,6 +90,34 @@ final class UsageSampleTests: XCTestCase {
     XCTAssertEqual(decoded.reviewUsedPercent, 3.0, accuracy: 0.001)
   }
 
+  func testDecodingRepairsImplausibleFarFutureResetTimes() throws {
+    let json = """
+    {
+      "capturedAt": 704505600.0,
+      "primaryUsedPercent": 75.5,
+      "primaryResetAt": 4102444800,
+      "secondaryUsedPercent": 25.0,
+      "secondaryResetAt": 4102444800,
+      "reviewUsedPercent": 3.0,
+      "reviewResetAt": 4102444800
+    }
+    """.data(using: .utf8)!
+
+    let before = Date().timeIntervalSince1970
+    let decoded = try JSONDecoder().decode(UsageSample.self, from: json)
+    let after = Date().timeIntervalSince1970
+
+    XCTAssertGreaterThanOrEqual(decoded.primaryResetAt, before + 17_990)
+    XCTAssertLessThanOrEqual(decoded.primaryResetAt, after + 18_010)
+
+    let secondaryResetAt = try XCTUnwrap(decoded.secondaryResetAt)
+    XCTAssertGreaterThanOrEqual(secondaryResetAt, before + 604_790)
+    XCTAssertLessThanOrEqual(secondaryResetAt, after + 604_810)
+
+    XCTAssertGreaterThanOrEqual(decoded.reviewResetAt, before + 17_990)
+    XCTAssertLessThanOrEqual(decoded.reviewResetAt, after + 18_010)
+  }
+
   func testEncodingProducesAllKeys() throws {
     let sample = UsageSample(
       capturedAt: Date(timeIntervalSince1970: 1000000),

@@ -31,8 +31,14 @@ final class UsageEstimatorTests: XCTestCase {
     resetAfterSeconds: Int = 12345,
     resetAt: TimeInterval = 0
   ) -> LimitWindow {
+    let resolvedResetAfterSeconds: Int
+    if resetAt > 0, resetAfterSeconds == 12345 {
+      resolvedResetAfterSeconds = max(0, Int(resetAt - Date().timeIntervalSince1970))
+    } else {
+      resolvedResetAfterSeconds = resetAfterSeconds
+    }
     let json = """
-    {"used_percent":\(usedPercent),"limit_window_seconds":\(limitWindowSeconds),"reset_after_seconds":\(resetAfterSeconds),"reset_at":\(resetAt)}
+    {"used_percent":\(usedPercent),"limit_window_seconds":\(limitWindowSeconds),"reset_after_seconds":\(resolvedResetAfterSeconds),"reset_at":\(resetAt)}
     """.data(using: .utf8)!
     return try! JSONDecoder().decode(LimitWindow.self, from: json)
   }

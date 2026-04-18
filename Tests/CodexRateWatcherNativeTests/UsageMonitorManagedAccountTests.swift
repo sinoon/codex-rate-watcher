@@ -26,6 +26,7 @@ final class UsageMonitorManagedAccountTests: XCTestCase {
       managedAccountStore: managedStore,
       paths: paths
     )
+    let sampleStore = SampleStore(fileURL: paths.rootDirectory.appending(path: "samples.json"))
     let existingProfiles = try await profileStore.captureCurrentAuthIfNeeded()
     let currentProfileID = try XCTUnwrap(existingProfiles.first?.id)
 
@@ -50,6 +51,7 @@ final class UsageMonitorManagedAccountTests: XCTestCase {
     let monitor = UsageMonitor(
       authStore: AuthStore(fileURL: liveAuthURL),
       apiClient: apiClient,
+      sampleStore: sampleStore,
       profileStore: profileStore,
       managedAccountService: service
     )

@@ -17,6 +17,18 @@ final class UsageMonitorTokenCostTests: XCTestCase {
       accessTokenSuffix: "current"
     ).write(to: liveAuthURL, options: .atomic)
 
+    let paths = AuthProfileStorePaths(
+      rootDirectory: tempDir.appending(path: "app-support", directoryHint: .isDirectory),
+      profilesDirectory: tempDir.appending(path: "app-support/auth-profiles", directoryHint: .isDirectory),
+      profileIndexFile: tempDir.appending(path: "app-support/profiles.json"),
+      backupsDirectory: tempDir.appending(path: "app-support/auth-backups", directoryHint: .isDirectory)
+    )
+    let profileStore = AuthProfileStore(
+      authStore: AuthStore(fileURL: liveAuthURL),
+      paths: paths
+    )
+    let sampleStore = SampleStore(fileURL: paths.rootDirectory.appending(path: "samples.json"))
+
     TokenCostMonitorURLProtocol.responseStatusCode = 200
     TokenCostMonitorURLProtocol.responseData = Self.makeUsageResponseData()
     let sessionConfig = URLSessionConfiguration.ephemeral
@@ -35,7 +47,9 @@ final class UsageMonitorTokenCostTests: XCTestCase {
     let monitor = UsageMonitor(
       authStore: AuthStore(fileURL: liveAuthURL),
       apiClient: apiClient,
-      tokenCostLoader: StubTokenCostLoader(snapshot: expectedSnapshot)
+      tokenCostLoader: StubTokenCostLoader(snapshot: expectedSnapshot),
+      sampleStore: sampleStore,
+      profileStore: profileStore
     )
 
     var observedState: UsageMonitor.State?
@@ -61,6 +75,18 @@ final class UsageMonitorTokenCostTests: XCTestCase {
       accessTokenSuffix: "current"
     ).write(to: liveAuthURL, options: .atomic)
 
+    let paths = AuthProfileStorePaths(
+      rootDirectory: tempDir.appending(path: "app-support", directoryHint: .isDirectory),
+      profilesDirectory: tempDir.appending(path: "app-support/auth-profiles", directoryHint: .isDirectory),
+      profileIndexFile: tempDir.appending(path: "app-support/profiles.json"),
+      backupsDirectory: tempDir.appending(path: "app-support/auth-backups", directoryHint: .isDirectory)
+    )
+    let profileStore = AuthProfileStore(
+      authStore: AuthStore(fileURL: liveAuthURL),
+      paths: paths
+    )
+    let sampleStore = SampleStore(fileURL: paths.rootDirectory.appending(path: "samples.json"))
+
     TokenCostMonitorURLProtocol.responseStatusCode = 200
     TokenCostMonitorURLProtocol.responseData = Self.makeUsageResponseData()
     let sessionConfig = URLSessionConfiguration.ephemeral
@@ -81,7 +107,9 @@ final class UsageMonitorTokenCostTests: XCTestCase {
       authStore: AuthStore(fileURL: liveAuthURL),
       apiClient: apiClient,
       tokenCostLoader: StubTokenCostLoader(snapshot: expectedSnapshot),
-      larkSignatureAutoSync: autoSync
+      larkSignatureAutoSync: autoSync,
+      sampleStore: sampleStore,
+      profileStore: profileStore
     )
 
     await monitor.refresh(manual: true)

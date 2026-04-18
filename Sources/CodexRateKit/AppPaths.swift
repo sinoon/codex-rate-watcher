@@ -54,4 +54,48 @@ public struct UsageSample: Codable, Sendable {
     self.reviewUsedPercent = reviewUsedPercent
     self.reviewResetAt = reviewResetAt
   }
+
+  enum CodingKeys: String, CodingKey {
+    case capturedAt
+    case primaryUsedPercent
+    case primaryResetAt
+    case secondaryUsedPercent
+    case secondaryResetAt
+    case reviewUsedPercent
+    case reviewResetAt
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    capturedAt = try container.decode(Date.self, forKey: .capturedAt)
+    primaryUsedPercent = try container.decode(Double.self, forKey: .primaryUsedPercent)
+    primaryResetAt = Self.sanitizeStoredResetAt(
+      try container.decode(TimeInterval.self, forKey: .primaryResetAt),
+      fallbackSeconds: 18_000
+    )
+    secondaryUsedPercent = try container.decodeIfPresent(Double.self, forKey: .secondaryUsedPercent)
+    secondaryResetAt = try container.decodeIfPresent(TimeInterval.self, forKey: .secondaryResetAt).map {
+      Self.sanitizeStoredResetAt($0, fallbackSeconds: 604_800)
+    }
+    reviewUsedPercent = try container.decode(Double.self, forKey: .reviewUsedPercent)
+    reviewResetAt = Self.sanitizeStoredResetAt(
+      try container.decode(TimeInterval.self, forKey: .reviewResetAt),
+      fallbackSeconds: 18_000
+    )
+  }
+
+  private static func sanitizeStoredResetAt(
+    _ rawResetAt: TimeInterval,
+    fallbackSeconds: Int,
+    now: Date = Date()
+  ) -> TimeInterval {
+    let fallback = now.addingTimeInterval(TimeInterval(max(0, fallbackSeconds))).timeIntervalSince1970
+    let tolerance = TimeInterval(max(300, min(fallbackSeconds * 2, 14 * 24 * 60 * 60)))
+
+    guard rawResetAt > fallback + tolerance else {
+      return rawResetAt
+    }
+
+    return fallback
+  }
 }

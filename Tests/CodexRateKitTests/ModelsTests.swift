@@ -194,6 +194,20 @@ final class ModelsTests: XCTestCase {
     )
   }
 
+  func testDecodeLimitWindowRepairsImplausibleFarFutureResetAt() {
+    let before = Date().timeIntervalSince1970
+    let window = makeLimitWindow(
+      usedPercent: 10.0,
+      limitWindowSeconds: 18_000,
+      resetAfterSeconds: 9_000,
+      resetAt: 4_102_444_800
+    )
+    let after = Date().timeIntervalSince1970
+
+    XCTAssertGreaterThanOrEqual(window.resetAt, before + 8_990)
+    XCTAssertLessThanOrEqual(window.resetAt, after + 9_010)
+  }
+
   // MARK: - LimitWindow Computed Properties
 
   func testLimitWindowRemainingPercentNormal() {
@@ -389,6 +403,36 @@ final class ModelsTests: XCTestCase {
 
     XCTAssertNil(summary.secondaryUsedPercent)
     XCTAssertNil(summary.secondaryResetAt)
+  }
+
+  func testDecodeAuthProfileUsageSummaryRepairsImplausibleStoredResetTimes() throws {
+    let json = """
+    {
+      "planType": "plus",
+      "isAllowed": true,
+      "limitReached": false,
+      "primaryUsedPercent": 10,
+      "primaryResetAt": 4102444800,
+      "secondaryUsedPercent": 15,
+      "secondaryResetAt": 4102444800,
+      "reviewUsedPercent": 20,
+      "reviewResetAt": 4102444800
+    }
+    """.data(using: .utf8)!
+
+    let before = Date().timeIntervalSince1970
+    let summary = try JSONDecoder().decode(AuthProfileUsageSummary.self, from: json)
+    let after = Date().timeIntervalSince1970
+
+    XCTAssertGreaterThanOrEqual(summary.primaryResetAt, before + 17_990)
+    XCTAssertLessThanOrEqual(summary.primaryResetAt, after + 18_010)
+
+    let secondaryResetAt = try XCTUnwrap(summary.secondaryResetAt)
+    XCTAssertGreaterThanOrEqual(secondaryResetAt, before + 604_790)
+    XCTAssertLessThanOrEqual(secondaryResetAt, after + 604_810)
+
+    XCTAssertGreaterThanOrEqual(summary.reviewResetAt, before + 17_990)
+    XCTAssertLessThanOrEqual(summary.reviewResetAt, after + 18_010)
   }
 
   // MARK: - AuthProfileUsageSummary Computed Properties

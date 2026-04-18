@@ -5,8 +5,10 @@ actor SampleStore {
   private let fileManager = FileManager.default
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
+  private let fileURL: URL
 
-  init() {
+  init(fileURL: URL = AppPaths.samplesFile) {
+    self.fileURL = fileURL
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     encoder.dateEncodingStrategy = .iso8601
     decoder.dateDecodingStrategy = .iso8601
@@ -14,7 +16,7 @@ actor SampleStore {
 
   func load() async -> [UsageSample] {
     do {
-      let data = try Data(contentsOf: AppPaths.samplesFile)
+      let data = try Data(contentsOf: fileURL)
       return try decoder.decode([UsageSample].self, from: data)
     } catch {
       return []
@@ -45,12 +47,12 @@ actor SampleStore {
   }
 
   private func save(_ samples: [UsageSample]) async {
-    let directory = AppPaths.samplesFile.deletingLastPathComponent()
+    let directory = fileURL.deletingLastPathComponent()
     try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
     do {
       let data = try encoder.encode(samples)
-      try data.write(to: AppPaths.samplesFile, options: .atomic)
+      try data.write(to: fileURL, options: .atomic)
     } catch {
       return
     }
