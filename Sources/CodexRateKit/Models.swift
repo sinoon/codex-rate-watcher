@@ -481,9 +481,13 @@ extension AuthProfileUsageSummary {
   public var switchSummaryText: String {
     let baseText = switchSummaryBaseText
 
+    if let resetSummary = joinedResetSummaryText(separator: " · ") {
+      return "\(baseText) · \(resetSummary)"
+    }
+
     if isWeeklyExhausted || isPrimaryExhausted {
       if let resetLabel = nextBlockingResetLabel {
-        return "\(baseText) · \(resetLabel) 重置"
+        return "\(baseText) · \(resetContextLabel(for: nextBlockingResetAt)) \(resetLabel)"
       }
       return baseText
     }
@@ -494,15 +498,11 @@ extension AuthProfileUsageSummary {
   public var profileListSummaryText: String {
     let baseText = switchSummaryBaseText
 
-    guard let resetAt = nextRelevantResetAt,
-          let resetSummary = QuotaTimeFormatter.resetCountdownLabel(
-            for: resetAt,
-            timeZone: .autoupdatingCurrent
-          ) else {
+    guard let resetSummary = joinedResetSummaryText(separator: "\n") else {
       return baseText
     }
 
-    return "\(baseText) · \(resetSummary)"
+    return "\(baseText)\n\(resetSummary)"
   }
 
   private var switchSummaryBaseText: String {
@@ -553,6 +553,21 @@ extension AuthProfileUsageSummary {
     return primaryResetAt
   }
 
+  private func joinedResetSummaryText(separator: String) -> String? {
+    var parts: [String] = []
+
+    if let primarySummary = resetSummaryText(context: "5h 重置", resetAt: primaryResetAt) {
+      parts.append(primarySummary)
+    }
+
+    if let weeklySummary = resetSummaryText(context: "周重置", resetAt: secondaryResetAt) {
+      parts.append(weeklySummary)
+    }
+
+    guard !parts.isEmpty else { return nil }
+    return parts.joined(separator: separator)
+  }
+
   /// Format a reset timestamp into a human-readable label.
   /// - Within today: "14:30"
   /// - Tomorrow: "明天 14:30"
@@ -564,6 +579,23 @@ extension AuthProfileUsageSummary {
       timeZone: .autoupdatingCurrent,
       style: .chineseMonthDay
     )
+  }
+
+  private func resetSummaryText(context: String, resetAt: TimeInterval?) -> String? {
+    guard let resetAt else { return nil }
+    return QuotaTimeFormatter.contextualResetCountdownLabel(
+      context: context,
+      for: resetAt,
+      timeZone: .autoupdatingCurrent
+    )
+  }
+
+  private func resetContextLabel(for resetAt: TimeInterval?) -> String {
+    guard let resetAt else { return "5h 重置" }
+    if let secondaryResetAt, abs(secondaryResetAt - resetAt) < 1 {
+      return "周重置"
+    }
+    return "5h 重置"
   }
 }
 

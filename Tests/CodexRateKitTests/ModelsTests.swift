@@ -575,6 +575,22 @@ final class ModelsTests: XCTestCase {
 
     XCTAssertTrue(summary.switchSummaryText.contains("5h耗尽"))
     XCTAssertTrue(summary.switchSummaryText.contains("周 39%"))
+    XCTAssertTrue(summary.switchSummaryText.contains("5h 重置"))
+    XCTAssertTrue(summary.switchSummaryText.contains("周重置"))
+  }
+
+  func testProfileListSummaryTextUsesWeeklyResetContextWhenWeeklyBlocked() {
+    let summary = makeSummary(
+      primaryUsedPercent: 22.0,
+      primaryResetAt: 1_900_000_000,
+      secondaryUsedPercent: 100.0,
+      secondaryResetAt: 1_900_500_000
+    )
+
+    XCTAssertTrue(summary.profileListSummaryText.contains("周额度耗尽"))
+    XCTAssertTrue(summary.profileListSummaryText.contains("5h 重置"))
+    XCTAssertTrue(summary.profileListSummaryText.contains("周重置"))
+    XCTAssertTrue(summary.profileListSummaryText.contains("\n"))
   }
 
   // MARK: - AuthProfileUsageSummary Codable Round-trip

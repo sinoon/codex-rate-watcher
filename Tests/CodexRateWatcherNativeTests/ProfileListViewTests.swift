@@ -43,10 +43,10 @@ final class ProfileListViewTests: XCTestCase {
 
     let resetLabels = allTextFields(in: viewController.view)
       .map(\.stringValue)
-      .filter { $0.contains("后重置") }
+      .filter { $0.contains("重置") }
     XCTAssertGreaterThanOrEqual(resetLabels.count, 2)
-    XCTAssertTrue(resetLabels.contains { $0.contains("5h 60%") })
-    XCTAssertTrue(resetLabels.contains { $0.contains("5h耗尽") })
+    XCTAssertTrue(resetLabels.contains { $0.contains("5h 60%") && $0.contains("5h 重置") && $0.contains("周重置") && $0.contains("\n") })
+    XCTAssertTrue(resetLabels.contains { $0.contains("5h耗尽") && $0.contains("5h 重置") && $0.contains("周重置") && $0.contains("\n") })
   }
 
   func testProfileRowsUseTwoLineLayoutForLongResetCopy() throws {
@@ -80,11 +80,13 @@ final class ProfileListViewTests: XCTestCase {
 
     let useButton = try XCTUnwrap(findButton(" Use ", in: viewController.view))
     let row = try XCTUnwrap(useButton.superview)
-    XCTAssertGreaterThan(row.frame.height, 40)
+    XCTAssertGreaterThan(row.frame.height, 48)
 
     let labels = row.subviews.compactMap { $0 as? NSTextField }
     let nameLabel = try XCTUnwrap(labels.first { $0.stringValue == "Team · ready" })
-    let usageLabel = try XCTUnwrap(labels.first { $0.stringValue.contains("后重置") })
+    let usageLabel = try XCTUnwrap(labels.first { $0.stringValue.contains("5h 重置") })
+    XCTAssertTrue(usageLabel.stringValue.contains("\n"))
+    XCTAssertTrue(usageLabel.stringValue.contains("周重置"))
     XCTAssertGreaterThan(nameLabel.frame.midY, usageLabel.frame.midY + 6)
   }
 

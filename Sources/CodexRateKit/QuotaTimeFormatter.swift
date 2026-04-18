@@ -66,6 +66,23 @@ public enum QuotaTimeFormatter {
     return "\(durationLabel(remaining)) 后重置（\(resetLabel)）"
   }
 
+  public static func contextualResetCountdownLabel(
+    context: String,
+    for resetAt: TimeInterval,
+    now: Date = Date(),
+    timeZone: TimeZone = .autoupdatingCurrent,
+    style: ResetLabelStyle = .compact
+  ) -> String? {
+    let date = Date(timeIntervalSince1970: resetAt)
+    let remaining = date.timeIntervalSince(now)
+    guard remaining > 0,
+          let resetLabel = resetLabel(for: resetAt, now: now, timeZone: timeZone, style: style) else {
+      return nil
+    }
+
+    return "\(context)：\(durationLabel(remaining)) 后（\(resetLabel)）"
+  }
+
   private static func configuredCalendar(timeZone: TimeZone) -> Calendar {
     var calendar = Calendar.autoupdatingCurrent
     calendar.timeZone = timeZone

@@ -1952,10 +1952,13 @@ private final class ProfileRowView: NSView {
 
     usageLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .regular)
     usageLabel.textColor = LN.textTertiary
-    usageLabel.lineBreakMode = .byTruncatingTail
-    usageLabel.maximumNumberOfLines = 1
+    usageLabel.lineBreakMode = .byWordWrapping
+    usageLabel.maximumNumberOfLines = 0
     usageLabel.translatesAutoresizingMaskIntoConstraints = false
     usageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    usageLabel.cell?.wraps = true
+    usageLabel.cell?.isScrollable = false
+    usageLabel.cell?.usesSingleLineMode = false
 
     switchBtn.bezelStyle = .texturedRounded
     switchBtn.isBordered = false
@@ -1975,7 +1978,7 @@ private final class ProfileRowView: NSView {
     addSubview(switchBtn)
 
     NSLayoutConstraint.activate([
-      heightAnchor.constraint(equalToConstant: 48),
+      heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
 
       dot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
       dot.centerYAnchor.constraint(equalTo: nameLabel.centerYAnchor),

@@ -50,4 +50,26 @@ final class ResetTimeFormatterTests: XCTestCase {
 
     XCTAssertEqual(countdown, "4h15m 后重置（16:45）")
   }
+
+  func testContextualResetCountdownIncludesWindowTypeAndLocalClockHint() throws {
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timeZone
+
+    let now = try XCTUnwrap(
+      calendar.date(from: DateComponents(year: 2026, month: 4, day: 8, hour: 12, minute: 30))
+    )
+    let reset = try XCTUnwrap(
+      calendar.date(from: DateComponents(year: 2026, month: 4, day: 8, hour: 16, minute: 45))
+    )
+
+    let countdown = QuotaTimeFormatter.contextualResetCountdownLabel(
+      context: "5h 重置",
+      for: reset.timeIntervalSince1970,
+      now: now,
+      timeZone: timeZone
+    )
+
+    XCTAssertEqual(countdown, "5h 重置：4h15m 后（16:45）")
+  }
 }
