@@ -617,7 +617,7 @@ extension AuthProfileUsageSummary {
   /// Format a reset timestamp into a human-readable label.
   /// - Within today: "14:30"
   /// - Tomorrow: "明天 14:30"
-  /// - Further: "3月22日"
+  /// - Further: "3月22日 14:30"
   private func nextResetLabel(for resetAt: TimeInterval?) -> String? {
     guard let resetAt else { return nil }
     return QuotaTimeFormatter.resetLabel(

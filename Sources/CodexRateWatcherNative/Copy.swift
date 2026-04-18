@@ -21,7 +21,7 @@ enum Copy {
     QuotaTimeFormatter.durationLabel(interval)
   }
 
-  /// Compact date: "16:09" (today) / "明天 14:30" / "3/22"
+  /// Compact date: "16:09" (today) / "明天 14:30" / "3/22 14:30"
   static func resetDate(_ resetAt: TimeInterval) -> String {
     QuotaTimeFormatter.resetLabel(for: resetAt, timeZone: TimeZone.autoupdatingCurrent) ?? "--"
   }

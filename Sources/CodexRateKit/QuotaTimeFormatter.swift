@@ -46,7 +46,7 @@ public enum QuotaTimeFormatter {
       return "明天 \(formatter.string(from: date))"
     }
 
-    formatter.dateFormat = style == .compact ? "M/d" : "M月d日"
+    formatter.dateFormat = style == .compact ? "M/d HH:mm" : "M月d日 HH:mm"
     return formatter.string(from: date)
   }
 
@@ -63,7 +63,7 @@ public enum QuotaTimeFormatter {
       return nil
     }
 
-    return "\(durationLabel(remaining)) 后重置（\(resetLabel)）"
+    return "\(resetLabel) 重置 · \(durationLabel(remaining))后"
   }
 
   public static func contextualResetCountdownLabel(
@@ -80,7 +80,7 @@ public enum QuotaTimeFormatter {
       return nil
     }
 
-    return "\(context)：\(durationLabel(remaining)) 后（\(resetLabel)）"
+    return "\(context)：\(resetLabel) · \(durationLabel(remaining))后"
   }
 
   private static func configuredCalendar(timeZone: TimeZone) -> Calendar {
