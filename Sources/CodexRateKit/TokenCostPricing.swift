@@ -39,6 +39,7 @@ public enum TokenCostPricing {
     "gpt-5.4-mini": CodexPricing(inputCostPerToken: 7.5e-7, outputCostPerToken: 4.5e-6, cacheReadInputCostPerToken: 7.5e-8),
     "gpt-5.4-nano": CodexPricing(inputCostPerToken: 2e-7, outputCostPerToken: 1.25e-6, cacheReadInputCostPerToken: 2e-8),
     "gpt-5.4-pro": CodexPricing(inputCostPerToken: 3e-5, outputCostPerToken: 1.8e-4, cacheReadInputCostPerToken: nil),
+    "gpt-5.5": CodexPricing(inputCostPerToken: 5e-6, outputCostPerToken: 3e-5, cacheReadInputCostPerToken: 5e-7),
   ]
 
   public static func normalizeCodexModel(_ raw: String) -> String {

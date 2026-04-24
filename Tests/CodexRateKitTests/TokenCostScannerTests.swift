@@ -87,6 +87,40 @@ final class TokenCostScannerTests: XCTestCase {
     XCTAssertEqual(snapshot.daily.first?.cacheReadTokens, 300)
   }
 
+  func testScannerPricesGPT55Sessions() throws {
+    let now = isoDate("2026-04-01T12:00:00+08:00")
+    let codexHome = tempDirectory.appending(path: ".codex", directoryHint: .isDirectory)
+    let sessionsDirectory = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "04", directoryHint: .isDirectory)
+      .appending(path: "01", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
+
+    let fileURL = sessionsDirectory.appending(path: "rollout-2026-04-01-gpt55.jsonl")
+    try writeLines([
+      #"{"timestamp":"2026-04-01T11:00:00+08:00","type":"session_meta","payload":{"session_id":"session-gpt55"}}"#,
+      #"{"timestamp":"2026-04-01T11:00:01+08:00","type":"turn_context","payload":{"model":"gpt-5.5"}}"#,
+      #"{"timestamp":"2026-04-01T11:00:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":400000,"output_tokens":10000}}}}"#,
+    ], to: fileURL)
+
+    let snapshot = TokenCostScanner.loadSnapshot(
+      now: now,
+      options: .init(
+        codexHomeURL: codexHome,
+        managedHomesDirectoryURL: tempDirectory.appending(path: "managed-codex-homes", directoryHint: .isDirectory),
+        cacheFileURL: tempDirectory.appending(path: "token-cost-cache.json"),
+        refreshMinIntervalSeconds: 0
+      )
+    )
+
+    XCTAssertEqual(snapshot.todayTokens, 1_010_000)
+    XCTAssertEqual(snapshot.todayCostUSD ?? 0, 3.5, accuracy: 0.0000001)
+    XCTAssertFalse(snapshot.hasPartialPricing)
+    XCTAssertEqual(snapshot.modelSummaries.map(\.modelName), ["gpt-5.5"])
+    XCTAssertEqual(snapshot.modelSummaries.first?.costUSD ?? 0, 3.5, accuracy: 0.0000001)
+  }
+
   func testScannerIncludesManagedHomesAndDeduplicatesSessionIDs() throws {
     let now = isoDate("2026-04-01T12:00:00+08:00")
     let codexHome = tempDirectory.appending(path: ".codex", directoryHint: .isDirectory)
