@@ -4,8 +4,11 @@ import Foundation
 ///
 /// Mirrors the Codex CLI behaviour in `codex-rs/login/src/auth/manager.rs`.
 public struct TokenRefresher: Sendable {
+  private let session: URLSession
 
-  public init() {}
+  public init(session: URLSession = RateWatcherURLSessionFactory.shared) {
+    self.session = session
+  }
 
   // Same issuer / clientID used by Codex CLI browser login.
   private static let tokenURL = URL(string: "https://auth.openai.com/oauth/token")!
@@ -69,9 +72,10 @@ public struct TokenRefresher: Sendable {
     var request = URLRequest(url: Self.tokenURL)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await session.data(for: request)
 
     guard let http = response as? HTTPURLResponse else {
       throw RefreshError.networkError("非 HTTP 响应")

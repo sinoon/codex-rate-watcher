@@ -48,6 +48,7 @@ public final class ProxyServer: @unchecked Sendable {
 
   private let config: Config
   private let upstreamURL: URL
+  private let session: URLSession
   private let lock = NSLock()
   private var requestCount = 0
   private var failoverCount = 0
@@ -66,8 +67,9 @@ public final class ProxyServer: @unchecked Sendable {
   private var _isRunning = false
   public var isRunning: Bool { lock.withLock { _isRunning } }
 
-  public init(config: Config) {
+  public init(config: Config, session: URLSession = RateWatcherURLSessionFactory.shared) {
     self.config = config
+    self.session = session
     self.upstreamURL = URL(string: config.upstream)!
   }
 
@@ -251,12 +253,13 @@ public final class ProxyServer: @unchecked Sendable {
       ur.setValue(value, forHTTPHeaderField: name)
     }
     ur.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
+    ur.setValue("no-store", forHTTPHeaderField: "Cache-Control")
     if let accountID, !accountID.isEmpty {
       ur.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
     }
 
     do {
-      let (data, resp) = try await URLSession.shared.data(for: ur)
+      let (data, resp) = try await session.data(for: ur)
       guard let http = resp as? HTTPURLResponse else { return .fail("Non-HTTP response") }
 
       var headers: [(String, String)] = []
@@ -391,8 +394,9 @@ public final class ProxyServer: @unchecked Sendable {
     guard let url = URL(string: "http://127.0.0.1:\(port)/health") else { return false }
     var req = URLRequest(url: url)
     req.timeoutInterval = 1.5
+    req.setValue("no-store", forHTTPHeaderField: "Cache-Control")
     do {
-      let (_, resp) = try await URLSession.shared.data(for: req)
+      let (_, resp) = try await RateWatcherURLSessionFactory.shared.data(for: req)
       return (resp as? HTTPURLResponse)?.statusCode == 200
     } catch {
       return false

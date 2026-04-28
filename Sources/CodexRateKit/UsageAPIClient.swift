@@ -51,7 +51,7 @@ public struct UsageAPIClient: @unchecked Sendable {
   private let decoder = JSONDecoder()
   private let endpoint = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
-  public init(session: URLSession = .shared) {
+  public init(session: URLSession = RateWatcherURLSessionFactory.shared) {
     self.session = session
   }
 
@@ -59,6 +59,7 @@ public struct UsageAPIClient: @unchecked Sendable {
     var request = URLRequest(url: endpoint)
     request.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
     request.setValue("codex-rate-watcher-native/0.1", forHTTPHeaderField: "User-Agent")
     if let accountID = auth.accountID, !accountID.isEmpty {
       request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")

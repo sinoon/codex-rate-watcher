@@ -126,6 +126,39 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
     )
   }
 
+  func testServiceThrottlesAfterFailedPush() async throws {
+    let store = LarkSignatureAutoSyncStore(fileURL: makeTempFileURL())
+    await store.save(
+      LarkSignatureAutoSyncConfig(
+        enabled: true,
+        credential: "bad-cred",
+        slotID: "slot-abc",
+        label: "",
+        baseURL: "https://l.garyyang.work",
+        useLocalSummary: false
+      )
+    )
+
+    let session = makeSession(statusCode: 401, data: Data(#"{"error":"unauthorized"}"#.utf8))
+    let service = LarkSignatureAutoSyncService(
+      store: store,
+      clientFactory: { baseURL in
+        LarkSlotClient(baseURL: baseURL, session: session)
+      }
+    )
+
+    await service.syncIfNeeded(snapshot: makeSnapshot(todayTokens: 149_736_619, updatedAt: Self.baseDate), now: Self.baseDate)
+    await service.syncIfNeeded(
+      snapshot: makeSnapshot(todayTokens: 150_000_000, updatedAt: Self.baseDate.addingTimeInterval(30)),
+      now: Self.baseDate.addingTimeInterval(30)
+    )
+
+    XCTAssertEqual(LarkAutoSyncURLProtocol.requestCount, 1)
+    let saved = await store.load()
+    XCTAssertNil(saved.lastSyncedValue)
+    XCTAssertEqual(saved.lastSyncedAt, Self.baseDate)
+  }
+
   private func makeSession(statusCode: Int, data: Data) -> URLSession {
     LarkAutoSyncURLProtocol.responseStatusCode = statusCode
     LarkAutoSyncURLProtocol.responseData = data

@@ -177,7 +177,10 @@ public struct LarkSlotClient: @unchecked Sendable {
   private let session: URLSession
   private let encoder = JSONEncoder()
 
-  public init(baseURL: URL = URL(string: "https://l.garyyang.work")!, session: URLSession = .shared) {
+  public init(
+    baseURL: URL = URL(string: "https://l.garyyang.work")!,
+    session: URLSession = RateWatcherURLSessionFactory.shared
+  ) {
     self.baseURL = baseURL
     self.session = session
   }
@@ -193,6 +196,7 @@ public struct LarkSlotClient: @unchecked Sendable {
     request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
     request.httpBody = try encoder.encode(UpdatePayload(slotId: slotID, value: value))
 
     let (data, response) = try await session.data(for: request)
@@ -344,6 +348,8 @@ public actor LarkSignatureAutoSyncService: LarkSignatureAutoSyncing {
       await store.save(config)
     } catch {
       // Keep auto-sync best-effort; UI refresh should not fail because Lark sync failed.
+      config.lastSyncedAt = now
+      await store.save(config)
       return
     }
   }
