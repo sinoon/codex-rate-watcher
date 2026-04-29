@@ -49,6 +49,35 @@ struct TokenCostCachedDay: Codable, Equatable, Sendable {
   }
 }
 
+struct TokenCostFileDiagnostics: Codable, Equatable, Sendable {
+  let tokenCountEvents: Int
+  let compactionEvents: Int
+  let firstTokenUnixMilliseconds: Int64?
+  let lastTokenUnixMilliseconds: Int64?
+  let totalTokens: Int
+  let exclusionReason: String?
+
+  init(
+    tokenCountEvents: Int = 0,
+    compactionEvents: Int = 0,
+    firstTokenUnixMilliseconds: Int64? = nil,
+    lastTokenUnixMilliseconds: Int64? = nil,
+    totalTokens: Int = 0,
+    exclusionReason: String? = nil
+  ) {
+    self.tokenCountEvents = tokenCountEvents
+    self.compactionEvents = compactionEvents
+    self.firstTokenUnixMilliseconds = firstTokenUnixMilliseconds
+    self.lastTokenUnixMilliseconds = lastTokenUnixMilliseconds
+    self.totalTokens = totalTokens
+    self.exclusionReason = exclusionReason
+  }
+
+  var isExcluded: Bool {
+    exclusionReason != nil
+  }
+}
+
 struct TokenCostCachedFile: Codable, Equatable, Sendable {
   let path: String
   let modifiedAtUnixMilliseconds: Int64
@@ -56,19 +85,43 @@ struct TokenCostCachedFile: Codable, Equatable, Sendable {
   let sessionID: String?
   let lastModel: String?
   let lastTotals: TokenCostRunningTotals?
+  let diagnostics: TokenCostFileDiagnostics?
   let days: [String: TokenCostCachedDay]
+
+  init(
+    path: String,
+    modifiedAtUnixMilliseconds: Int64,
+    size: Int64,
+    sessionID: String?,
+    lastModel: String?,
+    lastTotals: TokenCostRunningTotals?,
+    diagnostics: TokenCostFileDiagnostics? = nil,
+    days: [String: TokenCostCachedDay]
+  ) {
+    self.path = path
+    self.modifiedAtUnixMilliseconds = modifiedAtUnixMilliseconds
+    self.size = size
+    self.sessionID = sessionID
+    self.lastModel = lastModel
+    self.lastTotals = lastTotals
+    self.diagnostics = diagnostics
+    self.days = days
+  }
 }
 
 struct TokenCostCache: Codable, Equatable, Sendable {
+  var schemaVersion: Int?
   var lastScanUnixMilliseconds: Int64
   var files: [String: TokenCostCachedFile]
   var days: [String: TokenCostCachedDay]
 
   init(
+    schemaVersion: Int? = nil,
     lastScanUnixMilliseconds: Int64 = 0,
     files: [String: TokenCostCachedFile] = [:],
     days: [String: TokenCostCachedDay] = [:]
   ) {
+    self.schemaVersion = schemaVersion
     self.lastScanUnixMilliseconds = lastScanUnixMilliseconds
     self.files = files
     self.days = days

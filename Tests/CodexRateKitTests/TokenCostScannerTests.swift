@@ -301,6 +301,60 @@ final class TokenCostScannerTests: XCTestCase {
     XCTAssertTrue(snapshot.narrative.whatToWatch.contains { $0.contains("pricing") })
   }
 
+  func testScannerExcludesRapidCompactionReplayLogs() throws {
+    let now = isoDate("2026-04-01T12:00:00+08:00")
+    let codexHome = tempDirectory.appending(path: ".codex", directoryHint: .isDirectory)
+    let sessionsDirectory = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "04", directoryHint: .isDirectory)
+      .appending(path: "01", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
+
+    let normalFile = sessionsDirectory.appending(path: "rollout-normal.jsonl")
+    try writeLines([
+      #"{"timestamp":"2026-04-01T09:00:00+08:00","type":"session_meta","payload":{"session_id":"normal-session"}}"#,
+      #"{"timestamp":"2026-04-01T09:00:01+08:00","type":"turn_context","payload":{"model":"gpt-5"}}"#,
+      #"{"timestamp":"2026-04-01T09:00:02+08:00","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":200,"output_tokens":100}}}}"#,
+    ], to: normalFile)
+
+    var replayLines = [
+      #"{"timestamp":"2026-04-01T10:00:00+08:00","type":"session_meta","payload":{"session_id":"replay-session"}}"#,
+      #"{"timestamp":"2026-04-01T10:00:00+08:00","type":"turn_context","payload":{"model":"gpt-5.4"}}"#,
+    ]
+    for index in 1...1_001 {
+      if index % 5 == 0 {
+        replayLines.append(#"{"timestamp":"2026-04-01T10:00:00+08:00","type":"compacted","payload":{}}"#)
+        replayLines.append(#"{"timestamp":"2026-04-01T10:00:00+08:00","type":"event_msg","payload":{"type":"context_compacted"}}"#)
+      }
+      replayLines.append(
+        #"{"timestamp":"2026-04-01T10:00:00+08:00","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\#(index * 100_000),"cached_input_tokens":\#(index * 90_000),"output_tokens":\#(index * 10)}}}}"#
+      )
+    }
+    let replayFile = sessionsDirectory.appending(path: "rollout-replay.jsonl")
+    try writeLines(replayLines, to: replayFile)
+
+    let cacheFileURL = tempDirectory.appending(path: "token-cost-cache.json")
+    let snapshot = TokenCostScanner.loadSnapshot(
+      now: now,
+      options: .init(
+        codexHomeURL: codexHome,
+        managedHomesDirectoryURL: tempDirectory.appending(path: "managed-codex-homes", directoryHint: .isDirectory),
+        cacheFileURL: cacheFileURL,
+        refreshMinIntervalSeconds: 0
+      )
+    )
+
+    XCTAssertEqual(snapshot.todayTokens, 1_100)
+    XCTAssertEqual(snapshot.last30DaysTokens, 1_100)
+
+    let cache = TokenCostCacheStore.load(from: cacheFileURL)
+    let replayCacheFile = cache.files.values.first { $0.path.hasSuffix("/rollout-replay.jsonl") }
+    let replayDiagnostics = replayCacheFile?.diagnostics
+    XCTAssertEqual(replayDiagnostics?.exclusionReason, "rapid_compaction_replay")
+    XCTAssertTrue(replayCacheFile?.days.isEmpty ?? false)
+  }
+
   private func writeLines(_ lines: [String], to fileURL: URL) throws {
     let payload = lines.joined(separator: "\n") + "\n"
     try payload.write(to: fileURL, atomically: true, encoding: .utf8)

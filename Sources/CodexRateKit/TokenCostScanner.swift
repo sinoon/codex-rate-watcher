@@ -1,6 +1,13 @@
 import Foundation
 
 public enum TokenCostScanner {
+  private static let cacheSchemaVersion = 2
+  private static let replayTokenEventThreshold = 1_000
+  private static let replayCompactionEventThreshold = 100
+  private static let replayDurationThresholdSeconds: TimeInterval = 60 * 60
+  private static let replayTotalTokenThreshold = 100_000_000
+  private static let hardFileTokenThreshold = 2_000_000_000
+
   public struct Options: Sendable {
     public var codexHomeURL: URL?
     public var managedHomesDirectoryURL: URL?
@@ -35,6 +42,10 @@ public enum TokenCostScanner {
     let refreshMilliseconds = Int64(max(0, options.refreshMinIntervalSeconds) * 1000)
 
     var cache = options.forceRescan ? TokenCostCache() : TokenCostCacheStore.load(from: cacheFileURL)
+    if cache.schemaVersion != Self.cacheSchemaVersion {
+      cache = TokenCostCache()
+    }
+
     let shouldRefresh = options.forceRescan
       || refreshMilliseconds == 0
       || cache.lastScanUnixMilliseconds == 0
@@ -56,14 +67,17 @@ public enum TokenCostScanner {
     let now = Date(timeIntervalSince1970: TimeInterval(nowMilliseconds) / 1000)
     let earliest = Calendar.current.date(byAdding: .day, value: -89, to: now) ?? now
     let fileURLs = discoverSessionFiles(options: options, since: earliest, until: now).sorted { $0.path < $1.path }
-    var nextCache = TokenCostCache(lastScanUnixMilliseconds: nowMilliseconds)
+    var nextCache = TokenCostCache(
+      schemaVersion: Self.cacheSchemaVersion,
+      lastScanUnixMilliseconds: nowMilliseconds
+    )
     var seenSessionIDs: Set<String> = []
 
     for fileURL in fileURLs {
       let metadata = fileMetadata(for: fileURL)
       let cached = existing.files[fileURL.path]
 
-      let fileUsage: TokenCostCachedFile
+      var fileUsage: TokenCostCachedFile
       if let cached,
          cached.modifiedAtUnixMilliseconds == metadata.modifiedAtUnixMilliseconds,
          cached.size == metadata.size {
@@ -72,14 +86,24 @@ public enum TokenCostScanner {
         fileUsage = parseFile(fileURL: fileURL, metadata: metadata)
       }
 
-      if let sessionID = fileUsage.sessionID, seenSessionIDs.contains(sessionID) {
+      if shouldExclude(fileUsage: fileUsage), !fileUsage.days.isEmpty {
+        fileUsage = excludedCopy(
+          of: fileUsage,
+          reason: fileUsage.diagnostics?.exclusionReason ?? "cached_file_token_total_exceeded"
+        )
+      }
+
+      let isExcluded = shouldExclude(fileUsage: fileUsage)
+      if !isExcluded, let sessionID = fileUsage.sessionID, seenSessionIDs.contains(sessionID) {
         continue
       }
 
       nextCache.files[fileURL.path] = fileUsage
-      merge(days: fileUsage.days, into: &nextCache.days)
-      if let sessionID = fileUsage.sessionID {
-        seenSessionIDs.insert(sessionID)
+      if !isExcluded {
+        merge(days: fileUsage.days, into: &nextCache.days)
+        if let sessionID = fileUsage.sessionID {
+          seenSessionIDs.insert(sessionID)
+        }
       }
     }
 
@@ -596,6 +620,7 @@ public enum TokenCostScanner {
         sessionID: nil,
         lastModel: nil,
         lastTotals: nil,
+        diagnostics: TokenCostFileDiagnostics(exclusionReason: "unreadable_file"),
         days: [:]
       )
     }
@@ -604,6 +629,10 @@ public enum TokenCostScanner {
     var currentModel: String?
     var previousTotals: TokenCostRunningTotals?
     var days: [String: TokenCostCachedDay] = [:]
+    var tokenCountEvents = 0
+    var compactionEvents = 0
+    var firstTokenUnixMilliseconds: Int64?
+    var lastTokenUnixMilliseconds: Int64?
 
     contents.enumerateLines { line, _ in
       guard let data = line.data(using: .utf8),
@@ -613,6 +642,9 @@ public enum TokenCostScanner {
       }
 
       switch type {
+      case "compacted":
+        compactionEvents += 1
+
       case "session_meta":
         guard sessionID == nil else { return }
         let payload = object["payload"] as? [String: Any]
@@ -630,11 +662,28 @@ public enum TokenCostScanner {
 
       case "event_msg":
         guard let payload = object["payload"] as? [String: Any],
-              (payload["type"] as? String) == "token_count",
-              let timestamp = object["timestamp"] as? String,
-              let timestampParts = timestampParts(from: timestamp) else {
+              let payloadType = payload["type"] as? String else {
           return
         }
+
+        if payloadType == "context_compacted" {
+          compactionEvents += 1
+          return
+        }
+
+        guard payloadType == "token_count",
+              let timestamp = object["timestamp"] as? String,
+              let tokenDate = timestampDate(from: timestamp) else {
+          return
+        }
+
+        let timestampParts = timestampParts(from: tokenDate)
+        let tokenUnixMilliseconds = Int64(tokenDate.timeIntervalSince1970 * 1000)
+        if firstTokenUnixMilliseconds == nil {
+          firstTokenUnixMilliseconds = tokenUnixMilliseconds
+        }
+        lastTokenUnixMilliseconds = tokenUnixMilliseconds
+        tokenCountEvents += 1
 
         let info = payload["info"] as? [String: Any]
         let resolvedModel = (info?["model"] as? String)
@@ -707,6 +756,23 @@ public enum TokenCostScanner {
       }
     }
 
+    let totalTokens = totalTokens(in: days)
+    let exclusionReason = exclusionReason(
+      totalTokens: totalTokens,
+      tokenCountEvents: tokenCountEvents,
+      compactionEvents: compactionEvents,
+      firstTokenUnixMilliseconds: firstTokenUnixMilliseconds,
+      lastTokenUnixMilliseconds: lastTokenUnixMilliseconds
+    )
+    let diagnostics = TokenCostFileDiagnostics(
+      tokenCountEvents: tokenCountEvents,
+      compactionEvents: compactionEvents,
+      firstTokenUnixMilliseconds: firstTokenUnixMilliseconds,
+      lastTokenUnixMilliseconds: lastTokenUnixMilliseconds,
+      totalTokens: totalTokens,
+      exclusionReason: exclusionReason
+    )
+
     return TokenCostCachedFile(
       path: fileURL.path,
       modifiedAtUnixMilliseconds: metadata.modifiedAtUnixMilliseconds,
@@ -714,7 +780,8 @@ public enum TokenCostScanner {
       sessionID: sessionID,
       lastModel: currentModel,
       lastTotals: previousTotals,
-      days: days
+      diagnostics: diagnostics,
+      days: exclusionReason == nil ? days : [:]
     )
   }
 
@@ -771,24 +838,95 @@ public enum TokenCostScanner {
     }
   }
 
+  private static func shouldExclude(fileUsage: TokenCostCachedFile) -> Bool {
+    if fileUsage.diagnostics?.isExcluded == true {
+      return true
+    }
+
+    return totalTokens(in: fileUsage.days) >= hardFileTokenThreshold
+  }
+
+  private static func excludedCopy(of fileUsage: TokenCostCachedFile, reason: String) -> TokenCostCachedFile {
+    let existingDiagnostics = fileUsage.diagnostics
+    let diagnostics = TokenCostFileDiagnostics(
+      tokenCountEvents: existingDiagnostics?.tokenCountEvents ?? 0,
+      compactionEvents: existingDiagnostics?.compactionEvents ?? 0,
+      firstTokenUnixMilliseconds: existingDiagnostics?.firstTokenUnixMilliseconds,
+      lastTokenUnixMilliseconds: existingDiagnostics?.lastTokenUnixMilliseconds,
+      totalTokens: existingDiagnostics?.totalTokens ?? totalTokens(in: fileUsage.days),
+      exclusionReason: reason
+    )
+
+    return TokenCostCachedFile(
+      path: fileUsage.path,
+      modifiedAtUnixMilliseconds: fileUsage.modifiedAtUnixMilliseconds,
+      size: fileUsage.size,
+      sessionID: fileUsage.sessionID,
+      lastModel: fileUsage.lastModel,
+      lastTotals: fileUsage.lastTotals,
+      diagnostics: diagnostics,
+      days: [:]
+    )
+  }
+
+  private static func exclusionReason(
+    totalTokens: Int,
+    tokenCountEvents: Int,
+    compactionEvents: Int,
+    firstTokenUnixMilliseconds: Int64?,
+    lastTokenUnixMilliseconds: Int64?
+  ) -> String? {
+    if totalTokens >= hardFileTokenThreshold {
+      return "file_token_total_exceeded"
+    }
+
+    guard let firstTokenUnixMilliseconds,
+          let lastTokenUnixMilliseconds else {
+      return nil
+    }
+
+    let durationSeconds = TimeInterval(max(0, lastTokenUnixMilliseconds - firstTokenUnixMilliseconds)) / 1000
+    let looksLikeRapidReplay = durationSeconds <= replayDurationThresholdSeconds
+      && totalTokens >= replayTotalTokenThreshold
+      && tokenCountEvents >= replayTokenEventThreshold
+
+    if looksLikeRapidReplay && compactionEvents >= replayCompactionEventThreshold {
+      return "rapid_compaction_replay"
+    }
+
+    if looksLikeRapidReplay && totalTokens >= hardFileTokenThreshold / 2 {
+      return "rapid_token_replay"
+    }
+
+    return nil
+  }
+
+  private static func totalTokens(in days: [String: TokenCostCachedDay]) -> Int {
+    days.values.reduce(0) { dayTotal, day in
+      dayTotal + day.models.values.reduce(0) { modelTotal, bucket in
+        modelTotal + bucket.totalTokens
+      }
+    }
+  }
+
   private static func dayKey(from date: Date) -> String {
     let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
     return String(format: "%04d-%02d-%02d", components.year ?? 1970, components.month ?? 1, components.day ?? 1)
   }
 
-  private static func timestampParts(from timestamp: String) -> TimestampParts? {
+  private static func timestampDate(from timestamp: String) -> Date? {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     if let date = formatter.date(from: timestamp) {
-      return timestampParts(from: date)
+      return date
     }
 
     formatter.formatOptions = [.withInternetDateTime]
-    if let date = formatter.date(from: timestamp) {
-      return timestampParts(from: date)
-    }
+    return formatter.date(from: timestamp)
+  }
 
-    return nil
+  private static func timestampParts(from timestamp: String) -> TimestampParts? {
+    timestampDate(from: timestamp).map(timestampParts(from:))
   }
 
   private static func timestampParts(from date: Date) -> TimestampParts {
