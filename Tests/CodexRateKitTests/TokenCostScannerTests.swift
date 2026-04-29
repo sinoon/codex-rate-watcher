@@ -355,6 +355,57 @@ final class TokenCostScannerTests: XCTestCase {
     XCTAssertTrue(replayCacheFile?.days.isEmpty ?? false)
   }
 
+  func testScannerKeepsLongRunningHighVolumeSessions() throws {
+    let now = isoDate("2026-04-03T12:00:00+08:00")
+    let codexHome = tempDirectory.appending(path: ".codex", directoryHint: .isDirectory)
+    let sessionsDirectory = codexHome
+      .appending(path: "sessions", directoryHint: .isDirectory)
+      .appending(path: "2026", directoryHint: .isDirectory)
+      .appending(path: "04", directoryHint: .isDirectory)
+      .appending(path: "01", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
+
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    let start = isoDate("2026-04-01T00:00:00+08:00")
+
+    var lines = [
+      #"{"timestamp":"2026-04-01T00:00:00+08:00","type":"session_meta","payload":{"session_id":"long-session"}}"#,
+      #"{"timestamp":"2026-04-01T00:00:00+08:00","type":"turn_context","payload":{"model":"gpt-5.4"}}"#,
+    ]
+    for index in 1...1_001 {
+      let timestamp = formatter.string(from: start.addingTimeInterval(TimeInterval(index * 120)))
+      if index % 5 == 0 {
+        lines.append(#"{"timestamp":"\#(timestamp)","type":"compacted","payload":{}}"#)
+        lines.append(#"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"context_compacted"}}"#)
+      }
+      lines.append(
+        #"{"timestamp":"\#(timestamp)","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":\#(index * 2_500_000),"cached_input_tokens":\#(index * 2_000_000),"output_tokens":\#(index * 10_000)}}}}"#
+      )
+    }
+
+    let fileURL = sessionsDirectory.appending(path: "rollout-long-session.jsonl")
+    try writeLines(lines, to: fileURL)
+
+    let cacheFileURL = tempDirectory.appending(path: "token-cost-cache.json")
+    let snapshot = TokenCostScanner.loadSnapshot(
+      now: now,
+      options: .init(
+        codexHomeURL: codexHome,
+        managedHomesDirectoryURL: tempDirectory.appending(path: "managed-codex-homes", directoryHint: .isDirectory),
+        cacheFileURL: cacheFileURL,
+        refreshMinIntervalSeconds: 0
+      )
+    )
+
+    XCTAssertEqual(snapshot.last30DaysTokens, 2_512_510_000)
+
+    let cache = TokenCostCacheStore.load(from: cacheFileURL)
+    let cachedFile = cache.files.values.first { $0.path.hasSuffix("/rollout-long-session.jsonl") }
+    XCTAssertNil(cachedFile?.diagnostics?.exclusionReason)
+    XCTAssertFalse(cachedFile?.days.isEmpty ?? true)
+  }
+
   private func writeLines(_ lines: [String], to fileURL: URL) throws {
     let payload = lines.joined(separator: "\n") + "\n"
     try payload.write(to: fileURL, atomically: true, encoding: .utf8)

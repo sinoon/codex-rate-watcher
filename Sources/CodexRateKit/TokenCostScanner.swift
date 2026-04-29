@@ -1,12 +1,12 @@
 import Foundation
 
 public enum TokenCostScanner {
-  private static let cacheSchemaVersion = 2
+  private static let cacheSchemaVersion = 3
   private static let replayTokenEventThreshold = 1_000
   private static let replayCompactionEventThreshold = 100
   private static let replayDurationThresholdSeconds: TimeInterval = 60 * 60
   private static let replayTotalTokenThreshold = 100_000_000
-  private static let hardFileTokenThreshold = 2_000_000_000
+  private static let rapidReplayTokenThreshold = 1_000_000_000
 
   public struct Options: Sendable {
     public var codexHomeURL: URL?
@@ -89,7 +89,7 @@ public enum TokenCostScanner {
       if shouldExclude(fileUsage: fileUsage), !fileUsage.days.isEmpty {
         fileUsage = excludedCopy(
           of: fileUsage,
-          reason: fileUsage.diagnostics?.exclusionReason ?? "cached_file_token_total_exceeded"
+          reason: fileUsage.diagnostics?.exclusionReason ?? "cached_file_excluded"
         )
       }
 
@@ -839,11 +839,7 @@ public enum TokenCostScanner {
   }
 
   private static func shouldExclude(fileUsage: TokenCostCachedFile) -> Bool {
-    if fileUsage.diagnostics?.isExcluded == true {
-      return true
-    }
-
-    return totalTokens(in: fileUsage.days) >= hardFileTokenThreshold
+    fileUsage.diagnostics?.isExcluded == true
   }
 
   private static func excludedCopy(of fileUsage: TokenCostCachedFile, reason: String) -> TokenCostCachedFile {
@@ -876,10 +872,6 @@ public enum TokenCostScanner {
     firstTokenUnixMilliseconds: Int64?,
     lastTokenUnixMilliseconds: Int64?
   ) -> String? {
-    if totalTokens >= hardFileTokenThreshold {
-      return "file_token_total_exceeded"
-    }
-
     guard let firstTokenUnixMilliseconds,
           let lastTokenUnixMilliseconds else {
       return nil
@@ -894,7 +886,7 @@ public enum TokenCostScanner {
       return "rapid_compaction_replay"
     }
 
-    if looksLikeRapidReplay && totalTokens >= hardFileTokenThreshold / 2 {
+    if looksLikeRapidReplay && totalTokens >= rapidReplayTokenThreshold {
       return "rapid_token_replay"
     }
 
