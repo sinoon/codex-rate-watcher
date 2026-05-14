@@ -1416,15 +1416,16 @@ final class PopoverViewController: NSViewController {
     let todayTokenLabel = tokenCostSnapshot.todayTokens.map {
       TokenCostFormatting.tokenCount($0)
     } ?? "—"
-    let last30CostLabel = tokenCostSnapshot.last30DaysCostUSD.map {
-      TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
-    } ?? "—"
+    let last30MetricLabel = formattedPrimaryWindowMetric(
+      cost: tokenCostSnapshot.last30DaysCostUSD,
+      tokens: tokenCostSnapshot.last30DaysTokens
+    )
     costHourLabel.stringValue = Copy.costTodayMetric(todayCostLabel)
     costHourLabel.textColor = tokenCostSnapshot.todayCostUSD == nil ? LN.textTertiary : LN.green
     costTodayLabel.stringValue = Copy.costTokenMetric(todayTokenLabel)
     costTodayLabel.textColor = LN.textPrimary
-    costUtilLabel.stringValue = Copy.costLast30DaysMetric(last30CostLabel)
-    costUtilLabel.textColor = tokenCostSnapshot.last30DaysCostUSD == nil ? LN.textTertiary : LN.yellow
+    costUtilLabel.stringValue = Copy.costLast30DaysMetric(last30MetricLabel)
+    costUtilLabel.textColor = last30MetricLabel == "—" ? LN.textTertiary : LN.yellow
 
     costVisibleDailyEntries = Array(tokenCostSnapshot.daily.suffix(30))
     drawSparkline(costVisibleDailyEntries)
@@ -1462,7 +1463,11 @@ final class PopoverViewController: NSViewController {
 
     let line30 = Copy.costInlineRange(
       days: 30,
-      cost: formattedTooltipUSD(snapshot.last30DaysCostUSD),
+      cost: formattedInlineCost(
+        snapshot.last30DaysCostUSD,
+        tokens: snapshot.last30DaysTokens,
+        hasPartialPricing: window30?.hasPartialPricing ?? snapshot.hasPartialPricing
+      ),
       tokens: formattedTooltipTokens(snapshot.last30DaysTokens),
       detail: Copy.costActiveDays(window30?.activeDayCount ?? snapshot.activeDayCount)
     )
@@ -1477,7 +1482,11 @@ final class PopoverViewController: NSViewController {
 
     let line7 = Copy.costInlineRange(
       days: 7,
-      cost: formattedTooltipUSD(snapshot.last7DaysCostUSD),
+      cost: formattedInlineCost(
+        snapshot.last7DaysCostUSD,
+        tokens: snapshot.last7DaysTokens,
+        hasPartialPricing: window7?.hasPartialPricing ?? false
+      ),
       tokens: formattedTooltipTokens(snapshot.last7DaysTokens),
       detail: sevenDayDetail.replacingOccurrences(of: ": ", with: " ")
     )
@@ -1526,6 +1535,26 @@ final class PopoverViewController: NSViewController {
   private func formattedTooltipUSD(_ value: Double?) -> String {
     guard let value else { return "—" }
     return TokenCostFormatting.usd(value, minimumFractionDigits: 2, maximumFractionDigits: 2)
+  }
+
+  private func formattedPrimaryWindowMetric(cost: Double?, tokens: Int?) -> String {
+    if let cost {
+      return TokenCostFormatting.usd(cost, minimumFractionDigits: 2, maximumFractionDigits: 2)
+    }
+    if let tokens {
+      return Copy.costTokenMetric(TokenCostFormatting.tokenCount(tokens))
+    }
+    return "—"
+  }
+
+  private func formattedInlineCost(_ cost: Double?, tokens: Int?, hasPartialPricing: Bool) -> String {
+    if let cost {
+      return TokenCostFormatting.usd(cost, minimumFractionDigits: 2, maximumFractionDigits: 2)
+    }
+    if tokens != nil, hasPartialPricing {
+      return Copy.costPartialPricing
+    }
+    return "—"
   }
 
   private func formattedTooltipTokens(_ value: Int?) -> String {

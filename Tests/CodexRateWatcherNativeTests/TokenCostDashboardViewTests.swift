@@ -455,6 +455,33 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertTrue(viewController.costSublineTextForTesting().contains("7d"))
   }
 
+  func testPopoverCostCardFallsBackToThirtyDayTokensWhenCostIsPartial() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let state = UsageMonitor.State(
+      snapshot: makeUsageSnapshot(),
+      profiles: [],
+      activeProfileID: nil,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: makeSnapshot(),
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 10, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let visibleText = Self.visibleTextValues(in: viewController.view)
+    XCTAssertTrue(visibleText.contains("30d 118.0K tokens"))
+    XCTAssertFalse(visibleText.contains("30d —"))
+  }
+
   func testPopoverCostCardShowsLocalSupportingDetailWhenMergedSnapshotExists() {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
@@ -645,6 +672,17 @@ final class TokenCostDashboardViewTests: XCTestCase {
       secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
       reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
     )
+  }
+
+  private static func visibleTextValues(in view: NSView) -> [String] {
+    var values: [String] = []
+    if !view.isHidden, let textField = view as? NSTextField {
+      values.append(textField.stringValue)
+    }
+    for subview in view.subviews where !subview.isHidden {
+      values.append(contentsOf: visibleTextValues(in: subview))
+    }
+    return values
   }
 
   private func makeSnapshot(dominantModelName: String = "gpt-5") -> TokenCostSnapshot {
