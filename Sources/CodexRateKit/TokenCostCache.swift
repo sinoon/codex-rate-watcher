@@ -9,11 +9,21 @@ struct TokenCostRunningTotals: Codable, Equatable, Sendable {
 struct TokenCostBucket: Codable, Equatable, Sendable {
   var inputTokens: Int
   var cacheReadTokens: Int
+  // Tokens written to a prompt cache on this turn (Claude-specific). Always 0 for
+  // Codex sessions. Folded into `inputTokens` for total-prompt accounting, then
+  // priced separately in TokenCostPricing.
+  var cacheCreationTokens: Int
   var outputTokens: Int
 
-  init(inputTokens: Int = 0, cacheReadTokens: Int = 0, outputTokens: Int = 0) {
+  init(
+    inputTokens: Int = 0,
+    cacheReadTokens: Int = 0,
+    cacheCreationTokens: Int = 0,
+    outputTokens: Int = 0
+  ) {
     self.inputTokens = inputTokens
     self.cacheReadTokens = cacheReadTokens
+    self.cacheCreationTokens = cacheCreationTokens
     self.outputTokens = outputTokens
   }
 
@@ -21,10 +31,31 @@ struct TokenCostBucket: Codable, Equatable, Sendable {
     inputTokens + outputTokens
   }
 
-  mutating func add(inputTokens: Int, cacheReadTokens: Int, outputTokens: Int) {
+  mutating func add(
+    inputTokens: Int,
+    cacheReadTokens: Int,
+    cacheCreationTokens: Int = 0,
+    outputTokens: Int
+  ) {
     self.inputTokens += inputTokens
     self.cacheReadTokens += cacheReadTokens
+    self.cacheCreationTokens += cacheCreationTokens
     self.outputTokens += outputTokens
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case inputTokens
+    case cacheReadTokens
+    case cacheCreationTokens
+    case outputTokens
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    inputTokens = try container.decode(Int.self, forKey: .inputTokens)
+    cacheReadTokens = try container.decode(Int.self, forKey: .cacheReadTokens)
+    cacheCreationTokens = try container.decodeIfPresent(Int.self, forKey: .cacheCreationTokens) ?? 0
+    outputTokens = try container.decode(Int.self, forKey: .outputTokens)
   }
 }
 

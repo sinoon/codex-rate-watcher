@@ -13,6 +13,7 @@ public enum AppPaths {
   public static let managedCodexHomesDirectory = rootDirectory.appending(path: "managed-codex-homes")
   public static let managedCodexAccountsFile = rootDirectory.appending(path: "managed-codex-accounts.json")
   public static let tokenCostCacheFile = rootDirectory.appending(path: "token-cost-cache.json")
+  public static let claudeCodeTokenCostCacheFile = rootDirectory.appending(path: "claude-code-token-cost-cache.json")
   public static let tokenCostDeviceFile = rootDirectory.appending(path: "token-cost-device.json")
   public static let tokenCostLocalLedgerFile = rootDirectory.appending(path: "token-cost-ledger.json")
   public static let larkSignatureSyncConfigFile = rootDirectory.appending(path: "lark-signature-sync.json")

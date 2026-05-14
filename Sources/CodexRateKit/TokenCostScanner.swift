@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TokenCostScanner {
-  private static let cacheSchemaVersion = 3
+  private static let cacheSchemaVersion = 4
   private static let replayTokenEventThreshold = 1_000
   private static let replayCompactionEventThreshold = 100
   private static let replayDurationThresholdSeconds: TimeInterval = 60 * 60
@@ -37,6 +37,18 @@ public enum TokenCostScanner {
     now: Date = Date(),
     options: Options = .init()
   ) -> TokenCostSnapshot {
+    let days = loadCachedDays(now: now, options: options)
+    return TokenCostSnapshotBuilder.buildSnapshot(days: days, now: now)
+  }
+
+  // Load Codex token cost days, refreshing from disk when the cache is stale.
+  // Returns the merged day map without building a snapshot, so callers like
+  // LiveTokenCostSnapshotLoader can blend in additional sources (e.g. Claude
+  // Code) before snapshotting.
+  static func loadCachedDays(
+    now: Date = Date(),
+    options: Options = .init()
+  ) -> [String: TokenCostCachedDay] {
     let cacheFileURL = options.cacheFileURL ?? AppPaths.tokenCostCacheFile
     let nowMilliseconds = Int64(now.timeIntervalSince1970 * 1000)
     let refreshMilliseconds = Int64(max(0, options.refreshMinIntervalSeconds) * 1000)
@@ -56,7 +68,17 @@ public enum TokenCostScanner {
       TokenCostCacheStore.save(cache, to: cacheFileURL)
     }
 
-    return buildSnapshot(from: cache, now: now)
+    return cache.days
+  }
+
+  // Merge a source `days` map into a destination accumulator. Exposed so other
+  // scanners (e.g. ClaudeCodeSessionScanner) can be blended into the same
+  // snapshot pipeline without duplicating the bucket-merge logic.
+  static func mergeDays(
+    _ source: [String: TokenCostCachedDay],
+    into destination: inout [String: TokenCostCachedDay]
+  ) {
+    merge(days: source, into: &destination)
   }
 
   private static func refreshCache(

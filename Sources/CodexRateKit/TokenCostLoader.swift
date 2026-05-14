@@ -31,7 +31,16 @@ public struct LiveTokenCostSnapshotLoader: TokenCostSnapshotLoading {
 
   public func loadSnapshot(now: Date) async -> TokenCostSnapshot {
     await Task.detached(priority: .utility) {
-      let localSnapshot = TokenCostScanner.loadSnapshot(now: now)
+      // Codex days come from the existing scanner; Claude Code days are a
+      // local-only side stream. Merge them for the local snapshot so the GUI/
+      // CLI dashboards see both sources, but only push Codex through the
+      // iCloud ledger sync — CC stays device-local for now.
+      let codexDays = TokenCostScanner.loadCachedDays(now: now)
+      let claudeDays = ClaudeCodeSessionScanner.loadCachedDays(now: now)
+      var mergedDays = codexDays
+      TokenCostScanner.mergeDays(claudeDays, into: &mergedDays)
+      let localSnapshot = TokenCostSnapshotBuilder.buildSnapshot(days: mergedDays, now: now)
+
       let managedAccounts = (try? managedAccountStore.loadAccounts()) ?? ManagedCodexAccountSet(accounts: [])
       guard let device = try? deviceStore.loadOrCreateDevice(now: now) else {
         return localSnapshot
@@ -43,6 +52,7 @@ public struct LiveTokenCostSnapshotLoader: TokenCostSnapshotLoading {
           device: device,
           managedAccounts: managedAccounts,
           mirrorToICloud: mirrorToICloud,
+          extraDays: claudeDays,
           now: now
         )
       } catch {

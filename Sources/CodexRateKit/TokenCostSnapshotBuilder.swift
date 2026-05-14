@@ -63,10 +63,11 @@ enum TokenCostSnapshotBuilder {
 
     for model in sortedModels {
       let bucket = cachedDay.models[model] ?? TokenCostBucket()
-      let modelCost = TokenCostPricing.codexCostUSD(
+      let modelCost = TokenCostPricing.costUSD(
         model: model,
         inputTokens: bucket.inputTokens,
-        cachedInputTokens: bucket.cacheReadTokens,
+        cacheReadTokens: bucket.cacheReadTokens,
+        cacheCreationTokens: bucket.cacheCreationTokens,
         outputTokens: bucket.outputTokens
       )
 
@@ -104,10 +105,11 @@ enum TokenCostSnapshotBuilder {
         cacheReadTokens += bucket.cacheReadTokens
         outputTokens += bucket.outputTokens
 
-        let hourCost = TokenCostPricing.codexCostUSD(
+        let hourCost = TokenCostPricing.costUSD(
           model: model,
           inputTokens: bucket.inputTokens,
-          cachedInputTokens: bucket.cacheReadTokens,
+          cacheReadTokens: bucket.cacheReadTokens,
+          cacheCreationTokens: bucket.cacheCreationTokens,
           outputTokens: bucket.outputTokens
         )
         if hourCost == nil, bucket.totalTokens > 0 {

@@ -68,6 +68,7 @@ struct TokenCostSyncService: @unchecked Sendable {
     cacheFileURL: URL = AppPaths.tokenCostCacheFile,
     managedAccounts: ManagedCodexAccountSet,
     mirrorToICloud: Bool = true,
+    extraDays: [String: TokenCostCachedDay] = [:],
     now: Date = Date()
   ) throws -> TokenCostSnapshot {
     let localLedger = try buildLocalLedger(
@@ -82,12 +83,18 @@ struct TokenCostSyncService: @unchecked Sendable {
       try? ledgerStore.saveLedgerToICloud(localLedger)
     }
 
-    return try mergeSnapshot(localSnapshot: localSnapshot, localLedger: localLedger, now: now)
+    return try mergeSnapshot(
+      localSnapshot: localSnapshot,
+      localLedger: localLedger,
+      extraDays: extraDays,
+      now: now
+    )
   }
 
   func mergeSnapshot(
     localSnapshot: TokenCostSnapshot,
     localLedger: TokenCostSyncLedger,
+    extraDays: [String: TokenCostCachedDay] = [:],
     now: Date = Date()
   ) throws -> TokenCostSnapshot {
     let allLedgers = deduplicateLedgers(ledgerStore.loadICloudLedgers() + [localLedger])
@@ -96,6 +103,12 @@ struct TokenCostSyncService: @unchecked Sendable {
     var mergedDays: [String: TokenCostCachedDay] = [:]
     for session in mergedSessions.values {
       merge(days: session.days, into: &mergedDays)
+    }
+    // Local-only sources (e.g. Claude Code) are blended after iCloud ledgers so
+    // they appear in the unified snapshot without going through the cross-device
+    // sync path. They are intentionally not surfaced per-account.
+    if !extraDays.isEmpty {
+      merge(days: extraDays, into: &mergedDays)
     }
 
     let source = TokenCostSourceSummary(
@@ -226,6 +239,7 @@ struct TokenCostSyncService: @unchecked Sendable {
         destinationBucket.add(
           inputTokens: sourceBucket.inputTokens,
           cacheReadTokens: sourceBucket.cacheReadTokens,
+          cacheCreationTokens: sourceBucket.cacheCreationTokens,
           outputTokens: sourceBucket.outputTokens
         )
         destinationDay.models[model] = destinationBucket
@@ -238,6 +252,7 @@ struct TokenCostSyncService: @unchecked Sendable {
           destinationBucket.add(
             inputTokens: sourceBucket.inputTokens,
             cacheReadTokens: sourceBucket.cacheReadTokens,
+            cacheCreationTokens: sourceBucket.cacheCreationTokens,
             outputTokens: sourceBucket.outputTokens
           )
           destinationHour.models[model] = destinationBucket
