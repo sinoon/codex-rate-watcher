@@ -65,6 +65,105 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     XCTAssertEqual(profiles.first?.accountID, "acct_dup")
   }
 
+  func testImportAuthJSONAddsProfileWithoutOverwritingLiveAuth() async throws {
+    let harness = try makeHarness()
+    let importedAuthURL = tempDir.appending(path: "imported-auth.json")
+    let importedData = Self.makeAuthData(
+      email: "imported@example.com",
+      accountID: "acct_imported",
+      accessTokenSuffix: "imported"
+    )
+    try importedData.write(to: importedAuthURL, options: .atomic)
+    let liveDataBeforeImport = try Data(contentsOf: harness.liveAuthURL)
+
+    let result = try await harness.store.importAuthJSON(from: importedAuthURL, validatingWith: Self.makeUsageAPIClient())
+    let importedProfile = result.profile
+
+    XCTAssertEqual(result.decision, .added)
+    XCTAssertEqual(importedProfile.email, "imported@example.com")
+    XCTAssertEqual(importedProfile.accountID, "acct_imported")
+    XCTAssertEqual(try Data(contentsOf: harness.liveAuthURL), liveDataBeforeImport)
+
+    let snapshotURL = harness.paths.profilesDirectory.appending(path: importedProfile.snapshotFileName)
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), importedData)
+  }
+
+  func testImportAuthJSONFromPastedDataAddsProfile() async throws {
+    let harness = try makeHarness()
+    let pastedData = Self.makeAuthData(
+      email: "pasted@example.com",
+      accountID: "acct_pasted",
+      accessTokenSuffix: "pasted"
+    )
+
+    let result = try await harness.store.importAuthJSON(from: pastedData, validatingWith: Self.makeUsageAPIClient())
+    let importedProfile = result.profile
+
+    XCTAssertEqual(result.decision, .added)
+    XCTAssertEqual(importedProfile.email, "pasted@example.com")
+    XCTAssertEqual(importedProfile.accountID, "acct_pasted")
+  }
+
+  func testImportAuthJSONUpdatesExistingAccountInsteadOfDuplicating() async throws {
+    let harness = try makeHarness()
+    let firstAuthURL = tempDir.appending(path: "first-auth.json")
+    let refreshedAuthURL = tempDir.appending(path: "refreshed-auth.json")
+    try Self.makeAuthData(email: "same@example.com", accountID: "acct_same", accessTokenSuffix: "first")
+      .write(to: firstAuthURL, options: .atomic)
+    let refreshedData = Self.makeAuthData(email: "same@example.com", accountID: "acct_same", accessTokenSuffix: "refreshed")
+    try refreshedData.write(to: refreshedAuthURL, options: .atomic)
+
+    let firstResult = try await harness.store.importAuthJSON(from: firstAuthURL, validatingWith: Self.makeUsageAPIClient())
+    let refreshedResult = try await harness.store.importAuthJSON(from: refreshedAuthURL, validatingWith: Self.makeUsageAPIClient())
+    let firstProfile = firstResult.profile
+    let refreshedProfile = refreshedResult.profile
+    let profiles = await harness.store.loadProfiles()
+
+    XCTAssertEqual(firstResult.decision, .added)
+    XCTAssertEqual(refreshedResult.decision, .updatedExisting)
+    XCTAssertEqual(profiles.count, 1)
+    XCTAssertEqual(refreshedProfile.id, firstProfile.id)
+    let snapshotURL = harness.paths.profilesDirectory.appending(path: refreshedProfile.snapshotFileName)
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), refreshedData)
+  }
+
+  func testImportDuplicateAccountKeepsExistingAuthWhenNewAuthFailsValidation() async throws {
+    let harness = try makeHarness()
+    let existingAuthURL = tempDir.appending(path: "existing-auth.json")
+    let invalidAuthURL = tempDir.appending(path: "invalid-auth.json")
+    let existingData = Self.makeAuthData(email: "same@example.com", accountID: "acct_same", accessTokenSuffix: "valid")
+    let invalidData = Self.makeAuthData(email: "same@example.com", accountID: "acct_same", accessTokenSuffix: "invalid")
+    try existingData.write(to: existingAuthURL, options: .atomic)
+    try invalidData.write(to: invalidAuthURL, options: .atomic)
+
+    let existingResult = try await harness.store.importAuthJSON(
+      from: existingAuthURL,
+      validatingWith: Self.makeUsageAPIClient()
+    )
+    let conflictResult = try await harness.store.importAuthJSON(
+      from: invalidAuthURL,
+      validatingWith: Self.makeUsageAPIClient { request in
+        let authorization = request.value(forHTTPHeaderField: "Authorization") ?? ""
+        if authorization.contains(".invalid") {
+          return (401, Data(#"{"detail":"expired token"}"#.utf8))
+        }
+        return (200, Self.makeUsageResponseData())
+      }
+    )
+
+    XCTAssertEqual(existingResult.decision, .added)
+    XCTAssertEqual(
+      conflictResult.decision,
+      .keptExisting(reason: "粘贴的 auth 不可用：接口 401：expired token，已确认原 auth 可用。")
+    )
+    XCTAssertEqual(conflictResult.profile.id, existingResult.profile.id)
+
+    let profiles = await harness.store.loadProfiles()
+    XCTAssertEqual(profiles.count, 1)
+    let snapshotURL = harness.paths.profilesDirectory.appending(path: existingResult.profile.snapshotFileName)
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), existingData)
+  }
+
   func testSwitchToProfilePrefersManagedHomeAuthOverSnapshot() async throws {
     let harness = try makeHarness()
     let managedData = Self.makeAuthData(email: "switch@example.com", accountID: "acct_switch", accessTokenSuffix: "managed")
@@ -307,9 +406,20 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     try data.write(to: url, options: .atomic)
   }
 
-  private static func makeUsageAPIClient() -> UsageAPIClient {
+  private static func makeUsageAPIClient(
+    responseHandler: (@Sendable (URLRequest) -> (Int, Data))? = nil
+  ) -> UsageAPIClient {
     AuthProfileUsageAPIURLProtocol.responseStatusCode = 200
-    AuthProfileUsageAPIURLProtocol.responseData = Data(
+    AuthProfileUsageAPIURLProtocol.responseData = makeUsageResponseData()
+    AuthProfileUsageAPIURLProtocol.responseHandler = responseHandler
+
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [AuthProfileUsageAPIURLProtocol.self]
+    return UsageAPIClient(session: URLSession(configuration: configuration))
+  }
+
+  private static func makeUsageResponseData() -> Data {
+    Data(
       """
       {
         "plan_type": "team",
@@ -346,10 +456,6 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
       }
       """.utf8
     )
-
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [AuthProfileUsageAPIURLProtocol.self]
-    return UsageAPIClient(session: URLSession(configuration: configuration))
   }
 }
 
@@ -377,6 +483,7 @@ private final class InMemoryManagedAccountStore: @unchecked Sendable, ManagedCod
 private final class AuthProfileUsageAPIURLProtocol: URLProtocol {
   nonisolated(unsafe) static var responseStatusCode = 200
   nonisolated(unsafe) static var responseData = Data()
+  nonisolated(unsafe) static var responseHandler: (@Sendable (URLRequest) -> (Int, Data))?
 
   override class func canInit(with request: URLRequest) -> Bool {
     true
@@ -387,14 +494,15 @@ private final class AuthProfileUsageAPIURLProtocol: URLProtocol {
   }
 
   override func startLoading() {
+    let responsePayload = Self.responseHandler?(request) ?? (Self.responseStatusCode, Self.responseData)
     let response = HTTPURLResponse(
       url: request.url ?? URL(string: "https://example.com")!,
-      statusCode: Self.responseStatusCode,
+      statusCode: responsePayload.0,
       httpVersion: nil,
       headerFields: ["Content-Type": "application/json"]
     )!
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-    client?.urlProtocol(self, didLoad: Self.responseData)
+    client?.urlProtocol(self, didLoad: responsePayload.1)
     client?.urlProtocolDidFinishLoading(self)
   }
 

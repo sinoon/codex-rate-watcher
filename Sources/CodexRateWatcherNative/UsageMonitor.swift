@@ -159,7 +159,7 @@ final class UsageMonitor {
         return secondaryEstimate.statusText
       }
       if weeklyWindow.remainingPercent <= 0 {
-        return Copy.heroExhausted(resetAt: weeklyWindow.resetAt)
+        return Copy.quotaExhausted(resetAt: weeklyWindow.resetAt)
       }
       return Copy.quotaBurn(timeLeft: secondaryEstimate.timeUntilExhausted, resetAt: weeklyWindow.resetAt)
     }
@@ -501,6 +501,36 @@ final class UsageMonitor {
     errorMessage = nil
     await performRefresh(manual: true, refreshProfiles: true, manageLoadingState: false)
     return account
+  }
+
+  func importAuthJSON(from fileURL: URL) async throws -> AuthProfileImportResult {
+    let data = try Data(contentsOf: fileURL)
+    return try await importAuthJSON(from: data)
+  }
+
+  func importAuthJSON(from data: Data) async throws -> AuthProfileImportResult {
+    guard !isRefreshing && !isAddingAccount else {
+      throw NSError(domain: "CodexRateWatcherNative", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: Copy.importAuthBusy
+      ])
+    }
+
+    isRefreshing = true
+    emitState()
+    defer {
+      isRefreshing = false
+      emitState()
+    }
+
+    let importResult = try await profileStore.importAuthJSON(from: data, validatingWith: apiClient)
+    profiles = await profileStore.validateProfiles(using: apiClient)
+    activeProfileID = await profileStore.currentProfileID()
+    errorMessage = nil
+    lastProfilesValidationAt = Date()
+    return AuthProfileImportResult(
+      profile: profiles.first(where: { $0.id == importResult.profile.id }) ?? importResult.profile,
+      decision: importResult.decision
+    )
   }
 
   func switchToProfile(id: UUID) async {

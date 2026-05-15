@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var proxyServer: ProxyServer?
   private var proxyStatusTimer: Timer?
   private var addAccountTask: Task<Void, Never>?
+  private var importAuthTask: Task<Void, Never>?
 
   init(windowMode: Bool = false, openDashboardOnLaunch: Bool = false) {
     self.windowMode = windowMode
@@ -112,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     monitor.stop()
     stopProxyServer()
     addAccountTask?.cancel()
+    importAuthTask?.cancel()
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -197,6 +199,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let addAccountItem = NSMenuItem(title: Copy.addAccount, action: #selector(startAddAccountFlow), keyEquivalent: "")
     addAccountItem.target = self
     menu.addItem(addAccountItem)
+
+    let importAuthItem = NSMenuItem(title: Copy.importAuthJSON, action: #selector(startImportAuthJSONFlow), keyEquivalent: "")
+    importAuthItem.target = self
+    menu.addItem(importAuthItem)
 
     // Launch at Login toggle
     let launchLabel = launchAtLoginEnabled
@@ -403,6 +409,110 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
 
+  // MARK: - Auth JSON Import
+
+  @objc func startImportAuthJSONFlow() {
+    guard importAuthTask == nil else {
+      return
+    }
+
+    if !windowMode {
+      NSApp.setActivationPolicy(.regular)
+    }
+    NSApp.activate(ignoringOtherApps: true)
+
+    let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 560, height: 260))
+    textView.isRichText = false
+    textView.isAutomaticQuoteSubstitutionEnabled = false
+    textView.isAutomaticDashSubstitutionEnabled = false
+    textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+    textView.string = Self.clipboardAuthJSONCandidate() ?? ""
+
+    let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 560, height: 260))
+    scrollView.hasVerticalScroller = true
+    scrollView.hasHorizontalScroller = true
+    scrollView.autohidesScrollers = false
+    scrollView.documentView = textView
+
+    let alert = NSAlert()
+    alert.messageText = Copy.importAuthPanelTitle
+    alert.informativeText = Copy.importAuthPanelMessage
+    alert.alertStyle = .informational
+    alert.accessoryView = scrollView
+    alert.addButton(withTitle: Copy.importAuthPanelPrompt)
+    alert.addButton(withTitle: "取消")
+
+    guard alert.runModal() == .alertFirstButtonReturn else {
+      restoreAccessoryActivationIfNeeded()
+      return
+    }
+
+    let rawText = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !rawText.isEmpty else {
+      showImportFailure(error: NSError(domain: "CodexRateWatcherNative", code: 1, userInfo: [
+        NSLocalizedDescriptionKey: Copy.importAuthEmpty
+      ]))
+      restoreAccessoryActivationIfNeeded()
+      return
+    }
+    let authData = Data(rawText.utf8)
+
+    importAuthTask = Task { [weak self] in
+      guard let self else { return }
+      defer { self.importAuthTask = nil }
+
+      do {
+        let result = try await monitor.importAuthJSON(from: authData)
+        NSLog("[AuthImport] Imported auth.json: \(result.profile.displayName)")
+        showImportSuccess(result: result)
+      } catch is CancellationError {
+        return
+      } catch {
+        NSLog("[AuthImport] Error: \(error.localizedDescription)")
+        showImportFailure(error: error)
+      }
+      restoreAccessoryActivationIfNeeded()
+    }
+  }
+
+  private static func clipboardAuthJSONCandidate() -> String? {
+    guard let raw = NSPasteboard.general.string(forType: .string) else {
+      return nil
+    }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("{"),
+          trimmed.contains("\"tokens\""),
+          trimmed.contains("\"access_token\"") else {
+      return nil
+    }
+    return trimmed
+  }
+
+  private func showImportSuccess(result: AuthProfileImportResult) {
+    let alert = NSAlert()
+    alert.messageText = Copy.importAuthResultTitle(result)
+    alert.informativeText = Copy.importAuthSuccessBody(result: result)
+    alert.alertStyle = .informational
+    alert.addButton(withTitle: "好")
+    alert.runModal()
+  }
+
+  private func showImportFailure(error: Error) {
+    let alert = NSAlert()
+    alert.messageText = Copy.importAuthFailed
+    alert.informativeText = error.localizedDescription
+    alert.alertStyle = .warning
+    alert.addButton(withTitle: "好")
+    alert.runModal()
+  }
+
+  private func restoreAccessoryActivationIfNeeded() {
+    guard !windowMode else { return }
+    guard tokenCostDashboardWindow?.isVisible != true else { return }
+    NSApp.setActivationPolicy(.accessory)
+  }
+
+
   // MARK: - Managed Account Login
 
   @objc func startAddAccountFlow() {
@@ -480,6 +590,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appMenuItem.submenu = appMenu
 
     appMenu.addItem(withTitle: "关于 Codex Rate Watcher", action: #selector(showAbout), keyEquivalent: "")
+    let importAuthItem = NSMenuItem(title: Copy.importAuthJSON, action: #selector(startImportAuthJSONFlow), keyEquivalent: "i")
+    importAuthItem.target = self
+    appMenu.addItem(importAuthItem)
     appMenu.addItem(NSMenuItem.separator())
     appMenu.addItem(withTitle: "退出 Codex Rate Watcher", action: #selector(quitApp), keyEquivalent: "q")
 

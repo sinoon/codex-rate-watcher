@@ -61,13 +61,28 @@ actor SampleStore {
 
 enum AuthProfileStoreError: LocalizedError {
   case profileNotFound
+  case invalidImportedAuth(String)
 
   var errorDescription: String? {
     switch self {
     case .profileNotFound:
       return "没找到你刚才选中的那份账号档案。"
+    case .invalidImportedAuth(let message):
+      return "选中的文件不是可用的 auth.json：\(message)"
     }
   }
+}
+
+enum AuthProfileImportDecision: Equatable {
+  case added
+  case unchanged
+  case updatedExisting
+  case keptExisting(reason: String)
+}
+
+struct AuthProfileImportResult {
+  let profile: AuthProfileRecord
+  let decision: AuthProfileImportDecision
 }
 
 struct AuthProfileStorePaths {
@@ -166,6 +181,86 @@ actor AuthProfileStore {
     let managedAuthStore = AuthStore(fileURL: managedAuthURL(for: account))
     let envelope = try managedAuthStore.loadEnvelope()
     return try storeEnvelopeIfNeeded(envelope)
+  }
+
+  func importAuthJSON(from fileURL: URL, validatingWith apiClient: UsageAPIClient) async throws -> AuthProfileImportResult {
+    let data = try Data(contentsOf: fileURL)
+    return try await importAuthJSON(from: data, validatingWith: apiClient)
+  }
+
+  func importAuthJSON(from data: Data, validatingWith apiClient: UsageAPIClient) async throws -> AuthProfileImportResult {
+    let envelope: AuthEnvelope
+    do {
+      envelope = try authStore.envelope(from: data)
+    } catch {
+      throw AuthProfileStoreError.invalidImportedAuth(error.localizedDescription)
+    }
+
+    try createDirectoriesIfNeeded()
+    var profiles = try readProfiles()
+    let now = Date()
+
+    if let index = profiles.firstIndex(where: { $0.fingerprint == envelope.fingerprint }) {
+      profiles[index].lastSeenAt = now
+      profiles[index].authMode = envelope.snapshot.authMode
+      profiles[index].accountID = envelope.snapshot.accountID
+      profiles[index].email = envelope.snapshot.email
+      try writeProfiles(profiles)
+      let sorted = sortProfiles(profiles)
+      return AuthProfileImportResult(
+        profile: sorted.first(where: { $0.id == profiles[index].id }) ?? profiles[index],
+        decision: .unchanged
+      )
+    }
+
+    if let accountID = envelope.snapshot.accountID,
+       let index = profiles.firstIndex(where: { $0.accountID == accountID }) {
+      let snapshotURL = paths.profilesDirectory.appending(path: profiles[index].snapshotFileName)
+      let existingData = try Data(contentsOf: snapshotURL)
+      let existingEnvelope = try authStore.envelope(from: existingData)
+
+      do {
+        let usage = try await apiClient.fetchUsage(auth: envelope.snapshot)
+        try data.write(to: snapshotURL, options: .atomic)
+        profiles[index].fingerprint = envelope.fingerprint
+        profiles[index].authMode = envelope.snapshot.authMode
+        profiles[index].accountID = envelope.snapshot.accountID
+        profiles[index].email = envelope.snapshot.email
+        profiles[index].lastSeenAt = now
+        profiles[index].lastValidatedAt = now
+        profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: usage)
+        profiles[index].validationError = nil
+        try writeProfiles(profiles)
+        return AuthProfileImportResult(profile: profiles[index], decision: .updatedExisting)
+      } catch {
+        let newError = error.localizedDescription
+        do {
+          let existingUsage = try await apiClient.fetchUsage(auth: existingEnvelope.snapshot)
+          profiles[index].lastValidatedAt = now
+          profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: existingUsage)
+          profiles[index].validationError = nil
+          try writeProfiles(profiles)
+          return AuthProfileImportResult(
+            profile: profiles[index],
+            decision: .keptExisting(reason: "粘贴的 auth 不可用：\(newError)，已确认原 auth 可用。")
+          )
+        } catch {
+          profiles[index].lastValidatedAt = now
+          profiles[index].validationError = error.localizedDescription
+          try writeProfiles(profiles)
+          return AuthProfileImportResult(
+            profile: profiles[index],
+            decision: .keptExisting(reason: "粘贴的 auth 不可用：\(newError)，原 auth 校验也失败：\(error.localizedDescription)。")
+          )
+        }
+      }
+    }
+
+    let profilesAfterImport = try storeEnvelopeIfNeeded(envelope)
+    if let imported = profilesAfterImport.first(where: { $0.fingerprint == envelope.fingerprint }) {
+      return AuthProfileImportResult(profile: imported, decision: .added)
+    }
+    throw AuthProfileStoreError.profileNotFound
   }
 
   func validateProfiles(using apiClient: UsageAPIClient) async -> [AuthProfileRecord] {

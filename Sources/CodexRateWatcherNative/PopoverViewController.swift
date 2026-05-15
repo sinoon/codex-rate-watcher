@@ -130,6 +130,8 @@ final class PopoverViewController: NSViewController {
 
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
+  private let profileActionStack = NSStackView()
+  private let importAuthButton = NSButton()
   private let addAccountButton = NSButton()
   private let profileStack    = NSStackView()
 
@@ -1067,6 +1069,16 @@ final class PopoverViewController: NSViewController {
     profileHeader.textColor = LN.textTertiary
     profileHeader.translatesAutoresizingMaskIntoConstraints = false
 
+    importAuthButton.title = Copy.importAuth
+    importAuthButton.bezelStyle = .inline
+    importAuthButton.isBordered = false
+    importAuthButton.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    importAuthButton.contentTintColor = LN.textSecondary
+    importAuthButton.target = self
+    importAuthButton.action = #selector(importAuthTapped)
+    importAuthButton.translatesAutoresizingMaskIntoConstraints = false
+    importAuthButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+
     addAccountButton.title = Copy.addAccount
     addAccountButton.bezelStyle = .inline
     addAccountButton.isBordered = false
@@ -1077,23 +1089,30 @@ final class PopoverViewController: NSViewController {
     addAccountButton.translatesAutoresizingMaskIntoConstraints = false
     addAccountButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
+    profileActionStack.orientation = .horizontal
+    profileActionStack.alignment = .centerY
+    profileActionStack.spacing = 8
+    profileActionStack.translatesAutoresizingMaskIntoConstraints = false
+    profileActionStack.addArrangedSubview(importAuthButton)
+    profileActionStack.addArrangedSubview(addAccountButton)
+
     profileStack.orientation = .vertical
     profileStack.spacing = LN.gapXs
     profileStack.translatesAutoresizingMaskIntoConstraints = false
 
     container.addSubview(profileHeader)
-    container.addSubview(addAccountButton)
+    container.addSubview(profileActionStack)
     container.addSubview(profileStack)
 
     NSLayoutConstraint.activate([
       container.widthAnchor.constraint(equalToConstant: LN.popoverW),
 
       profileHeader.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LN.pad),
-      profileHeader.trailingAnchor.constraint(lessThanOrEqualTo: addAccountButton.leadingAnchor, constant: -8),
+      profileHeader.trailingAnchor.constraint(lessThanOrEqualTo: profileActionStack.leadingAnchor, constant: -8),
       profileHeader.topAnchor.constraint(equalTo: container.topAnchor),
 
-      addAccountButton.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
-      addAccountButton.centerYAnchor.constraint(equalTo: profileHeader.centerYAnchor),
+      profileActionStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
+      profileActionStack.centerYAnchor.constraint(equalTo: profileHeader.centerYAnchor),
 
       profileStack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: LN.pad),
       profileStack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -LN.pad),
@@ -1182,6 +1201,11 @@ final class PopoverViewController: NSViewController {
   @objc private func addAccountTapped() {
     guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
     appDelegate.startAddAccountFlow()
+  }
+
+  @objc private func importAuthTapped() {
+    guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
+    appDelegate.startImportAuthJSONFlow()
   }
 
   @objc private func openDashboardTapped() {

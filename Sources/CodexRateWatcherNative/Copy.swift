@@ -49,13 +49,43 @@ enum Copy {
 
   // MARK: - Other Quotas Detail (compact)
 
-  /// "≈2h10m 可用 · 3/22 重置"
-  static func quotaBurn(timeLeft: TimeInterval?, resetAt: TimeInterval) -> String {
-    let reset = resetDate(resetAt)
+  /// "3/22 10:25 重置 · 4天2h后"
+  static func quotaReset(
+    resetAt: TimeInterval,
+    now: Date = Date(),
+    timeZone: TimeZone = .autoupdatingCurrent
+  ) -> String {
+    QuotaTimeFormatter.resetCountdownLabel(
+      for: resetAt,
+      now: now,
+      timeZone: timeZone
+    ) ?? {
+      let reset = QuotaTimeFormatter.resetLabel(for: resetAt, now: now, timeZone: timeZone) ?? "--"
+      return "\(reset) 重置"
+    }()
+  }
+
+  /// "≈2h10m · 3/22 10:25 重置 · 4天2h后"
+  static func quotaBurn(
+    timeLeft: TimeInterval?,
+    resetAt: TimeInterval,
+    now: Date = Date(),
+    timeZone: TimeZone = .autoupdatingCurrent
+  ) -> String {
+    let reset = quotaReset(resetAt: resetAt, now: now, timeZone: timeZone)
     if let t = timeLeft {
-      return "≈\(duration(t)) · \(reset) 重置"
+      return "≈\(duration(t)) · \(reset)"
     }
-    return "\(reset) 重置"
+    return reset
+  }
+
+  /// "已耗尽 · 3/22 10:25 重置 · 4天2h后"
+  static func quotaExhausted(
+    resetAt: TimeInterval,
+    now: Date = Date(),
+    timeZone: TimeZone = .autoupdatingCurrent
+  ) -> String {
+    "已耗尽 · \(quotaReset(resetAt: resetAt, now: now, timeZone: timeZone))"
   }
 
   /// For review estimate which has no reset time
@@ -230,6 +260,42 @@ enum Copy {
   }
   static let addAccountFailed = "添加账号失败"
   static let addAccountAlreadyRunning = "已有一个添加账号流程在进行中。"
+
+  // MARK: - Auth JSON Import
+
+  static let importAuth = "粘贴"
+  static let importAuthJSON = "粘贴 auth.json…"
+  static let importAuthPanelTitle = "粘贴 auth.json"
+  static let importAuthPanelMessage = "粘贴完整 auth.json 内容。导入后会加入账号列表，不会覆盖当前 ~/.codex/auth.json。"
+  static let importAuthPanelPrompt = "导入"
+  static let importAuthEmpty = "请先粘贴 auth.json 内容。"
+  static let importAuthSuccess = "auth.json 已导入"
+  static func importAuthResultTitle(_ result: AuthProfileImportResult) -> String {
+    switch result.decision {
+    case .keptExisting:
+      return "已保留现有账号"
+    case .updatedExisting:
+      return "账号登录态已更新"
+    case .unchanged:
+      return "账号已存在"
+    case .added:
+      return importAuthSuccess
+    }
+  }
+  static func importAuthSuccessBody(result: AuthProfileImportResult) -> String {
+    switch result.decision {
+    case .added:
+      return "\(result.profile.displayName) 已加入账号列表，当前账号保持不变。"
+    case .unchanged:
+      return "\(result.profile.displayName) 已在账号列表中，未重复添加。"
+    case .updatedExisting:
+      return "\(result.profile.displayName) 的新 auth 已校验可用，并已更新。当前账号保持不变。"
+    case .keptExisting(let reason):
+      return "\(result.profile.displayName) 已保留原 auth。\(reason)"
+    }
+  }
+  static let importAuthFailed = "导入 auth.json 失败"
+  static let importAuthBusy = "当前正在同步账号，稍后再试。"
 
 
   // MARK: - Relay Plan
