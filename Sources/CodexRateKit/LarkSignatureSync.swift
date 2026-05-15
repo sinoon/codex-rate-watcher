@@ -138,6 +138,39 @@ public enum LarkSignatureFormatter {
   }
 }
 
+public enum LarkSignatureURLBuilder {
+  public static let defaultBaseURL = URL(string: "https://l.garyyang.work")!
+  public static let defaultTargetURL = URL(string: "https://github.com/sinoon/codex-rate-watcher#-lark-url-preview-signature-sync")!
+
+  public static func signatureURL(
+    slotID: String,
+    baseURL: URL = defaultBaseURL,
+    targetURL: URL? = defaultTargetURL
+  ) -> URL {
+    var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) ?? URLComponents()
+    components.path = "/"
+    components.query = nil
+    components.fragment = nil
+
+    var queryParts = [
+      "t=\(percentEncodedQueryValue(#"{{slot id="\#(slotID)"}}"#))"
+    ]
+    if let targetURL {
+      queryParts.append("u=\(percentEncodedQueryValue(targetURL.absoluteString))")
+    }
+
+    guard let rootURL = components.url else {
+      return baseURL
+    }
+    return URL(string: rootURL.absoluteString + "?" + queryParts.joined(separator: "&")) ?? rootURL
+  }
+
+  private static func percentEncodedQueryValue(_ value: String) -> String {
+    let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~")
+    return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+  }
+}
+
 public enum LarkSlotSyncError: LocalizedError, Equatable {
   case invalidResponse
   case httpError(statusCode: Int, message: String)

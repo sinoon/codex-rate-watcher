@@ -190,8 +190,6 @@ private struct CLIOptions {
     case relay
     case cost
     case larkSignature
-    case proxy
-    case mode
     case help
   }
   var command: Command = .status
@@ -199,17 +197,14 @@ private struct CLIOptions {
   var relayStrategy: String = "reset-aware"
   var watchInterval: Int = 30
   var historyHours: Int = 24
-  var proxyPort: UInt16 = 19876
-  var proxyUpstream: String = "https://api.openai.com"
-  var noAutoRelay: Bool = false
-  var proxyVerbose: Bool = false
-  var modeTarget: String = ""
   var larkCredential: String = ""
   var larkSlotID: String = ""
   var larkLabel: String = ""
   var larkBaseURL: String = "https://l.garyyang.work"
+  var larkTargetURL: String = LarkSignatureURLBuilder.defaultTargetURL.absoluteString
   var larkUseLocalSummary: Bool = false
   var larkDryRun: Bool = false
+  var larkSignatureURL: Bool = false
   var larkEnableAutoSync: Bool = false
   var larkDisableAutoSync: Bool = false
   var larkShowAutoSync: Bool = false
@@ -238,10 +233,6 @@ private func parseArguments() -> CLIOptions {
     opts.command = .cost; idx = 1
   case "lark-signature":
     opts.command = .larkSignature; idx = 1
-  case "proxy":
-    opts.command = .proxy; idx = 1
-  case "mode":
-    opts.command = .mode; idx = 1
   case "relay":
     opts.command = .relay; idx = 1
   case "help", "-h", "--help":
@@ -255,12 +246,6 @@ private func parseArguments() -> CLIOptions {
     fputs(ANSI.c(ANSI.red, "Unknown command: \(first)") + "\n", stderr)
     fputs("Run 'codex-rate help' for usage information.\n", stderr)
     exit(1)
-  }
-
-  // Parse mode subcommand (proxy/direct)
-  if opts.command == .mode && idx < args.count && !args[idx].hasPrefix("-") {
-    opts.modeTarget = args[idx]
-    idx += 1
   }
 
   // Parse remaining flags
@@ -287,18 +272,6 @@ private func parseArguments() -> CLIOptions {
         exitWithError("--strategy requires a value: reset-aware, greedy, or max-runway")
       }
       opts.relayStrategy = args[idx]
-    case "--port":
-      idx += 1
-      guard idx < args.count, let val = UInt16(args[idx]) else {
-        exitWithError("--port requires a valid port number (1-65535)")
-      }
-      opts.proxyPort = val
-    case "--upstream":
-      idx += 1
-      guard idx < args.count else {
-        exitWithError("--upstream requires a URL")
-      }
-      opts.proxyUpstream = args[idx]
     case "--credential":
       idx += 1
       guard idx < args.count, !args[idx].isEmpty else {
@@ -323,20 +296,24 @@ private func parseArguments() -> CLIOptions {
         exitWithError("--base-url requires a value")
       }
       opts.larkBaseURL = args[idx]
+    case "--target-url":
+      idx += 1
+      guard idx < args.count, !args[idx].isEmpty else {
+        exitWithError("--target-url requires a value")
+      }
+      opts.larkTargetURL = args[idx]
     case "--local-only":
       opts.larkUseLocalSummary = true
     case "--dry-run":
       opts.larkDryRun = true
+    case "--signature-url":
+      opts.larkSignatureURL = true
     case "--enable-auto-sync":
       opts.larkEnableAutoSync = true
     case "--disable-auto-sync":
       opts.larkDisableAutoSync = true
     case "--show-auto-sync":
       opts.larkShowAutoSync = true
-    case "--no-relay":
-      opts.noAutoRelay = true
-    case "--verbose":
-      opts.proxyVerbose = true
     case "-h", "--help":
       opts.command = .help; return opts
     default:
@@ -872,33 +849,6 @@ private func runRelay(strategyName: String, json: Bool) async {
 
 
 
-// MARK: - Subcommand: Proxy
-
-private func runProxy(opts: CLIOptions) async {
-  let config = ProxyServer.Config(
-    port: opts.proxyPort,
-    upstream: opts.proxyUpstream,
-    autoRelay: !opts.noAutoRelay,
-    verbose: opts.proxyVerbose
-  )
-
-  // Trap SIGINT for graceful shutdown
-  signal(SIGINT, SIG_IGN)
-  let sigSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-  sigSource.setEventHandler {
-    print("\n" + ANSI.c(ANSI.dim, "Shutting down proxy..."))
-    Foundation.exit(0)
-  }
-  sigSource.resume()
-
-  let server = ProxyServer(config: config)
-  do {
-    try await server.run()
-  } catch {
-    exitWithError(error.localizedDescription)
-  }
-}
-
 // MARK: - Help
 
 
@@ -949,6 +899,53 @@ private func runLarkSignature(opts: CLIOptions) async {
     } else {
       print(ANSI.c(ANSI.green, "Disabled app auto-sync for Lark signature."))
     }
+    return
+  }
+
+  if opts.larkSignatureURL {
+    var slotID = opts.larkSlotID
+    var baseURLString = opts.larkBaseURL
+    if slotID.isEmpty {
+      let config = await store.load()
+      slotID = config.slotID
+      if baseURLString == LarkSignatureURLBuilder.defaultBaseURL.absoluteString,
+         !config.baseURL.isEmpty {
+        baseURLString = config.baseURL
+      }
+    }
+
+    guard !slotID.isEmpty else {
+      exitWithError("--slot-id is required for --signature-url unless app auto-sync is configured")
+    }
+    guard let baseURL = URL(string: baseURLString) else {
+      exitWithError("--base-url must be a valid URL")
+    }
+    guard let targetURL = URL(string: opts.larkTargetURL) else {
+      exitWithError("--target-url must be a valid URL")
+    }
+
+    let signatureURL = LarkSignatureURLBuilder.signatureURL(
+      slotID: slotID,
+      baseURL: baseURL,
+      targetURL: targetURL
+    )
+
+    if opts.jsonOutput {
+      let payload: [String: Any] = [
+        "base_url": baseURL.absoluteString,
+        "signature_url": signatureURL.absoluteString,
+        "slot_id": slotID,
+        "target_url": targetURL.absoluteString,
+        "template": #"{{slot id="\#(slotID)"}}"#
+      ]
+      if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+         let text = String(data: data, encoding: .utf8) {
+        print(text)
+      }
+      return
+    }
+
+    print(signatureURL.absoluteString)
     return
   }
 
@@ -1066,8 +1063,6 @@ private func printHelp() {
     relay       Show relay plan across accounts
     cost        Show local token cost from Codex session logs
     lark-signature  Sync token cost summary into a Lark URL preview slot
-    proxy       Start local HTTP proxy for Codex API
-    mode        Switch Codex between proxy and direct modes
     help        Show this help message
 
   \(ANSI.c(ANSI.bold, "OPTIONS"))
@@ -1075,19 +1070,17 @@ private func printHelp() {
     --interval <secs>    Watch polling interval (default: 30, min: 10)
     --hours <N>          History window in hours (default: 24)
     --strategy <name>    Relay strategy: reset-aware (default), greedy, max-runway
-    --port <N>           Proxy listen port (default: 19876)
-    --upstream <url>     Proxy upstream URL (default: https://api.openai.com)
     --credential <str>   Lark custom slot credential
     --slot-id <str>      Lark custom slot ID
     --label <str>        Prefix label for signature summary (default: empty)
     --base-url <url>     Lark slot API base URL (default: https://l.garyyang.work)
+    --target-url <url>   Click target for generated Lark signature URL
     --local-only         Use local-device totals instead of merged totals
     --dry-run            Print signature text without writing slot
+    --signature-url      Print copyable Lark signature URL without writing slot
     --enable-auto-sync   Save Lark sync config for the menu bar app
     --disable-auto-sync  Remove saved app auto-sync config
     --show-auto-sync     Show saved app auto-sync status
-    --no-relay           Disable automatic 429 failover
-    --verbose            Verbose proxy logging
     -v, --version        Show version
     -h, --help           Show help
 
@@ -1101,96 +1094,14 @@ private func printHelp() {
     codex-rate relay --strategy greedy  Use greedy strategy
     codex-rate cost              Show local token cost
     codex-rate cost --json       Local token cost as JSON
+    codex-rate lark-signature --slot-id <id> --signature-url
     codex-rate lark-signature --slot-id <id> --dry-run
     codex-rate lark-signature --credential <cred> --slot-id <id>
     codex-rate lark-signature --credential <cred> --slot-id <id> --enable-auto-sync
     codex-rate lark-signature --show-auto-sync
-    codex-rate proxy             Start proxy on port 19876
-    codex-rate proxy --port 8080 Start proxy on custom port
-    codex-rate proxy --verbose   Proxy with request logging
-    codex-rate mode              Show current Codex mode
-    codex-rate mode proxy        Switch to proxy mode
-    codex-rate mode direct       Switch to direct/account mode
-  \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/patchwork-body/shakeflow"))
+  \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/sinoon/codex-rate-watcher"))
   """
   print(help)
-}
-
-
-// MARK: - Subcommand: Mode
-
-private func runMode(target: String, port: UInt16, json: Bool) {
-  let mgr = CodexConfigManager()
-  let current = mgr.currentMode()
-
-  // No target = show current mode
-  if target.isEmpty {
-    if json {
-      let obj: [String: String] = [
-        "mode": current.rawValue,
-        "config": mgr.path,
-      ]
-      if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-         let str = String(data: data, encoding: .utf8) {
-        print(str)
-      }
-    } else {
-      let icon = current == .proxy ? "PROXY" : "DIRECT"
-      let color = current == .proxy ? ANSI.magenta : ANSI.green
-      print(ANSI.c(ANSI.bold, "Codex Mode: ") + ANSI.c(ANSI.bold + color, icon))
-      print(ANSI.c(ANSI.dim, "  Config: \(mgr.path)"))
-      if current == .proxy {
-        print(ANSI.c(ANSI.dim, "  Proxy:  http://localhost:\(port)"))
-      }
-      print()
-      print("Switch with:  codex-rate mode proxy | codex-rate mode direct")
-    }
-    return
-  }
-
-  // Switch mode
-  switch target.lowercased() {
-  case "proxy":
-    if current == .proxy {
-      print(ANSI.c(ANSI.yellow, "Already in proxy mode."))
-      return
-    }
-    do {
-      try mgr.switchTo(proxy: port)
-      if json {
-        print("{\"mode\":\"proxy\",\"port\":\(port)}")
-      } else {
-        print(ANSI.c(ANSI.green, "Switched to PROXY mode."))
-        print("  Codex will route through: http://localhost:\(port)")
-        print()
-        print(ANSI.c(ANSI.dim, "Make sure the proxy is running:"))
-        print(ANSI.c(ANSI.cyan, "  codex-rate proxy --port \(port)"))
-      }
-    } catch {
-      fputs(ANSI.c(ANSI.red, "Failed: \(error.localizedDescription)") + "\n", stderr)
-    }
-
-  case "direct", "normal":
-    if current == .direct {
-      print(ANSI.c(ANSI.yellow, "Already in direct mode."))
-      return
-    }
-    do {
-      try mgr.switchToDirect()
-      if json {
-        print("{\"mode\":\"direct\"}")
-      } else {
-        print(ANSI.c(ANSI.green, "Switched to DIRECT mode."))
-        print("  Codex will use account-based auth directly.")
-      }
-    } catch {
-      fputs(ANSI.c(ANSI.red, "Failed: \(error.localizedDescription)") + "\n", stderr)
-    }
-
-  default:
-    fputs(ANSI.c(ANSI.red, "Unknown mode: \(target)") + "\n", stderr)
-    fputs("Usage: codex-rate mode [proxy|direct]\n", stderr)
-  }
 }
 
 // MARK: - Main Entry Point
@@ -1210,10 +1121,6 @@ case .cost:
   await runCost(json: opts.jsonOutput)
 case .larkSignature:
   await runLarkSignature(opts: opts)
-case .proxy:
-  await runProxy(opts: opts)
-case .mode:
-  runMode(target: opts.modeTarget, port: opts.proxyPort, json: opts.jsonOutput)
 case .relay:
   await runRelay(strategyName: opts.relayStrategy, json: opts.jsonOutput)
 case .help:

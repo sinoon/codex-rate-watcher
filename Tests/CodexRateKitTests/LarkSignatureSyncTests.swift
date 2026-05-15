@@ -64,6 +64,37 @@ final class LarkSignatureSyncTests: XCTestCase {
     XCTAssertEqual(summary, "Codex 本机 · 暂无 token 数据 · 16:08")
   }
 
+  func testSignatureURLUsesSlotForTextAndTargetForClickDestination() throws {
+    let targetURL = try XCTUnwrap(URL(string: "https://github.com/sinoon/codex-rate-watcher#-lark-url-preview-signature-sync"))
+    let signatureURL = LarkSignatureURLBuilder.signatureURL(
+      slotID: "slot-abc",
+      targetURL: targetURL
+    )
+
+    let components = try XCTUnwrap(URLComponents(url: signatureURL, resolvingAgainstBaseURL: false))
+    let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+      item.value.map { (item.name, $0) }
+    })
+
+    XCTAssertEqual(signatureURL.scheme, "https")
+    XCTAssertEqual(signatureURL.host, "l.garyyang.work")
+    XCTAssertEqual(queryItems["t"], #"{{slot id="slot-abc"}}"#)
+    XCTAssertEqual(queryItems["u"], targetURL.absoluteString)
+    XCTAssertTrue(signatureURL.absoluteString.contains("t=%7B%7Bslot%20id%3D%22slot-abc%22%7D%7D"))
+    XCTAssertTrue(signatureURL.absoluteString.contains("u=https%3A%2F%2Fgithub.com%2Fsinoon%2Fcodex-rate-watcher%23-lark-url-preview-signature-sync"))
+  }
+
+  func testSignatureURLCanUseCustomBaseURL() throws {
+    let baseURL = try XCTUnwrap(URL(string: "https://preview.example.test/base"))
+    let signatureURL = LarkSignatureURLBuilder.signatureURL(
+      slotID: "slot-abc",
+      baseURL: baseURL,
+      targetURL: nil
+    )
+
+    XCTAssertEqual(signatureURL.absoluteString, "https://preview.example.test/?t=%7B%7Bslot%20id%3D%22slot-abc%22%7D%7D")
+  }
+
   func testUpdateSlotSendsBearerTokenAndJSONBody() async throws {
     let session = makeSession(
       statusCode: 200,

@@ -138,16 +138,28 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 - **全设备或本机都能选** —— 默认写合并后的总量，也可以切成仅本机视角
 
 <p>
-  <img src="docs/screenshot-lark-signature.svg" width="780" alt="飞书 URL Preview 签名效果图：展示今日、7天、30天 token 用量和金额" />
+  <img src="docs/screenshot-lark-signature.svg" width="620" alt="飞书签名 URL 卡片：展示一行 token 摘要和 Copy URL 操作" />
 </p>
 
 #### 快速配置
 
 1. 先准备好飞书自定义 slot 的 `credential` 和 `slot-id`。
-2. 飞书签名里要放的是 **动态 slot 链接**，不是把文案直接写死的静态链接：
+2. 生成可以直接复制到飞书签名里的 URL。`t=` 负责展示动态签名文案，`u=` 负责控制点击后的落地页。默认生成的 URL 会把点击跳转到本 README 的配置说明：
+
+   ```bash
+   swift run codex-rate lark-signature --slot-id <slot-id> --signature-url
+   ```
+
+   如果想改点击落地页：
+
+   ```bash
+   swift run codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
+   ```
+
+   生成出来的 URL 形态是：
 
    ```text
-   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D
+   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D&u=https%3A%2F%2Fgithub.com%2Fsinoon%2Fcodex-rate-watcher%23-lark-url-preview-signature-sync
    ```
 
 3. 先在本地预览这次会写入什么内容：
@@ -165,7 +177,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 #### 常见坑
 
-如果你的飞书签名链接长这样：`https://l.garyyang.work/?t=Token%20...`，那它是**静态链接**，后面不会自动更新。要想让菜单栏应用持续改值，签名链接本身必须读取 `{{slot id="..."}}`。
+如果你的飞书签名链接长这样：`https://l.garyyang.work/?t=Token%20...`，那它是**静态链接**，后面不会自动更新。要想让菜单栏应用持续改值，签名链接本身必须读取 `{{slot id="..."}}`。点击落地页是独立配置：保留动态 `t={{slot ...}}`，只改 `u=` 就可以调整点击后打开的页面。
 
 ### ☁️ iCloud 多设备 Token Ledger 同步
 
@@ -260,6 +272,12 @@ swift run CodexRateWatcherNative -- --window
 ```bash
 # 预览准备写入飞书 URL Preview 签名槽位的文案
 swift run codex-rate lark-signature --slot-id <slot-id> --dry-run
+
+# 生成可以直接复制到飞书签名里的 URL
+swift run codex-rate lark-signature --slot-id <slot-id> --signature-url
+
+# 生成带自定义点击落地页的签名 URL
+swift run codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
 
 # 将最新 token 汇总写入飞书自定义 slot
 swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id>

@@ -45,6 +45,7 @@ private enum LN {
 
 final class PopoverViewController: NSViewController {
   private let monitor: UsageMonitor
+  private let larkSignatureStore = LarkSignatureAutoSyncStore()
   private var observerID: UUID?
   private var latestTokenCostSnapshot: TokenCostSnapshot?
 
@@ -116,17 +117,13 @@ final class PopoverViewController: NSViewController {
   private var costHoverPanelLeading: NSLayoutConstraint?
   private let costHoverPanelWidth: CGFloat = 268
   private let costSharePopover = NSPopover()
+  private var latestLarkSignatureConfig = LarkSignatureAutoSyncConfig()
 
-  // Mode card
-  private var modeWrapper: NSView!
-  private let modeSectionLabel = NSTextField(labelWithString: "CODEX MODE")
-  private let modeDirectBtn = NSButton()
-  private let modeProxyBtn = NSButton()
-  private let modeStatusLabel = NSTextField(labelWithString: "")
-  private let codexConfig = CodexConfigManager()
-  private let modeIndicatorDot = NSView()
-  private let modeRequestsLabel = NSTextField(labelWithString: "")
-  private var proxyIsRunning = false
+  // Lark signature card
+  private var larkSignatureWrapper: NSView!
+  private let larkSignatureSectionLabel = NSTextField(labelWithString: "")
+  private let larkSignaturePreviewBodyLabel = NSTextField(labelWithString: "")
+  private let costSignatureURLButton = NSButton()
 
   // Profile section
   private let profileHeader   = NSTextField(labelWithString: "")
@@ -159,6 +156,7 @@ final class PopoverViewController: NSViewController {
     observerID = monitor.addObserver { [weak self] s in
       DispatchQueue.main.async { self?.render(state: s) }
     }
+    refreshLarkSignatureURLButton()
   }
 
   override func viewDidLayout() {
@@ -195,30 +193,30 @@ final class PopoverViewController: NSViewController {
     ])
 
     let headerView = makeHeader()
-    let modeCard = makeModeCard()
     let primaryCard = makePrimaryCard()
     let quotaCard = makeQuotaCard()
     let costCard = makeCostCard()
+    let larkSignatureCard = makeLarkSignatureCard()
     let relayCard = makeRelayCard()
     let recView = makeRecBanner()
     let profileSection = makeProfileSection()
     let footer = makeFooter()
 
     root.addArrangedSubview(headerView)
-    root.addArrangedSubview(modeCard)
     root.addArrangedSubview(primaryCard)
     root.addArrangedSubview(quotaCard)
     root.addArrangedSubview(costCard)
+    root.addArrangedSubview(larkSignatureCard)
     root.addArrangedSubview(relayCard)
     root.addArrangedSubview(recView)
     root.addArrangedSubview(profileSection)
     root.addArrangedSubview(footer)
 
     root.setCustomSpacing(LN.gap, after: headerView)
-    root.setCustomSpacing(LN.gapSm, after: modeCard)
     root.setCustomSpacing(LN.gapSm, after: primaryCard)
     root.setCustomSpacing(LN.gapSm, after: quotaCard)
     root.setCustomSpacing(LN.gapSm, after: costCard)
+    root.setCustomSpacing(LN.gapSm, after: larkSignatureCard)
     root.setCustomSpacing(LN.gap, after: relayCard)
     root.setCustomSpacing(LN.gap, after: recView)
     root.setCustomSpacing(LN.gapSm, after: profileSection)
@@ -266,167 +264,6 @@ final class PopoverViewController: NSViewController {
     ])
 
     return container
-  }
-
-
-  // MARK: - Mode Card (Codex proxy toggle)
-
-  private func makeModeCard() -> NSView {
-    let wrapper = NSView()
-    wrapper.translatesAutoresizingMaskIntoConstraints = false
-    modeWrapper = wrapper
-
-    let card = NSView()
-    card.wantsLayer = true
-    card.layer?.backgroundColor = LN.surface.cgColor
-    card.layer?.cornerRadius = LN.radius
-    card.layer?.borderWidth = 1
-    card.layer?.borderColor = LN.borderSubtle.cgColor
-    card.translatesAutoresizingMaskIntoConstraints = false
-
-    modeSectionLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
-    modeSectionLabel.textColor = LN.textMuted
-    modeSectionLabel.translatesAutoresizingMaskIntoConstraints = false
-
-    // Segmented toggle track
-    let toggleTrack = NSView()
-    toggleTrack.wantsLayer = true
-    toggleTrack.layer?.backgroundColor = LN.elevated.cgColor
-    toggleTrack.layer?.cornerRadius = LN.radiusSm + 2
-    toggleTrack.translatesAutoresizingMaskIntoConstraints = false
-
-    configureModeButton(modeDirectBtn, title: "⚡️  Direct", action: #selector(modeTappedDirect))
-    configureModeButton(modeProxyBtn, title: "🌐  Proxy", action: #selector(modeTappedProxy))
-
-    toggleTrack.addSubview(modeDirectBtn)
-    toggleTrack.addSubview(modeProxyBtn)
-
-    modeStatusLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
-    modeStatusLabel.textColor = LN.textTertiary
-    modeStatusLabel.lineBreakMode = .byTruncatingTail
-    modeStatusLabel.maximumNumberOfLines = 1
-    modeStatusLabel.translatesAutoresizingMaskIntoConstraints = false
-
-    // Indicator dot (green=running, red=down, hidden in direct mode)
-    modeIndicatorDot.wantsLayer = true
-    modeIndicatorDot.layer?.cornerRadius = 3
-    modeIndicatorDot.layer?.backgroundColor = LN.textMuted.cgColor
-    modeIndicatorDot.translatesAutoresizingMaskIntoConstraints = false
-    modeIndicatorDot.isHidden = true
-
-    // Request counter (proxy mode only)
-    modeRequestsLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .medium)
-    modeRequestsLabel.textColor = LN.textMuted
-    modeRequestsLabel.alignment = .right
-    modeRequestsLabel.translatesAutoresizingMaskIntoConstraints = false
-    modeRequestsLabel.isHidden = true
-
-    card.addSubview(modeSectionLabel)
-    card.addSubview(toggleTrack)
-    card.addSubview(modeIndicatorDot)
-    card.addSubview(modeStatusLabel)
-    card.addSubview(modeRequestsLabel)
-
-    let cPad = LN.cardPad
-    let toggleH: CGFloat = 32
-    let btnPad: CGFloat = 3
-
-    NSLayoutConstraint.activate([
-      modeSectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
-      modeSectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
-
-      toggleTrack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
-      toggleTrack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      toggleTrack.topAnchor.constraint(equalTo: modeSectionLabel.bottomAnchor, constant: LN.gapSm),
-      toggleTrack.heightAnchor.constraint(equalToConstant: toggleH),
-
-      modeDirectBtn.leadingAnchor.constraint(equalTo: toggleTrack.leadingAnchor, constant: btnPad),
-      modeDirectBtn.topAnchor.constraint(equalTo: toggleTrack.topAnchor, constant: btnPad),
-      modeDirectBtn.bottomAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: -btnPad),
-      modeDirectBtn.trailingAnchor.constraint(equalTo: toggleTrack.centerXAnchor, constant: -1),
-
-      modeProxyBtn.leadingAnchor.constraint(equalTo: toggleTrack.centerXAnchor, constant: 1),
-      modeProxyBtn.topAnchor.constraint(equalTo: toggleTrack.topAnchor, constant: btnPad),
-      modeProxyBtn.bottomAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: -btnPad),
-      modeProxyBtn.trailingAnchor.constraint(equalTo: toggleTrack.trailingAnchor, constant: -btnPad),
-
-      modeIndicatorDot.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
-      modeIndicatorDot.widthAnchor.constraint(equalToConstant: 6),
-      modeIndicatorDot.heightAnchor.constraint(equalToConstant: 6),
-      modeIndicatorDot.centerYAnchor.constraint(equalTo: modeStatusLabel.centerYAnchor),
-
-      modeStatusLabel.leadingAnchor.constraint(equalTo: modeIndicatorDot.trailingAnchor, constant: 5),
-      modeStatusLabel.topAnchor.constraint(equalTo: toggleTrack.bottomAnchor, constant: LN.gapSm),
-      modeStatusLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
-
-      modeRequestsLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
-      modeRequestsLabel.centerYAnchor.constraint(equalTo: modeStatusLabel.centerYAnchor),
-      modeStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: modeRequestsLabel.leadingAnchor, constant: -4),
-    ])
-
-    wrapper.addSubview(card)
-    NSLayoutConstraint.activate([
-      wrapper.widthAnchor.constraint(equalToConstant: LN.popoverW),
-      card.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: LN.pad),
-      card.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -LN.pad),
-      card.topAnchor.constraint(equalTo: wrapper.topAnchor),
-      card.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-    ])
-
-    refreshModeCard()
-    return wrapper
-  }
-
-  private func configureModeButton(_ btn: NSButton, title: String, action: Selector) {
-    btn.bezelStyle = .texturedRounded
-    btn.isBordered = false
-    btn.wantsLayer = true
-    btn.layer?.cornerRadius = LN.radiusSm
-    btn.font = .systemFont(ofSize: LN.fontSmall, weight: .semibold)
-    btn.title = title
-    btn.target = self
-    btn.action = action
-    btn.translatesAutoresizingMaskIntoConstraints = false
-  }
-
-  private func refreshModeCard() {
-    let mode = codexConfig.currentMode()
-    if mode == .direct {
-      modeDirectBtn.layer?.backgroundColor = LN.purple.cgColor
-      modeDirectBtn.contentTintColor = .white
-      modeProxyBtn.layer?.backgroundColor = NSColor.clear.cgColor
-      modeProxyBtn.contentTintColor = LN.textTertiary
-      modeStatusLabel.stringValue = "Direct connection · Account-based"
-      modeIndicatorDot.isHidden = true
-      modeRequestsLabel.isHidden = true
-    } else {
-      modeProxyBtn.layer?.backgroundColor = LN.purple.cgColor
-      modeProxyBtn.contentTintColor = .white
-      modeDirectBtn.layer?.backgroundColor = NSColor.clear.cgColor
-      modeDirectBtn.contentTintColor = LN.textTertiary
-      modeIndicatorDot.isHidden = false
-      modeRequestsLabel.isHidden = false
-      if proxyIsRunning {
-        modeIndicatorDot.layer?.backgroundColor = LN.green.cgColor
-        modeStatusLabel.stringValue = "Proxy running · :19876"
-      } else {
-        modeIndicatorDot.layer?.backgroundColor = LN.red.cgColor
-        modeStatusLabel.stringValue = "Proxy starting…"
-      }
-    }
-  }
-
-  func refreshModeFromExternal() {
-    refreshModeCard()
-  }
-
-  func updateProxyStatus(running: Bool, stats: ProxyServer.Stats?) {
-    proxyIsRunning = running
-    refreshModeCard()
-    if let stats, codexConfig.currentMode() == .proxy {
-      modeRequestsLabel.isHidden = false
-      modeRequestsLabel.stringValue = "\(stats.requests) req"
-    }
   }
 
   // MARK: - Primary Card (hero metric in a card)
@@ -737,9 +574,6 @@ final class PopoverViewController: NSViewController {
     label.translatesAutoresizingMaskIntoConstraints = false
   }
 
-  // MARK: - Relay Card
-
-
   // MARK: - Cost Card
 
   private func makeCostCard() -> NSView {
@@ -919,6 +753,88 @@ final class PopoverViewController: NSViewController {
 
     return wrapper
   }
+
+  private func makeLarkSignatureCard() -> NSView {
+    let wrapper = NSView()
+    wrapper.translatesAutoresizingMaskIntoConstraints = false
+    wrapper.isHidden = true
+    larkSignatureWrapper = wrapper
+
+    let card = NSView()
+    card.wantsLayer = true
+    card.layer?.backgroundColor = LN.surface.cgColor
+    card.layer?.cornerRadius = LN.radius
+    card.layer?.borderWidth = 1
+    card.layer?.borderColor = LN.borderSubtle.cgColor
+    card.translatesAutoresizingMaskIntoConstraints = false
+
+    larkSignatureSectionLabel.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    larkSignatureSectionLabel.textColor = LN.textMuted
+    larkSignatureSectionLabel.stringValue = Copy.larkSignatureSectionTitle
+    larkSignatureSectionLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    costSignatureURLButton.title = Copy.costCopySignatureURL
+    costSignatureURLButton.bezelStyle = .inline
+    costSignatureURLButton.isBordered = false
+    costSignatureURLButton.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    costSignatureURLButton.contentTintColor = LN.green
+    costSignatureURLButton.target = self
+    costSignatureURLButton.action = #selector(copyLarkSignatureURLTapped)
+    costSignatureURLButton.translatesAutoresizingMaskIntoConstraints = false
+    costSignatureURLButton.isEnabled = false
+
+    let preview = NSView()
+    preview.wantsLayer = true
+    preview.layer?.backgroundColor = LN.elevated.cgColor
+    preview.layer?.cornerRadius = LN.radiusSm
+    preview.layer?.borderWidth = 1
+    preview.layer?.borderColor = LN.borderSubtle.cgColor
+    preview.translatesAutoresizingMaskIntoConstraints = false
+
+    larkSignaturePreviewBodyLabel.font = .monospacedDigitSystemFont(ofSize: LN.fontMicro, weight: .medium)
+    larkSignaturePreviewBodyLabel.textColor = LN.textSecondary
+    larkSignaturePreviewBodyLabel.lineBreakMode = .byTruncatingTail
+    larkSignaturePreviewBodyLabel.maximumNumberOfLines = 1
+    larkSignaturePreviewBodyLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    card.addSubview(larkSignatureSectionLabel)
+    card.addSubview(costSignatureURLButton)
+    card.addSubview(preview)
+    preview.addSubview(larkSignaturePreviewBodyLabel)
+
+    let cPad = LN.cardPad
+    NSLayoutConstraint.activate([
+      larkSignatureSectionLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      larkSignatureSectionLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: cPad),
+      larkSignatureSectionLabel.trailingAnchor.constraint(lessThanOrEqualTo: costSignatureURLButton.leadingAnchor, constant: -8),
+
+      costSignatureURLButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      costSignatureURLButton.centerYAnchor.constraint(equalTo: larkSignatureSectionLabel.centerYAnchor),
+
+      preview.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      preview.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      preview.topAnchor.constraint(equalTo: larkSignatureSectionLabel.bottomAnchor, constant: LN.gapSm),
+      preview.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+
+      larkSignaturePreviewBodyLabel.leadingAnchor.constraint(equalTo: preview.leadingAnchor, constant: 10),
+      larkSignaturePreviewBodyLabel.trailingAnchor.constraint(equalTo: preview.trailingAnchor, constant: -10),
+      larkSignaturePreviewBodyLabel.topAnchor.constraint(equalTo: preview.topAnchor, constant: 9),
+      larkSignaturePreviewBodyLabel.bottomAnchor.constraint(equalTo: preview.bottomAnchor, constant: -9),
+    ])
+
+    wrapper.addSubview(card)
+    NSLayoutConstraint.activate([
+      wrapper.widthAnchor.constraint(equalToConstant: LN.popoverW),
+      card.topAnchor.constraint(equalTo: wrapper.topAnchor),
+      card.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: LN.pad),
+      card.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -LN.pad),
+      card.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
+    ])
+
+    updateLarkSignaturePreview()
+    return wrapper
+  }
+
   private func makeRelayCard() -> NSView {
     let wrapper = NSView()
     wrapper.translatesAutoresizingMaskIntoConstraints = false
@@ -1230,54 +1146,20 @@ final class PopoverViewController: NSViewController {
     costSharePopover.show(relativeTo: costShareButton.bounds, of: costShareButton, preferredEdge: .maxX)
   }
 
+  @objc private func copyLarkSignatureURLTapped() {
+    let store = larkSignatureStore
+    Task { [weak self] in
+      let config = await store.load()
+      await MainActor.run {
+        self?.applyLarkSignatureConfig(config)
+        self?.copyLarkSignatureURL(config: config)
+      }
+    }
+  }
+
   @objc private func recSwitchTapped() {
     guard let pid = recProfileID else { return }
     Task { await monitor.switchToProfile(id: pid) }
-  }
-
-  @objc private func modeTappedDirect() {
-    guard codexConfig.currentMode() != .direct else { return }
-    do {
-      try codexConfig.switchToDirect()
-      // Delegate lifecycle to AppDelegate
-      if let appDel = NSApp.delegate as? AppDelegate {
-        appDel.handleModeSwitch(toProxy: false)
-      }
-      flashModeSwitch(success: true)
-    } catch {
-      NSLog("[ModeToggle] switch to direct failed: \(error.localizedDescription)")
-      flashModeSwitch(success: false)
-    }
-  }
-
-  @objc private func modeTappedProxy() {
-    guard codexConfig.currentMode() != .proxy else { return }
-    do {
-      try codexConfig.switchTo(proxy: 19876)
-      if let appDel = NSApp.delegate as? AppDelegate {
-        appDel.handleModeSwitch(toProxy: true)
-      }
-      flashModeSwitch(success: true)
-    } catch {
-      NSLog("[ModeToggle] switch to proxy failed: \(error.localizedDescription)")
-      flashModeSwitch(success: false)
-    }
-  }
-
-  private func flashModeSwitch(success: Bool) {
-    refreshModeCard()
-    guard let card = modeWrapper?.subviews.first else { return }
-    let originalBorder = card.layer?.borderColor
-    let flashColor = success ? LN.green.withAlphaComponent(0.6).cgColor : LN.red.withAlphaComponent(0.6).cgColor
-    card.layer?.borderColor = flashColor
-    card.layer?.borderWidth = 1.5
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-      NSAnimationContext.runAnimationGroup { ctx in
-        ctx.duration = 0.3
-        card.layer?.borderColor = originalBorder
-        card.layer?.borderWidth = 1
-      }
-    }
   }
 
   // MARK: - Render
@@ -1404,6 +1286,7 @@ final class PopoverViewController: NSViewController {
 
     guard let tokenCostSnapshot = state.tokenCostSnapshot else {
       costWrapper?.isHidden = true
+      larkSignatureWrapper?.isHidden = true
       costShareButton.isEnabled = false
       costVisibleDailyEntries = []
       costSparklineBarFrames = []
@@ -1413,7 +1296,9 @@ final class PopoverViewController: NSViewController {
       return
     }
     costWrapper?.isHidden = false
+    larkSignatureWrapper?.isHidden = false
     costShareButton.isEnabled = tokenCostSnapshot.hasAnyData
+    updateLarkSignaturePreview()
 
     guard tokenCostSnapshot.hasAnyData else {
       costHourLabel.stringValue = Copy.costNoLocalData
@@ -1431,6 +1316,7 @@ final class PopoverViewController: NSViewController {
       costHoverBodyLabel.stringValue = Copy.costNoLocalData
       setCostHoverVisible(false)
       costSharePopover.performClose(nil)
+      updateLarkSignaturePreview()
       return
     }
 
@@ -1462,6 +1348,61 @@ final class PopoverViewController: NSViewController {
       costHoverTitleLabel.stringValue = Copy.costSectionTitle
       costHoverBodyLabel.stringValue = Copy.costNoLocalData
       setCostHoverVisible(false)
+    }
+    updateLarkSignaturePreview()
+  }
+
+  private func refreshLarkSignatureURLButton() {
+    let store = larkSignatureStore
+    Task { [weak self] in
+      let config = await store.load()
+      await MainActor.run {
+        self?.applyLarkSignatureConfig(config)
+      }
+    }
+  }
+
+  private func applyLarkSignatureConfig(_ config: LarkSignatureAutoSyncConfig) {
+    latestLarkSignatureConfig = config
+    costSignatureURLButton.title = Copy.costCopySignatureURL
+    costSignatureURLButton.isEnabled = !config.slotID.isEmpty
+    updateLarkSignaturePreview()
+  }
+
+  private func updateLarkSignaturePreview() {
+    if let latestTokenCostSnapshot {
+      larkSignaturePreviewBodyLabel.stringValue = LarkSignatureFormatter.summary(
+        snapshot: latestTokenCostSnapshot,
+        label: latestLarkSignatureConfig.label,
+        useLocalSummary: latestLarkSignatureConfig.useLocalSummary,
+        maxLength: 160
+      )
+    } else {
+      larkSignaturePreviewBodyLabel.stringValue = Copy.costNoLocalData
+    }
+
+  }
+
+  private func copyLarkSignatureURL(config: LarkSignatureAutoSyncConfig) {
+    guard !config.slotID.isEmpty else {
+      return
+    }
+
+    let signatureURL = LarkSignatureURLBuilder.signatureURL(
+      slotID: config.slotID,
+      baseURL: URL(string: config.baseURL) ?? LarkSignatureURLBuilder.defaultBaseURL
+    )
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(signatureURL.absoluteString, forType: .string)
+    showSignatureURLCopiedFeedback()
+  }
+
+  private func showSignatureURLCopiedFeedback() {
+    costSignatureURLButton.title = Copy.costCopySignatureURLCopied
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+      guard let self, self.costSignatureURLButton.title == Copy.costCopySignatureURLCopied else { return }
+      self.costSignatureURLButton.title = Copy.costCopySignatureURL
+      self.updateLarkSignaturePreview()
     }
   }
 

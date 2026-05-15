@@ -162,16 +162,28 @@ Need the same token picture outside the app? Codex Rate Watcher can write a comp
 - **Merged or local scope** — choose all-device totals by default or force a local-only summary when you want machine-specific status
 
 <p>
-  <img src="docs/screenshot-lark-signature.svg" width="780" alt="Lark URL preview signature showing Token today, 7-day, and 30-day token usage plus spend in a compact dark badge" />
+  <img src="docs/screenshot-lark-signature.svg" width="620" alt="Lark signature URL card showing one compact token summary line and a Copy URL action" />
 </p>
 
 #### Quick setup
 
 1. Create or locate your Lark custom slot and keep both the `credential` and `slot-id`.
-2. Use the **dynamic slot link** in your Lark signature instead of a literal text URL:
+2. Generate the copyable signature URL. The `t=` value renders the live badge text; the `u=` value controls where people land after clicking it. By default the generated URL points clicks back to this README section:
+
+   ```bash
+   codex-rate lark-signature --slot-id <slot-id> --signature-url
+   ```
+
+   To point clicks somewhere else:
+
+   ```bash
+   codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
+   ```
+
+   The generated URL has this shape:
 
    ```text
-   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D
+   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D&u=https%3A%2F%2Fgithub.com%2Fsinoon%2Fcodex-rate-watcher%23-lark-url-preview-signature-sync
    ```
 
 3. Preview what Codex Rate Watcher will write:
@@ -189,7 +201,7 @@ Need the same token picture outside the app? Codex Rate Watcher can write a comp
 
 #### Common pitfall
 
-If your Lark signature link looks like `https://l.garyyang.work/?t=Token%20...`, that link is **static** and will never auto-update. Auto-sync only works when the link itself reads from `{{slot id="..."}}`.
+If your Lark signature link looks like `https://l.garyyang.work/?t=Token%20...`, that link is **static** and will never auto-update. Auto-sync only works when the link itself reads from `{{slot id="..."}}`. The click target is independent: keep the dynamic `t={{slot ...}}` value, then change only `u=` when you want the badge to open a different page.
 
 ### ☁️ iCloud Device Ledger Sync
 
@@ -270,6 +282,12 @@ codex-rate relay --json
 
 # Preview the Lark URL preview signature text
 codex-rate lark-signature --slot-id <slot-id> --dry-run
+
+# Generate the copyable Lark signature URL
+codex-rate lark-signature --slot-id <slot-id> --signature-url
+
+# Generate a signature URL with a custom click target
+codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
 
 # Push the latest token summary into a Lark custom slot
 codex-rate lark-signature --credential <credential> --slot-id <slot-id>

@@ -73,6 +73,28 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertNotNil(findButton("Share", in: viewController.view))
   }
 
+  func testPopoverCostCardShowsCopySignatureURLButton() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
+  }
+
+  func testPopoverShowsLarkSignaturePreviewCard() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState())
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let visibleText = Self.visibleTextValues(in: viewController.view)
+    XCTAssertTrue(visibleText.contains(Copy.larkSignatureSectionTitle))
+    XCTAssertTrue(visibleText.contains { $0.contains("7天40.0K/$8.5") })
+    XCTAssertNotNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
+  }
+
   func testPopoverCanBuildLargeSharePreviewWithCopyImageAction() throws {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
