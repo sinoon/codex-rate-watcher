@@ -340,7 +340,98 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: harness.managedAuthURL), liveData)
   }
 
-  private func makeHarness() throws -> AuthProfileHarness {
+  func testValidateProfilesRefreshesExpiredAccessTokenBeforeMarkingUnavailable() async throws {
+    let freshData = Self.makeAuthData(
+      email: "refresh@example.com",
+      accountID: "acct_refresh",
+      accessTokenSuffix: "fresh",
+      refreshTokenSuffix: "fresh-refresh"
+    )
+    let tokenRefresher = FakeTokenRefresher { _ in freshData }
+    let harness = try makeHarness(tokenRefresher: tokenRefresher)
+    let expiredData = Self.makeAuthData(
+      email: "refresh@example.com",
+      accountID: "acct_refresh",
+      accessTokenSuffix: "expired",
+      refreshTokenSuffix: "old-refresh"
+    )
+    let importResult = try await harness.store.importAuthJSON(
+      from: expiredData,
+      validatingWith: Self.makeUsageAPIClient()
+    )
+
+    let profiles = await harness.store.validateProfiles(
+      using: Self.makeUsageAPIClient { request in
+        let authorization = request.value(forHTTPHeaderField: "Authorization") ?? ""
+        if authorization.contains(".expired") {
+          return (401, Data())
+        }
+        return (200, Self.makeUsageResponseData())
+      }
+    )
+
+    let profile = try XCTUnwrap(profiles.first { $0.id == importResult.profile.id })
+    let snapshotURL = harness.paths.profilesDirectory.appending(path: profile.snapshotFileName)
+    XCTAssertEqual(tokenRefresher.calls, 1)
+    XCTAssertNil(profile.validationError)
+    XCTAssertNotNil(profile.latestUsage)
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), freshData)
+  }
+
+  func testValidateProfilesKeepsLastKnownUsageOnTransientUsageFailure() async throws {
+    let harness = try makeHarness()
+    let profileData = Self.makeAuthData(
+      email: "transient@example.com",
+      accountID: "acct_transient",
+      accessTokenSuffix: "valid"
+    )
+    let importResult = try await harness.store.importAuthJSON(
+      from: profileData,
+      validatingWith: Self.makeUsageAPIClient()
+    )
+    _ = await harness.store.validateProfiles(using: Self.makeUsageAPIClient())
+
+    let profiles = await harness.store.validateProfiles(
+      using: Self.makeUsageAPIClient { _ in
+        (500, Data(#"{"detail":"temporary upstream error"}"#.utf8))
+      }
+    )
+
+    let after = try XCTUnwrap(profiles.first { $0.id == importResult.profile.id })
+    XCTAssertNil(after.validationError)
+    XCTAssertNotNil(after.latestUsage)
+  }
+
+  func testValidateProfilesPersistsUnavailableWhenRefreshTokenIsInvalid() async throws {
+    let tokenRefresher = FakeTokenRefresher { _ in
+      throw TokenRefresher.RefreshError.permanentFailure("invalid_grant")
+    }
+    let harness = try makeHarness(tokenRefresher: tokenRefresher)
+    let expiredData = Self.makeAuthData(
+      email: "invalid-refresh@example.com",
+      accountID: "acct_invalid_refresh",
+      accessTokenSuffix: "expired",
+      refreshTokenSuffix: "invalid-refresh"
+    )
+    let importResult = try await harness.store.importAuthJSON(
+      from: expiredData,
+      validatingWith: Self.makeUsageAPIClient()
+    )
+
+    let profiles = await harness.store.validateProfiles(
+      using: Self.makeUsageAPIClient { _ in
+        (401, Data())
+      }
+    )
+
+    let profile = try XCTUnwrap(profiles.first { $0.id == importResult.profile.id })
+    XCTAssertEqual(tokenRefresher.calls, 1)
+    XCTAssertEqual(profile.validationError, "refresh_token 已失效，请重新登录：invalid_grant")
+  }
+
+  private func makeHarness(
+    tokenRefresher: any AuthTokenRefreshing = TokenRefresher()
+  ) throws -> AuthProfileHarness {
     let rootURL = tempDir.appending(path: "app-support", directoryHint: .isDirectory)
     let paths = AuthProfileStorePaths(
       rootDirectory: rootURL,
@@ -359,6 +450,7 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     let store = AuthProfileStore(
       authStore: AuthStore(fileURL: liveAuthURL),
       managedAccountStore: accountStore,
+      tokenRefresher: tokenRefresher,
       paths: paths
     )
 
@@ -375,7 +467,8 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
   private static func makeAuthData(
     email: String,
     accountID: String,
-    accessTokenSuffix: String
+    accessTokenSuffix: String,
+    refreshTokenSuffix: String? = nil
   ) -> Data {
     let payloadJSON = #"{"https://api.openai.com/profile":{"email":"\#(email)"}}"#
     let payload = Data(payloadJSON.utf8).base64EncodedString()
@@ -383,18 +476,19 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "=", with: "")
     let jwt = "header.\(payload).\(accessTokenSuffix)"
-
-    let authJSON = """
-    {
-      "auth_mode": "chatgpt",
-      "tokens": {
-        "access_token": "\(jwt)",
-        "account_id": "\(accountID)"
-      }
+    var tokens = [
+      "access_token": jwt,
+      "account_id": accountID,
+    ]
+    if let refreshTokenSuffix {
+      tokens["refresh_token"] = "refresh_\(refreshTokenSuffix)"
     }
-    """
+    let json: [String: Any] = [
+      "auth_mode": "chatgpt",
+      "tokens": tokens,
+    ]
 
-    return Data(authJSON.utf8)
+    return try! JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
   }
 
   private static func writeProfiles(_ profiles: [AuthProfileRecord], to url: URL) throws {
@@ -466,6 +560,20 @@ private struct AuthProfileHarness {
   let managedHomeURL: URL
   let managedAuthURL: URL
   let accountStore: InMemoryManagedAccountStore
+}
+
+private final class FakeTokenRefresher: AuthTokenRefreshing, @unchecked Sendable {
+  nonisolated(unsafe) private(set) var calls = 0
+  private let handler: @Sendable (Data) throws -> Data
+
+  init(handler: @escaping @Sendable (Data) throws -> Data) {
+    self.handler = handler
+  }
+
+  func refresh(currentAuthData: Data) async throws -> Data {
+    calls += 1
+    return try handler(currentAuthData)
+  }
 }
 
 private final class InMemoryManagedAccountStore: @unchecked Sendable, ManagedCodexAccountStoring {

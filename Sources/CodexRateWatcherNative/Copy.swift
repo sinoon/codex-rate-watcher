@@ -215,6 +215,10 @@ enum Copy {
     return "No other profiles"
   }
 
+  static func hiddenProfileDisclosure(count: Int, isExpanded: Bool) -> String {
+    "Unavailable Profiles · \(count) \(isExpanded ? "shown" : "hidden")"
+  }
+
   static func profileBlocked(resetAt: TimeInterval?, label: String) -> String {
     if let r = resetAt {
       return "\(label) · \(resetDate(r)) 重置"

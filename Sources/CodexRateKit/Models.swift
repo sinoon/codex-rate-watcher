@@ -358,10 +358,15 @@ extension AuthProfileRecord {
     switchState == .waitingForReset
   }
 
-  /// Whether the subscription check failed (e.g. 402 Payment Required).
-  /// These profiles should be hidden from the UI by default.
-  public var isSubscriptionFailed: Bool {
+  /// Profiles with a known validation failure should stay out of the primary
+  /// switch list unless the user explicitly expands them.
+  public var isHiddenByDefaultInProfileList: Bool {
     validationError != nil
+  }
+
+  /// Whether the subscription check failed (e.g. 402 Payment Required).
+  public var isSubscriptionFailed: Bool {
+    isHiddenByDefaultInProfileList
   }
 
   /// Short account identifier: email prefix if exists, else account ID suffix

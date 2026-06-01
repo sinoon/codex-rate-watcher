@@ -186,10 +186,6 @@ final class UsageMonitor {
     }
 
     private func buildSwitchRecommendation() -> SwitchRecommendation {
-      let currentProfile = profiles.first(where: { $0.id == activeProfileID })
-      let rankedProfiles = rankedReadyProfiles()
-      let waitingProfiles = rankedWaitingProfiles(excluding: activeProfileID)
-
       guard snapshot != nil else {
         return SwitchRecommendation(
           kind: .syncing,
@@ -198,6 +194,11 @@ final class UsageMonitor {
           recommendedProfileID: nil
         )
       }
+
+      let effectiveProfiles = profilesWithLiveCurrentUsage()
+      let currentProfile = effectiveProfiles.first(where: { $0.id == activeProfileID })
+      let rankedProfiles = rankedReadyProfiles(in: effectiveProfiles)
+      let waitingProfiles = rankedWaitingProfiles(in: effectiveProfiles, excluding: activeProfileID)
 
       guard let bestProfile = rankedProfiles.first else {
         let fallbackDetail: String
@@ -257,7 +258,22 @@ final class UsageMonitor {
       )
     }
 
-    private func rankedReadyProfiles() -> [AuthProfileRecord] {
+    private func profilesWithLiveCurrentUsage() -> [AuthProfileRecord] {
+      guard let snapshot, let activeProfileID else {
+        return profiles
+      }
+
+      return profiles.map { profile in
+        guard profile.id == activeProfileID else { return profile }
+        var current = profile
+        current.latestUsage = AuthProfileUsageSummary(snapshot: snapshot)
+        current.validationError = nil
+        current.lastValidatedAt = lastUpdatedAt ?? current.lastValidatedAt
+        return current
+      }
+    }
+
+    private func rankedReadyProfiles(in profiles: [AuthProfileRecord]) -> [AuthProfileRecord] {
       profiles
         .compactMap { profile -> (AuthProfileRecord, Double)? in
           guard let score = score(for: profile, isCurrent: profile.id == activeProfileID) else {
@@ -274,7 +290,7 @@ final class UsageMonitor {
         .map(\.0)
     }
 
-    private func rankedWaitingProfiles(excluding excludedID: UUID?) -> [AuthProfileRecord] {
+    private func rankedWaitingProfiles(in profiles: [AuthProfileRecord], excluding excludedID: UUID?) -> [AuthProfileRecord] {
       profiles
         .filter { profile in
           profile.id != excludedID && profile.isWaitingForReset
@@ -616,7 +632,7 @@ final class UsageMonitor {
         lastProfilesValidationAt = Date()
       }
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = userVisibleRefreshError(error)
       let fallbackNow = Date()
       tokenCostSnapshot = await tokenCostLoader.loadSnapshot(now: fallbackNow)
       if let tokenCostSnapshot {
@@ -635,6 +651,23 @@ final class UsageMonitor {
         activeProfileID = await profileStore.currentProfileID()
       }
     }
+  }
+
+  private func userVisibleRefreshError(_ error: Error) -> String? {
+    if error is CancellationError {
+      return nil
+    }
+
+    let nsError = error as NSError
+    if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+      return nil
+    }
+
+    if error.localizedDescription == "cancelled" {
+      return nil
+    }
+
+    return error.localizedDescription
   }
 
   /// Use the refresh_token to obtain a fresh access_token, persist it, then

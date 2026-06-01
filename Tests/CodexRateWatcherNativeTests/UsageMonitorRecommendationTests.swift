@@ -39,7 +39,43 @@ final class UsageMonitorRecommendationTests: XCTestCase {
     XCTAssertTrue(recommendation.detail.contains("周 39%"))
   }
 
-  private func makeRecord(id: UUID, email: String, usage: AuthProfileUsageSummary) -> AuthProfileRecord {
+  func testRecommendationTrustsLiveSnapshotWhenCurrentProfileHasStaleValidationError() {
+    let activeID = UUID()
+
+    let state = UsageMonitor.State(
+      snapshot: makeSnapshot(primaryUsed: 30, secondaryUsed: 7),
+      profiles: [
+        makeRecord(
+          id: activeID,
+          email: "active@example.com",
+          usage: makeUsage(planType: "pro", primaryUsed: 30, secondaryUsed: 7),
+          validationError: "cancelled"
+        ),
+      ],
+      activeProfileID: activeID,
+      errorMessage: "cancelled",
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: nil,
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 2, percentPerHour: 12, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 24, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    let recommendation = state.switchRecommendation
+
+    XCTAssertEqual(recommendation.kind, .stay)
+    XCTAssertEqual(recommendation.headline, Copy.recStay)
+    XCTAssertFalse(recommendation.detail.contains(Copy.unavailable))
+  }
+
+  private func makeRecord(
+    id: UUID,
+    email: String,
+    usage: AuthProfileUsageSummary,
+    validationError: String? = nil
+  ) -> AuthProfileRecord {
     AuthProfileRecord(
       id: id,
       fingerprint: id.uuidString,
@@ -51,7 +87,7 @@ final class UsageMonitorRecommendationTests: XCTestCase {
       lastSeenAt: Date(),
       lastValidatedAt: Date(),
       latestUsage: usage,
-      validationError: nil
+      validationError: validationError
     )
   }
 

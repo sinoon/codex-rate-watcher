@@ -90,6 +90,65 @@ final class ProfileListViewTests: XCTestCase {
     XCTAssertGreaterThan(nameLabel.frame.midY, usageLabel.frame.midY + 6)
   }
 
+  func testRenderProfilesCollapsesUnavailableProfilesByDefault() throws {
+    let monitor = UsageMonitor()
+    let viewController = PopoverViewController(monitor: monitor)
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let activeID = UUID()
+    let readyID = UUID()
+    let expiredID = UUID()
+    let secondExpiredID = UUID()
+
+    let state = UsageMonitor.State(
+      snapshot: makeSnapshot(primaryUsed: 20, secondaryUsed: 30),
+      profiles: [
+        makeRecord(id: activeID, email: "active@example.com", usage: makeUsage(planType: "pro", primaryUsed: 20, secondaryUsed: 30)),
+        makeRecord(id: readyID, email: "ready@example.com", usage: makeUsage(planType: "plus", primaryUsed: 10, secondaryUsed: 10)),
+        makeRecord(
+          id: expiredID,
+          email: "expired@example.com",
+          usage: makeUsage(planType: "team", primaryUsed: 25, secondaryUsed: 25),
+          validationError: "认证已过期，请重新登录 (401)"
+        ),
+        makeRecord(
+          id: secondExpiredID,
+          email: "expired2@example.com",
+          usage: makeUsage(planType: "plus", primaryUsed: 30, secondaryUsed: 30),
+          validationError: "认证已过期，请重新登录 (401)"
+        ),
+      ],
+      activeProfileID: activeID,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: nil,
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 3, percentPerHour: 8, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 12, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findLabel("Other Profiles · 1 available", in: viewController.view))
+    XCTAssertNotNil(findButton("Unavailable Profiles · 2 hidden", in: viewController.view))
+    XCTAssertNil(findLabel("Team · expired", in: viewController.view))
+    XCTAssertNil(findLabel("Plus · expired2", in: viewController.view))
+    XCTAssertNil(findButton(" Unavailable ", in: viewController.view))
+
+    let disclosureButton = try XCTUnwrap(findButton("Unavailable Profiles · 2 hidden", in: viewController.view))
+    disclosureButton.performClick(nil)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findButton("Unavailable Profiles · 2 shown", in: viewController.view))
+    XCTAssertNotNil(findLabel("Team · expired", in: viewController.view))
+    XCTAssertNotNil(findLabel("Plus · expired2", in: viewController.view))
+    XCTAssertEqual(allButtons(in: viewController.view).filter { $0.title == " Unavailable " }.count, 2)
+  }
+
   func testRenderSwitchRecommendationShowsDetailText() throws {
     let monitor = UsageMonitor()
     let viewController = PopoverViewController(monitor: monitor)

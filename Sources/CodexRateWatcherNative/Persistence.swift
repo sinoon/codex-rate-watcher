@@ -85,6 +85,30 @@ struct AuthProfileImportResult {
   let decision: AuthProfileImportDecision
 }
 
+private struct ProfileValidationSuccess {
+  let rawData: Data
+  let envelope: AuthEnvelope
+  let usage: UsageSnapshot
+}
+
+private enum ProfileValidationFailure: LocalizedError {
+  case persistent(String)
+  case transient(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .persistent(let message), .transient(let message):
+      return message
+    }
+  }
+}
+
+protocol AuthTokenRefreshing: Sendable {
+  func refresh(currentAuthData: Data) async throws -> Data
+}
+
+extension TokenRefresher: AuthTokenRefreshing {}
+
 struct AuthProfileStorePaths {
   let rootDirectory: URL
   let profilesDirectory: URL
@@ -103,6 +127,7 @@ actor AuthProfileStore {
   private let fileManager = FileManager.default
   private let authStore: AuthStore
   private let managedAccountStore: ManagedCodexAccountStoring
+  private let tokenRefresher: any AuthTokenRefreshing
   private let paths: AuthProfileStorePaths
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
@@ -111,10 +136,12 @@ actor AuthProfileStore {
   init(
     authStore: AuthStore = AuthStore(),
     managedAccountStore: ManagedCodexAccountStoring = FileManagedCodexAccountStore(),
+    tokenRefresher: any AuthTokenRefreshing = TokenRefresher(),
     paths: AuthProfileStorePaths = .live
   ) {
     self.authStore = authStore
     self.managedAccountStore = managedAccountStore
+    self.tokenRefresher = tokenRefresher
     self.paths = paths
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     encoder.dateEncodingStrategy = .iso8601
@@ -272,16 +299,28 @@ actor AuthProfileStore {
       let snapshotURL = paths.profilesDirectory.appending(path: profiles[index].snapshotFileName)
       do {
         let data = try Data(contentsOf: snapshotURL)
-        let envelope = try authStore.envelope(from: data)
-        let usage = try await apiClient.fetchUsage(auth: envelope.snapshot)
+        let validated = try await validateProfileAuthData(data, using: apiClient)
+
+        if validated.rawData != data {
+          try? validated.rawData.write(to: snapshotURL, options: .atomic)
+          syncManagedHomeIfNeeded(for: validated.envelope)
+        }
 
         profiles[index].lastValidatedAt = now
-        profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: usage)
+        profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: validated.usage)
         profiles[index].validationError = nil
-        profiles[index].fingerprint = envelope.fingerprint
-        profiles[index].authMode = envelope.snapshot.authMode
-        profiles[index].accountID = envelope.snapshot.accountID
-        profiles[index].email = envelope.snapshot.email
+        profiles[index].fingerprint = validated.envelope.fingerprint
+        profiles[index].authMode = validated.envelope.snapshot.authMode
+        profiles[index].accountID = validated.envelope.snapshot.accountID
+        profiles[index].email = validated.envelope.snapshot.email
+      } catch let failure as ProfileValidationFailure {
+        switch failure {
+        case .persistent(let message):
+          profiles[index].lastValidatedAt = now
+          profiles[index].validationError = message
+        case .transient(let message):
+          NSLog("[AuthProfileStore] Keeping previous profile state after transient validation failure for \(profiles[index].displayName): \(message)")
+        }
       } catch {
         profiles[index].lastValidatedAt = now
         profiles[index].validationError = error.localizedDescription
@@ -290,6 +329,67 @@ actor AuthProfileStore {
 
     try? writeProfiles(profiles)
     return sortProfiles(profiles)
+  }
+
+  private func validateProfileAuthData(
+    _ data: Data,
+    using apiClient: UsageAPIClient
+  ) async throws -> ProfileValidationSuccess {
+    let envelope = try authStore.envelope(from: data)
+
+    do {
+      let usage = try await apiClient.fetchUsage(auth: envelope.snapshot)
+      return ProfileValidationSuccess(rawData: data, envelope: envelope, usage: usage)
+    } catch let apiError as UsageAPIError {
+      guard isExpiredAccessToken(apiError) else {
+        throw profileValidationFailure(for: apiError)
+      }
+      return try await refreshProfileAuthData(data, using: apiClient)
+    } catch {
+      throw ProfileValidationFailure.transient(error.localizedDescription)
+    }
+  }
+
+  private func refreshProfileAuthData(
+    _ data: Data,
+    using apiClient: UsageAPIClient
+  ) async throws -> ProfileValidationSuccess {
+    do {
+      let refreshedData = try await tokenRefresher.refresh(currentAuthData: data)
+      let refreshedEnvelope = try authStore.envelope(from: refreshedData)
+      let usage = try await apiClient.fetchUsage(auth: refreshedEnvelope.snapshot)
+      return ProfileValidationSuccess(rawData: refreshedData, envelope: refreshedEnvelope, usage: usage)
+    } catch let refreshError as TokenRefresher.RefreshError {
+      if refreshError.isPermanent {
+        throw ProfileValidationFailure.persistent(refreshError.localizedDescription)
+      }
+      throw ProfileValidationFailure.transient(refreshError.localizedDescription)
+    } catch let apiError as UsageAPIError {
+      throw profileValidationFailure(for: apiError)
+    } catch {
+      throw ProfileValidationFailure.transient(error.localizedDescription)
+    }
+  }
+
+  private func isExpiredAccessToken(_ error: UsageAPIError) -> Bool {
+    if case .httpError(statusCode: 401, _) = error {
+      return true
+    }
+    return false
+  }
+
+  private func profileValidationFailure(for error: UsageAPIError) -> ProfileValidationFailure {
+    switch error {
+    case .invalidResponse:
+      return .transient(error.localizedDescription)
+    case .httpError(let statusCode, _):
+      switch statusCode {
+      case 401, 402, 403:
+        return .persistent(error.localizedDescription)
+      default:
+        return .transient(error.localizedDescription)
+      }
+    }
   }
 
   func switchToProfile(id: UUID) async throws {

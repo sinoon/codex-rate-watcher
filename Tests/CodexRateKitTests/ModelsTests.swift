@@ -686,6 +686,11 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(record.isSubscriptionFailed)
   }
 
+  func testAuthProfileRecordIsHiddenByDefaultInProfileListWithValidationError() {
+    let record = makeRecord(validationError: "认证已过期，请重新登录 (401)")
+    XCTAssertTrue(record.isHiddenByDefaultInProfileList)
+  }
+
   func testAuthProfileRecordAccountIdentifierEmail() {
     let record = makeRecord(email: "sinoon1218@gmail.com")
     XCTAssertEqual(record.accountIdentifier, "sinoon1218")

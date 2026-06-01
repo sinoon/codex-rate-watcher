@@ -48,6 +48,7 @@ final class PopoverViewController: NSViewController {
   private let larkSignatureStore = LarkSignatureAutoSyncStore()
   private var observerID: UUID?
   private var latestTokenCostSnapshot: TokenCostSnapshot?
+  private var latestState: UsageMonitor.State?
 
   // Header
   private let titleLabel    = NSTextField(labelWithString: "Codex Rate Watcher")
@@ -131,6 +132,7 @@ final class PopoverViewController: NSViewController {
   private let importAuthButton = NSButton()
   private let addAccountButton = NSButton()
   private let profileStack    = NSStackView()
+  private var showsHiddenProfiles = false
 
   // Footer
   private let footerLabel    = NSTextField(labelWithString: "")
@@ -1013,6 +1015,7 @@ final class PopoverViewController: NSViewController {
     profileActionStack.addArrangedSubview(addAccountButton)
 
     profileStack.orientation = .vertical
+    profileStack.alignment = .width
     profileStack.spacing = LN.gapXs
     profileStack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1165,6 +1168,7 @@ final class PopoverViewController: NSViewController {
   // MARK: - Render
 
   private func render(state: UsageMonitor.State) {
+    latestState = state
     updatedLabel.stringValue = state.lastUpdatedLabel
     refreshButton.isEnabled = !state.isRefreshing && !state.isAddingAccount
     addAccountButton.isEnabled = !state.isAddingAccount
@@ -1855,9 +1859,17 @@ final class PopoverViewController: NSViewController {
 
   private func renderProfiles(state: UsageMonitor.State) {
     profileStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-    let others = state.profiles.filter { $0.id != state.activeProfileID && $0.validationError?.contains("402") != true }
-    let availCount = others.filter(\.isReadyForImmediateSwitch).count
-    let waitingCount = others.filter(\.isWaitingForReset).count
+
+    let others = state.profiles.filter { $0.id != state.activeProfileID }
+    let hiddenProfiles = others.filter(\.isHiddenByDefaultInProfileList)
+    let visibleProfiles = others.filter { !$0.isHiddenByDefaultInProfileList }
+
+    if hiddenProfiles.isEmpty {
+      showsHiddenProfiles = false
+    }
+
+    let availCount = visibleProfiles.filter(\.isReadyForImmediateSwitch).count
+    let waitingCount = visibleProfiles.filter(\.isWaitingForReset).count
     profileHeader.stringValue = Copy.profileHeader(available: availCount, waiting: waitingCount, total: others.count)
 
     if others.isEmpty {
@@ -1865,11 +1877,40 @@ final class PopoverViewController: NSViewController {
       return
     }
 
-    for profile in others {
+    for profile in visibleProfiles {
       let row = ProfileRowView()
       row.configure(
         profile: profile,
         isRecommended: profile.id == state.switchRecommendation.recommendedProfileID,
+        isBusy: state.isRefreshing || state.isAddingAccount
+      ) { [weak self] in
+        self?.confirmSwitch(to: profile)
+      }
+      profileStack.addArrangedSubview(row)
+    }
+
+    if !hiddenProfiles.isEmpty {
+      let disclosure = HiddenProfilesDisclosureView()
+      disclosure.configure(
+        count: hiddenProfiles.count,
+        isExpanded: showsHiddenProfiles
+      ) { [weak self] in
+        guard let self else { return }
+        self.showsHiddenProfiles.toggle()
+        if let latestState = self.latestState {
+          self.render(state: latestState)
+        }
+      }
+      profileStack.addArrangedSubview(disclosure)
+    }
+
+    guard showsHiddenProfiles else { return }
+
+    for profile in hiddenProfiles {
+      let row = ProfileRowView()
+      row.configure(
+        profile: profile,
+        isRecommended: false,
         isBusy: state.isRefreshing || state.isAddingAccount
       ) { [weak self] in
         self?.confirmSwitch(to: profile)
@@ -1916,6 +1957,61 @@ final class PopoverViewController: NSViewController {
 }
 
 // MARK: - ProfileRowView
+
+private final class HiddenProfilesDisclosureView: NSView {
+  private let button = NSButton()
+  private var onToggle: (() -> Void)?
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    setup()
+  }
+
+  @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+  private func setup() {
+    wantsLayer = true
+    layer?.cornerRadius = LN.radiusSm
+    layer?.backgroundColor = LN.elevated.withAlphaComponent(0.65).cgColor
+    translatesAutoresizingMaskIntoConstraints = false
+
+    button.bezelStyle = .inline
+    button.isBordered = false
+    button.alignment = .left
+    button.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    button.contentTintColor = LN.textTertiary
+    button.imagePosition = .imageLeading
+    button.imageScaling = .scaleProportionallyDown
+    button.target = self
+    button.action = #selector(tapped)
+    button.translatesAutoresizingMaskIntoConstraints = false
+
+    addSubview(button)
+
+    NSLayoutConstraint.activate([
+      heightAnchor.constraint(equalToConstant: 28),
+
+      button.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+      button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+      button.topAnchor.constraint(equalTo: topAnchor, constant: 3),
+      button.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
+    ])
+  }
+
+  func configure(count: Int, isExpanded: Bool, onToggle: @escaping () -> Void) {
+    self.onToggle = onToggle
+    button.title = Copy.hiddenProfileDisclosure(count: count, isExpanded: isExpanded)
+    button.image = NSImage(
+      systemSymbolName: isExpanded ? "chevron.down" : "chevron.right",
+      accessibilityDescription: isExpanded ? "Hide unavailable profiles" : "Show unavailable profiles"
+    )
+    button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
+  }
+
+  @objc private func tapped() {
+    onToggle?()
+  }
+}
 
 private final class ProfileRowView: NSView {
   private let dot         = NSView()
