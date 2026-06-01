@@ -1,5 +1,10 @@
 import Foundation
 
+public enum AuthRefreshPolicy {
+  public static let proactiveRefreshLeadTime: TimeInterval = 24 * 60 * 60
+  public static let transientRetryDelay: TimeInterval = 60 * 60
+}
+
 /// Refreshes ChatGPT OAuth tokens using the refresh_token grant.
 ///
 /// Mirrors the Codex CLI behaviour in `codex-rs/login/src/auth/manager.rs`.
@@ -75,7 +80,13 @@ public struct TokenRefresher: Sendable {
     request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-    let (data, response) = try await session.data(for: request)
+    let data: Data
+    let response: URLResponse
+    do {
+      (data, response) = try await session.data(for: request)
+    } catch {
+      throw RefreshError.networkError(error.localizedDescription)
+    }
 
     guard let http = response as? HTTPURLResponse else {
       throw RefreshError.networkError("非 HTTP 响应")

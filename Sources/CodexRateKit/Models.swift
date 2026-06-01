@@ -239,6 +239,7 @@ public struct AuthProfileRecord: Codable, Identifiable, Sendable {
   public var lastValidatedAt: Date?
   public var latestUsage: AuthProfileUsageSummary?
   public var validationError: String?
+  public var authRefreshRetryAfter: Date?
 
   public init(
     id: UUID,
@@ -251,7 +252,8 @@ public struct AuthProfileRecord: Codable, Identifiable, Sendable {
     lastSeenAt: Date,
     lastValidatedAt: Date? = nil,
     latestUsage: AuthProfileUsageSummary? = nil,
-    validationError: String? = nil
+    validationError: String? = nil,
+    authRefreshRetryAfter: Date? = nil
   ) {
     self.id = id
     self.fingerprint = fingerprint
@@ -264,6 +266,7 @@ public struct AuthProfileRecord: Codable, Identifiable, Sendable {
     self.lastValidatedAt = lastValidatedAt
     self.latestUsage = latestUsage
     self.validationError = validationError
+    self.authRefreshRetryAfter = authRefreshRetryAfter
   }
 }
 

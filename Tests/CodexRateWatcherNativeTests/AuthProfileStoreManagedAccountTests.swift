@@ -378,6 +378,86 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: snapshotURL), freshData)
   }
 
+  func testValidateProfilesProactivelyRefreshesAccessTokenNearExpiration() async throws {
+    let now = Date()
+    let expiringData = Self.makeAuthData(
+      email: "proactive@example.com",
+      accountID: "acct_proactive",
+      accessTokenSuffix: "expiring",
+      refreshTokenSuffix: "old-refresh",
+      issuedAt: now.addingTimeInterval(-9 * 24 * 60 * 60),
+      expiresAt: now.addingTimeInterval(30 * 60)
+    )
+    let freshData = Self.makeAuthData(
+      email: "proactive@example.com",
+      accountID: "acct_proactive",
+      accessTokenSuffix: "fresh",
+      refreshTokenSuffix: "fresh-refresh",
+      issuedAt: now,
+      expiresAt: now.addingTimeInterval(10 * 24 * 60 * 60)
+    )
+    let tokenRefresher = FakeTokenRefresher { _ in freshData }
+    let harness = try makeHarness(tokenRefresher: tokenRefresher)
+    let importResult = try await harness.store.importAuthJSON(
+      from: expiringData,
+      validatingWith: Self.makeUsageAPIClient()
+    )
+    let recorder = AuthorizationRecorder()
+
+    let profiles = await harness.store.validateProfiles(
+      using: Self.makeUsageAPIClient { request in
+        recorder.append(request)
+        return (200, Self.makeUsageResponseData())
+      }
+    )
+
+    let profile = try XCTUnwrap(profiles.first { $0.id == importResult.profile.id })
+    let snapshotURL = harness.paths.profilesDirectory.appending(path: profile.snapshotFileName)
+    XCTAssertEqual(tokenRefresher.calls, 1)
+    XCTAssertNil(profile.validationError)
+    XCTAssertNil(profile.authRefreshRetryAfter)
+    XCTAssertEqual(try Data(contentsOf: snapshotURL), freshData)
+    XCTAssertTrue(recorder.authorizations.last?.contains(".fresh") == true)
+  }
+
+  func testValidateProfilesBacksOffTransientProactiveRefreshFailure() async throws {
+    let now = Date()
+    let expiringData = Self.makeAuthData(
+      email: "backoff@example.com",
+      accountID: "acct_backoff",
+      accessTokenSuffix: "expiring",
+      refreshTokenSuffix: "old-refresh",
+      issuedAt: now.addingTimeInterval(-9 * 24 * 60 * 60),
+      expiresAt: now.addingTimeInterval(30 * 60)
+    )
+    let tokenRefresher = FakeTokenRefresher { _ in
+      throw TokenRefresher.RefreshError.serverError(500, "temporary")
+    }
+    let harness = try makeHarness(tokenRefresher: tokenRefresher)
+    let importResult = try await harness.store.importAuthJSON(
+      from: expiringData,
+      validatingWith: Self.makeUsageAPIClient()
+    )
+
+    let firstProfiles = await harness.store.validateProfiles(using: Self.makeUsageAPIClient())
+    let firstProfile = try XCTUnwrap(firstProfiles.first { $0.id == importResult.profile.id })
+    XCTAssertEqual(tokenRefresher.calls, 1)
+    XCTAssertNil(firstProfile.validationError)
+    XCTAssertNotNil(firstProfile.latestUsage)
+    XCTAssertGreaterThan(firstProfile.authRefreshRetryAfter ?? .distantPast, Date())
+
+    let secondProfiles = await harness.store.validateProfiles(using: Self.makeUsageAPIClient())
+    let secondProfile = try XCTUnwrap(secondProfiles.first { $0.id == importResult.profile.id })
+    XCTAssertEqual(tokenRefresher.calls, 1)
+    XCTAssertNil(secondProfile.validationError)
+    XCTAssertNotNil(secondProfile.latestUsage)
+    XCTAssertLessThan(
+      abs((secondProfile.authRefreshRetryAfter ?? .distantFuture)
+        .timeIntervalSince(firstProfile.authRefreshRetryAfter ?? .distantPast)),
+      1
+    )
+  }
+
   func testValidateProfilesKeepsLastKnownUsageOnTransientUsageFailure() async throws {
     let harness = try makeHarness()
     let profileData = Self.makeAuthData(
@@ -468,10 +548,21 @@ final class AuthProfileStoreManagedAccountTests: XCTestCase {
     email: String,
     accountID: String,
     accessTokenSuffix: String,
-    refreshTokenSuffix: String? = nil
+    refreshTokenSuffix: String? = nil,
+    issuedAt: Date? = nil,
+    expiresAt: Date? = nil
   ) -> Data {
-    let payloadJSON = #"{"https://api.openai.com/profile":{"email":"\#(email)"}}"#
-    let payload = Data(payloadJSON.utf8).base64EncodedString()
+    var payloadObject: [String: Any] = [
+      "https://api.openai.com/profile": ["email": email]
+    ]
+    if let issuedAt {
+      payloadObject["iat"] = Int(issuedAt.timeIntervalSince1970)
+    }
+    if let expiresAt {
+      payloadObject["exp"] = Int(expiresAt.timeIntervalSince1970)
+    }
+    let payloadData = try! JSONSerialization.data(withJSONObject: payloadObject, options: [.sortedKeys])
+    let payload = payloadData.base64EncodedString()
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "=", with: "")
@@ -573,6 +664,23 @@ private final class FakeTokenRefresher: AuthTokenRefreshing, @unchecked Sendable
   func refresh(currentAuthData: Data) async throws -> Data {
     calls += 1
     return try handler(currentAuthData)
+  }
+}
+
+private final class AuthorizationRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [String] = []
+
+  var authorizations: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return values
+  }
+
+  func append(_ request: URLRequest) {
+    lock.lock()
+    values.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
+    lock.unlock()
   }
 }
 

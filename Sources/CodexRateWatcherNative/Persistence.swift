@@ -89,15 +89,17 @@ private struct ProfileValidationSuccess {
   let rawData: Data
   let envelope: AuthEnvelope
   let usage: UsageSnapshot
+  let authRefreshRetryAfter: Date?
 }
 
 private enum ProfileValidationFailure: LocalizedError {
   case persistent(String)
   case transient(String)
+  case refreshTransient(String, retryAfter: Date)
 
   var errorDescription: String? {
     switch self {
-    case .persistent(let message), .transient(let message):
+    case .persistent(let message), .transient(let message), .refreshTransient(let message, _):
       return message
     }
   }
@@ -194,6 +196,7 @@ actor AuthProfileStore {
       profiles[index].lastValidatedAt = Date()
       profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: snapshot)
       profiles[index].validationError = nil
+      profiles[index].authRefreshRetryAfter = nil
       profiles[index].authMode = envelope.snapshot.authMode
       if profiles[index].accountID == nil {
         profiles[index].accountID = envelope.snapshot.accountID
@@ -257,6 +260,7 @@ actor AuthProfileStore {
         profiles[index].lastValidatedAt = now
         profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: usage)
         profiles[index].validationError = nil
+        profiles[index].authRefreshRetryAfter = nil
         try writeProfiles(profiles)
         return AuthProfileImportResult(profile: profiles[index], decision: .updatedExisting)
       } catch {
@@ -266,6 +270,7 @@ actor AuthProfileStore {
           profiles[index].lastValidatedAt = now
           profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: existingUsage)
           profiles[index].validationError = nil
+          profiles[index].authRefreshRetryAfter = nil
           try writeProfiles(profiles)
           return AuthProfileImportResult(
             profile: profiles[index],
@@ -299,7 +304,12 @@ actor AuthProfileStore {
       let snapshotURL = paths.profilesDirectory.appending(path: profiles[index].snapshotFileName)
       do {
         let data = try Data(contentsOf: snapshotURL)
-        let validated = try await validateProfileAuthData(data, using: apiClient)
+        let validated = try await validateProfileAuthData(
+          data,
+          using: apiClient,
+          authRefreshRetryAfter: profiles[index].authRefreshRetryAfter,
+          now: now
+        )
 
         if validated.rawData != data {
           try? validated.rawData.write(to: snapshotURL, options: .atomic)
@@ -309,6 +319,7 @@ actor AuthProfileStore {
         profiles[index].lastValidatedAt = now
         profiles[index].latestUsage = AuthProfileUsageSummary(snapshot: validated.usage)
         profiles[index].validationError = nil
+        profiles[index].authRefreshRetryAfter = validated.authRefreshRetryAfter
         profiles[index].fingerprint = validated.envelope.fingerprint
         profiles[index].authMode = validated.envelope.snapshot.authMode
         profiles[index].accountID = validated.envelope.snapshot.accountID
@@ -318,8 +329,12 @@ actor AuthProfileStore {
         case .persistent(let message):
           profiles[index].lastValidatedAt = now
           profiles[index].validationError = message
+          profiles[index].authRefreshRetryAfter = nil
         case .transient(let message):
           NSLog("[AuthProfileStore] Keeping previous profile state after transient validation failure for \(profiles[index].displayName): \(message)")
+        case .refreshTransient(let message, let retryAfter):
+          profiles[index].authRefreshRetryAfter = retryAfter
+          NSLog("[AuthProfileStore] Deferring token refresh retry for \(profiles[index].displayName) until \(retryAfter): \(message)")
         }
       } catch {
         profiles[index].lastValidatedAt = now
@@ -333,18 +348,60 @@ actor AuthProfileStore {
 
   private func validateProfileAuthData(
     _ data: Data,
-    using apiClient: UsageAPIClient
+    using apiClient: UsageAPIClient,
+    authRefreshRetryAfter: Date?,
+    now: Date
   ) async throws -> ProfileValidationSuccess {
     let envelope = try authStore.envelope(from: data)
+    let shouldRefreshSoon = shouldProactivelyRefresh(envelope, now: now)
+    let isBackedOff = isRefreshBackedOff(until: authRefreshRetryAfter, now: now)
+
+    if shouldRefreshSoon && !isBackedOff {
+      do {
+        return try await refreshProfileAuthData(data, using: apiClient, now: now)
+      } catch let refreshFailure as ProfileValidationFailure {
+        guard case .refreshTransient(_, let retryAfter) = refreshFailure else {
+          throw refreshFailure
+        }
+        do {
+          let usage = try await apiClient.fetchUsage(auth: envelope.snapshot)
+          return ProfileValidationSuccess(
+            rawData: data,
+            envelope: envelope,
+            usage: usage,
+            authRefreshRetryAfter: retryAfter
+          )
+        } catch let apiError as UsageAPIError {
+          if isExpiredAccessToken(apiError) {
+            throw refreshFailure
+          }
+          throw profileValidationFailure(for: apiError)
+        } catch {
+          throw ProfileValidationFailure.transient(error.localizedDescription)
+        }
+      }
+    }
 
     do {
       let usage = try await apiClient.fetchUsage(auth: envelope.snapshot)
-      return ProfileValidationSuccess(rawData: data, envelope: envelope, usage: usage)
+      return ProfileValidationSuccess(
+        rawData: data,
+        envelope: envelope,
+        usage: usage,
+        authRefreshRetryAfter: shouldRefreshSoon ? authRefreshRetryAfter : nil
+      )
     } catch let apiError as UsageAPIError {
       guard isExpiredAccessToken(apiError) else {
         throw profileValidationFailure(for: apiError)
       }
-      return try await refreshProfileAuthData(data, using: apiClient)
+      guard !isBackedOff else {
+        let retryAfter = authRefreshRetryAfter ?? now.addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+        throw ProfileValidationFailure.refreshTransient(
+          "等待上次 token 刷新失败后的重试窗口",
+          retryAfter: retryAfter
+        )
+      }
+      return try await refreshProfileAuthData(data, using: apiClient, now: now)
     } catch {
       throw ProfileValidationFailure.transient(error.localizedDescription)
     }
@@ -352,23 +409,53 @@ actor AuthProfileStore {
 
   private func refreshProfileAuthData(
     _ data: Data,
-    using apiClient: UsageAPIClient
+    using apiClient: UsageAPIClient,
+    now: Date
   ) async throws -> ProfileValidationSuccess {
+    let refreshedData: Data
     do {
-      let refreshedData = try await tokenRefresher.refresh(currentAuthData: data)
-      let refreshedEnvelope = try authStore.envelope(from: refreshedData)
-      let usage = try await apiClient.fetchUsage(auth: refreshedEnvelope.snapshot)
-      return ProfileValidationSuccess(rawData: refreshedData, envelope: refreshedEnvelope, usage: usage)
+      refreshedData = try await tokenRefresher.refresh(currentAuthData: data)
     } catch let refreshError as TokenRefresher.RefreshError {
       if refreshError.isPermanent {
         throw ProfileValidationFailure.persistent(refreshError.localizedDescription)
       }
-      throw ProfileValidationFailure.transient(refreshError.localizedDescription)
+      throw ProfileValidationFailure.refreshTransient(
+        refreshError.localizedDescription,
+        retryAfter: now.addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+      )
+    } catch {
+      throw ProfileValidationFailure.refreshTransient(
+        error.localizedDescription,
+        retryAfter: now.addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+      )
+    }
+
+    do {
+      let refreshedEnvelope = try authStore.envelope(from: refreshedData)
+      let usage = try await apiClient.fetchUsage(auth: refreshedEnvelope.snapshot)
+      return ProfileValidationSuccess(
+        rawData: refreshedData,
+        envelope: refreshedEnvelope,
+        usage: usage,
+        authRefreshRetryAfter: nil
+      )
     } catch let apiError as UsageAPIError {
       throw profileValidationFailure(for: apiError)
     } catch {
       throw ProfileValidationFailure.transient(error.localizedDescription)
     }
+  }
+
+  private func shouldProactivelyRefresh(_ envelope: AuthEnvelope, now: Date) -> Bool {
+    guard let lifetime = AuthStore.accessTokenLifetime(from: envelope.snapshot.accessToken) else {
+      return false
+    }
+    return lifetime.expires(within: AuthRefreshPolicy.proactiveRefreshLeadTime, now: now)
+  }
+
+  private func isRefreshBackedOff(until retryAfter: Date?, now: Date) -> Bool {
+    guard let retryAfter else { return false }
+    return retryAfter > now
   }
 
   private func isExpiredAccessToken(_ error: UsageAPIError) -> Bool {
@@ -499,6 +586,7 @@ actor AuthProfileStore {
       profiles[index].authMode = envelope.snapshot.authMode
       profiles[index].accountID = envelope.snapshot.accountID
       profiles[index].email = envelope.snapshot.email
+      profiles[index].authRefreshRetryAfter = nil
       try writeProfiles(profiles)
       return sortProfiles(profiles)
     }
@@ -514,6 +602,7 @@ actor AuthProfileStore {
       profiles[index].authMode = envelope.snapshot.authMode
       profiles[index].accountID = envelope.snapshot.accountID
       profiles[index].email = envelope.snapshot.email
+      profiles[index].authRefreshRetryAfter = nil
       try writeProfiles(profiles)
       return sortProfiles(profiles)
     }

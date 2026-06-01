@@ -98,6 +98,26 @@ final class AuthStoreTests: XCTestCase {
     XCTAssertEqual(snapshot.authMode, "api_key")
   }
 
+  func testAccessTokenLifetimeParsesJWTNumericDates() throws {
+    let issuedAt = Date(timeIntervalSince1970: 1_770_000_000)
+    let expiresAt = issuedAt.addingTimeInterval(10 * 24 * 60 * 60)
+    let payloadJSON = """
+    {"iat":\(Int(issuedAt.timeIntervalSince1970)),"exp":\(Int(expiresAt.timeIntervalSince1970))}
+    """
+    let payload = Data(payloadJSON.utf8).base64EncodedString()
+      .replacingOccurrences(of: "+", with: "-")
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "=", with: "")
+    let jwt = "header.\(payload).signature"
+
+    let lifetime = try XCTUnwrap(AuthStore.accessTokenLifetime(from: jwt))
+
+    XCTAssertEqual(lifetime.issuedAt, issuedAt)
+    XCTAssertEqual(lifetime.expiresAt, expiresAt)
+    XCTAssertTrue(lifetime.expires(within: 24 * 60 * 60, now: expiresAt.addingTimeInterval(-60)))
+    XCTAssertFalse(lifetime.expires(within: 24 * 60 * 60, now: issuedAt))
+  }
+
   // MARK: - Missing Token
 
   func testLoadMissingToken() throws {

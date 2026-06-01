@@ -373,7 +373,7 @@ final class UsageMonitor {
 
   private let authStore: AuthStore
   private let apiClient: UsageAPIClient
-  private let tokenRefresher = TokenRefresher()
+  private let tokenRefresher: any AuthTokenRefreshing
   private let tokenCostLoader: TokenCostSnapshotLoading
   private let larkSignatureAutoSync: LarkSignatureAutoSyncing
   private let sampleStore: SampleStore
@@ -388,6 +388,7 @@ final class UsageMonitor {
   private var errorMessage: String?
   private var lastUpdatedAt: Date?
   private var lastProfilesValidationAt: Date?
+  private var authRefreshRetryAfter: Date?
   private var isRefreshing = false
   private var isAddingAccount = false
   private var tokenCostSnapshot: TokenCostSnapshot?
@@ -411,6 +412,7 @@ final class UsageMonitor {
   init(
     authStore: AuthStore = AuthStore(),
     apiClient: UsageAPIClient = UsageAPIClient(),
+    tokenRefresher: any AuthTokenRefreshing = TokenRefresher(),
     tokenCostLoader: TokenCostSnapshotLoading = LiveTokenCostSnapshotLoader(),
     larkSignatureAutoSync: LarkSignatureAutoSyncing = LarkSignatureAutoSyncService(),
     sampleStore: SampleStore = SampleStore(),
@@ -420,6 +422,7 @@ final class UsageMonitor {
   ) {
     self.authStore = authStore
     self.apiClient = apiClient
+    self.tokenRefresher = tokenRefresher
     self.tokenCostLoader = tokenCostLoader
     self.larkSignatureAutoSync = larkSignatureAutoSync
     self.sampleStore = sampleStore
@@ -598,7 +601,7 @@ final class UsageMonitor {
 
     do {
       profiles = (try? await profileStore.captureCurrentAuthIfNeeded()) ?? profiles
-      let auth = try authStore.load()
+      let auth = try await loadCurrentAuthRefreshingIfNeeded(now: Date())
       let freshSnapshot: UsageSnapshot
       do {
         freshSnapshot = try await apiClient.fetchUsage(auth: auth)
@@ -670,14 +673,85 @@ final class UsageMonitor {
     return error.localizedDescription
   }
 
+  private func loadCurrentAuthRefreshingIfNeeded(now: Date) async throws -> AuthSnapshot {
+    let rawData = try authStore.loadRawData()
+    let envelope = try authStore.envelope(from: rawData)
+    guard let lifetime = AuthStore.accessTokenLifetime(from: envelope.snapshot.accessToken) else {
+      authRefreshRetryAfter = nil
+      return envelope.snapshot
+    }
+
+    guard lifetime.expires(within: AuthRefreshPolicy.proactiveRefreshLeadTime, now: now) else {
+      authRefreshRetryAfter = nil
+      return envelope.snapshot
+    }
+
+    if let authRefreshRetryAfter, authRefreshRetryAfter > now {
+      return envelope.snapshot
+    }
+
+    NSLog("[UsageMonitor] Access token expires soon. Attempting proactive token refresh…")
+    let updatedData: Data
+    do {
+      updatedData = try await tokenRefresher.refresh(currentAuthData: rawData)
+    } catch let refreshError as TokenRefresher.RefreshError {
+      return try handleProactiveRefreshFailure(
+        refreshError,
+        currentSnapshot: envelope.snapshot,
+        lifetime: lifetime,
+        now: now
+      )
+    } catch {
+      authRefreshRetryAfter = now.addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+      NSLog("[UsageMonitor] Proactive token refresh failed; retry deferred until \(authRefreshRetryAfter!): \(error.localizedDescription)")
+      return envelope.snapshot
+    }
+
+    try authStore.writeRawData(updatedData)
+    authRefreshRetryAfter = nil
+    return try authStore.envelope(from: updatedData).snapshot
+  }
+
+  private func handleProactiveRefreshFailure(
+    _ refreshError: TokenRefresher.RefreshError,
+    currentSnapshot: AuthSnapshot,
+    lifetime: AuthTokenLifetime,
+    now: Date
+  ) throws -> AuthSnapshot {
+    if refreshError.isPermanent {
+      authRefreshRetryAfter = nil
+      NSLog("[UsageMonitor] Proactive token refresh failed permanently: \(refreshError.localizedDescription)")
+      if lifetime.isExpired(at: now) {
+        throw refreshError
+      }
+      return currentSnapshot
+    }
+
+    authRefreshRetryAfter = now.addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+    NSLog("[UsageMonitor] Proactive token refresh failed; retry deferred until \(authRefreshRetryAfter!): \(refreshError.localizedDescription)")
+    return currentSnapshot
+  }
+
   /// Use the refresh_token to obtain a fresh access_token, persist it, then
   /// retry the usage API call once.
   private func refreshTokenAndRetry() async throws -> UsageSnapshot {
     NSLog("[UsageMonitor] Access token expired (401). Attempting token refresh…")
 
     let rawData = try authStore.loadRawData()
-    let updatedData = try await tokenRefresher.refresh(currentAuthData: rawData)
+    let updatedData: Data
+    do {
+      updatedData = try await tokenRefresher.refresh(currentAuthData: rawData)
+    } catch let refreshError as TokenRefresher.RefreshError {
+      if !refreshError.isPermanent {
+        authRefreshRetryAfter = Date().addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+      }
+      throw refreshError
+    } catch {
+      authRefreshRetryAfter = Date().addingTimeInterval(AuthRefreshPolicy.transientRetryDelay)
+      throw error
+    }
     try authStore.writeRawData(updatedData)
+    authRefreshRetryAfter = nil
 
     NSLog("[UsageMonitor] Token refresh succeeded, retrying usage fetch")
 

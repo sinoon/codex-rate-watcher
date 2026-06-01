@@ -14,6 +14,28 @@ public struct AuthEnvelope: Sendable {
   public let fingerprint: String
 }
 
+public struct AuthTokenLifetime: Equatable, Sendable {
+  public let issuedAt: Date?
+  public let expiresAt: Date
+
+  public init(issuedAt: Date?, expiresAt: Date) {
+    self.issuedAt = issuedAt
+    self.expiresAt = expiresAt
+  }
+
+  public func remainingTime(at now: Date = Date()) -> TimeInterval {
+    expiresAt.timeIntervalSince(now)
+  }
+
+  public func expires(within interval: TimeInterval, now: Date = Date()) -> Bool {
+    remainingTime(at: now) <= interval
+  }
+
+  public func isExpired(at now: Date = Date()) -> Bool {
+    remainingTime(at: now) <= 0
+  }
+}
+
 public enum AuthStoreError: LocalizedError {
   case missingToken
   case invalidJWT
@@ -105,13 +127,35 @@ public struct AuthStore: @unchecked Sendable {
 
   // MARK: - JWT Parsing
 
+  public static func accessTokenLifetime(from jwt: String) -> AuthTokenLifetime? {
+    guard let payload = decodeJWTPayload(jwt),
+          let expiresAt = numericDate(payload["exp"]) else {
+      return nil
+    }
+
+    return AuthTokenLifetime(
+      issuedAt: numericDate(payload["iat"]),
+      expiresAt: expiresAt
+    )
+  }
+
   /// Extract email from JWT access token (if exists)
   private static func extractEmail(from jwt: String) -> String? {
+    guard let json = decodeJWTPayload(jwt) else { return nil }
+    if let profile = json["https://api.openai.com/profile"] as? [String: Any] {
+      return profile["email"] as? String
+    }
+    return nil
+  }
+
+  private static func decodeJWTPayload(_ jwt: String) -> [String: Any]? {
     let parts = jwt.split(separator: ".")
     guard parts.count >= 2 else { return nil }
 
     var payload = String(parts[1])
-    // Fix base64 padding
+    payload = payload
+      .replacingOccurrences(of: "-", with: "+")
+      .replacingOccurrences(of: "_", with: "/")
     payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
 
     guard let payloadData = Data(base64Encoded: payload, options: .ignoreUnknownCharacters) else {
@@ -119,12 +163,23 @@ public struct AuthStore: @unchecked Sendable {
     }
 
     do {
-      let json = try JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
-      if let profile = json?["https://api.openai.com/profile"] as? [String: Any] {
-        return profile["email"] as? String
-      }
+      return try JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
     } catch { }
 
+    return nil
+  }
+
+  private static func numericDate(_ value: Any?) -> Date? {
+    guard let value else { return nil }
+    if let number = value as? NSNumber {
+      return Date(timeIntervalSince1970: number.doubleValue)
+    }
+    if let double = value as? Double {
+      return Date(timeIntervalSince1970: double)
+    }
+    if let int = value as? Int {
+      return Date(timeIntervalSince1970: TimeInterval(int))
+    }
     return nil
   }
 }
