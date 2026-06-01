@@ -70,6 +70,18 @@ public enum TokenCostPricing {
       cacheReadInputCostPerToken: 1.5e-6,
       cacheCreationInputCostPerToken: 1.875e-5
     ),
+    "claude-opus-4-8": CodexPricing(
+      inputCostPerToken: 1.5e-5,
+      outputCostPerToken: 7.5e-5,
+      cacheReadInputCostPerToken: 1.5e-6,
+      cacheCreationInputCostPerToken: 1.875e-5
+    ),
+    "claude-4.8-opus": CodexPricing(
+      inputCostPerToken: 1.5e-5,
+      outputCostPerToken: 7.5e-5,
+      cacheReadInputCostPerToken: 1.5e-6,
+      cacheCreationInputCostPerToken: 1.875e-5
+    ),
     "claude-opus-4-6": CodexPricing(
       inputCostPerToken: 1.5e-5,
       outputCostPerToken: 7.5e-5,

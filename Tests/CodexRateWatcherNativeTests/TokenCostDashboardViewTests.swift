@@ -504,6 +504,19 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertFalse(visibleText.contains("30d —"))
   }
 
+  func testPopoverCostCardFallsBackToTodayTokensWhenCostIsPartial() {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    viewController.renderForTesting(state: makeState(snapshot: makeSnapshot()))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let visibleText = Self.visibleTextValues(in: viewController.view)
+    XCTAssertTrue(visibleText.contains("Today 9.2K tokens"))
+    XCTAssertFalse(visibleText.contains("Today —"))
+  }
+
   func testPopoverCostCardShowsLocalSupportingDetailWhenMergedSnapshotExists() {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view

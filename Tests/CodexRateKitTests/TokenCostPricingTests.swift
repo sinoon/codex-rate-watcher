@@ -86,6 +86,20 @@ final class TokenCostPricingTests: XCTestCase {
     XCTAssertEqual(cost!, 3.63, accuracy: 0.0001)
   }
 
+  func testCostSupportsClaudeOpus48Pricing() {
+    let cost = TokenCostPricing.costUSD(
+      model: "anthropic/claude-opus-4-8-20260601",
+      inputTokens: 1_000_000,
+      cacheReadTokens: 100_000,
+      cacheCreationTokens: 200_000,
+      outputTokens: 50_000
+    )
+
+    XCTAssertNotNil(cost)
+    XCTAssertEqual(cost!, 18.15, accuracy: 0.0001)
+    XCTAssertEqual(TokenCostPricing.normalizeClaudeModel("claude-4.8-opus"), "claude-4.8-opus")
+  }
+
   func testCostUSDDispatchesToClaudePricingForVendorPrefixedNames() {
     let cost = TokenCostPricing.costUSD(
       model: "anthropic/claude-haiku-4-5-20260101",

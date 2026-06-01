@@ -1324,9 +1324,10 @@ final class PopoverViewController: NSViewController {
       return
     }
 
-    let todayCostLabel = tokenCostSnapshot.todayCostUSD.map {
-      TokenCostFormatting.usd($0, minimumFractionDigits: 2, maximumFractionDigits: 2)
-    } ?? "—"
+    let todayMetricLabel = formattedPrimaryWindowMetric(
+      cost: tokenCostSnapshot.todayCostUSD,
+      tokens: tokenCostSnapshot.todayTokens
+    )
     let todayTokenLabel = tokenCostSnapshot.todayTokens.map {
       TokenCostFormatting.tokenCount($0)
     } ?? "—"
@@ -1334,8 +1335,8 @@ final class PopoverViewController: NSViewController {
       cost: tokenCostSnapshot.last30DaysCostUSD,
       tokens: tokenCostSnapshot.last30DaysTokens
     )
-    costHourLabel.stringValue = Copy.costTodayMetric(todayCostLabel)
-    costHourLabel.textColor = tokenCostSnapshot.todayCostUSD == nil ? LN.textTertiary : LN.green
+    costHourLabel.stringValue = Copy.costTodayMetric(todayMetricLabel)
+    costHourLabel.textColor = todayMetricLabel == "—" ? LN.textTertiary : LN.green
     costTodayLabel.stringValue = Copy.costTokenMetric(todayTokenLabel)
     costTodayLabel.textColor = LN.textPrimary
     costUtilLabel.stringValue = Copy.costLast30DaysMetric(last30MetricLabel)
