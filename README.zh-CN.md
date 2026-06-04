@@ -144,23 +144,19 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 #### 快速配置
 
 1. 先准备好飞书自定义 slot 的 `credential` 和 `slot-id`。
-2. 生成可以直接复制到飞书签名里的 URL。`t=` 负责展示动态签名文案，`u=` 负责控制点击后的落地页。默认生成的 URL 会把点击跳转到本 README 的配置说明：
+2. 生成可以直接复制到飞书签名里的 URL。`t=` 负责展示动态签名文案。默认生成的 URL 不带点击落地页，避免飞书预览抓取时跟随跳转而不展示 token：
 
    ```bash
    swift run codex-rate lark-signature --slot-id <slot-id> --signature-url
    ```
 
-   如果想改点击落地页：
-
-   ```bash
-   swift run codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
-   ```
-
    生成出来的 URL 形态是：
 
    ```text
-   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D&u=https%3A%2F%2Fgithub.com%2Fsinoon%2Fcodex-rate-watcher%23-lark-url-preview-signature-sync
+   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D
    ```
+
+   如果确实想让点击后跳到别的页面，可以在菜单栏 UI 的 `LARK SIGNATURE` 卡片里填写并保存可选跳转地址；留空时复制出来的就是上面的短链接。
 
 3. 先在本地预览这次会写入什么内容：
 
@@ -177,7 +173,7 @@ Codex Rate Watcher 驻留在 macOS 菜单栏，让你对 OpenAI Codex / ChatGPT 
 
 #### 常见坑
 
-如果你的飞书签名链接长这样：`https://l.garyyang.work/?t=Token%20...`，那它是**静态链接**，后面不会自动更新。要想让菜单栏应用持续改值，签名链接本身必须读取 `{{slot id="..."}}`。点击落地页是独立配置：保留动态 `t={{slot ...}}`，只改 `u=` 就可以调整点击后打开的页面。
+如果你的飞书签名链接长这样：`https://l.garyyang.work/?t=Token%20...`，那它是**静态链接**，后面不会自动更新。要想让菜单栏应用持续改值，签名链接本身必须读取 `{{slot id="..."}}`。如果签名链接里带了 `u=`，飞书预览抓取可能会跟随跳转到目标页，导致 token 文案不展示；优先使用只包含动态 `t={{slot ...}}` 的短链接。
 
 ### ☁️ iCloud 多设备 Token Ledger 同步
 
@@ -275,9 +271,6 @@ swift run codex-rate lark-signature --slot-id <slot-id> --dry-run
 
 # 生成可以直接复制到飞书签名里的 URL
 swift run codex-rate lark-signature --slot-id <slot-id> --signature-url
-
-# 生成带自定义点击落地页的签名 URL
-swift run codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
 
 # 将最新 token 汇总写入飞书自定义 slot
 swift run codex-rate lark-signature --credential <credential> --slot-id <slot-id>

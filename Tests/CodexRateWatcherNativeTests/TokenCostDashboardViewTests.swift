@@ -95,6 +95,32 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertNotNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
   }
 
+  func testPopoverLarkSignatureURLUsesConfiguredClickTarget() throws {
+    let viewController = PopoverViewController(monitor: UsageMonitor())
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    XCTAssertNotNil(findButton(Copy.larkSignatureSaveTargetURL, in: viewController.view))
+
+    let config = LarkSignatureAutoSyncConfig(
+      enabled: true,
+      credential: "cred-123",
+      slotID: "slot-abc",
+      label: "",
+      baseURL: "https://l.garyyang.work",
+      targetURL: "https://example.com/docs",
+      useLocalSummary: false
+    )
+    let signatureURL = try XCTUnwrap(viewController.larkSignatureURLForTesting(config: config))
+    let components = try XCTUnwrap(URLComponents(url: signatureURL, resolvingAgainstBaseURL: false))
+    let queryItems = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+      item.value.map { (item.name, $0) }
+    })
+
+    XCTAssertEqual(queryItems["t"], #"{{slot id="slot-abc"}}"#)
+    XCTAssertEqual(queryItems["u"], "https://example.com/docs")
+  }
+
   func testPopoverCanBuildLargeSharePreviewWithCopyImageAction() throws {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view

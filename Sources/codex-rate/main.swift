@@ -201,7 +201,6 @@ private struct CLIOptions {
   var larkSlotID: String = ""
   var larkLabel: String = ""
   var larkBaseURL: String = "https://l.garyyang.work"
-  var larkTargetURL: String = LarkSignatureURLBuilder.defaultTargetURL.absoluteString
   var larkUseLocalSummary: Bool = false
   var larkDryRun: Bool = false
   var larkSignatureURL: Bool = false
@@ -296,12 +295,6 @@ private func parseArguments() -> CLIOptions {
         exitWithError("--base-url requires a value")
       }
       opts.larkBaseURL = args[idx]
-    case "--target-url":
-      idx += 1
-      guard idx < args.count, !args[idx].isEmpty else {
-        exitWithError("--target-url requires a value")
-      }
-      opts.larkTargetURL = args[idx]
     case "--local-only":
       opts.larkUseLocalSummary = true
     case "--dry-run":
@@ -920,14 +913,9 @@ private func runLarkSignature(opts: CLIOptions) async {
     guard let baseURL = URL(string: baseURLString) else {
       exitWithError("--base-url must be a valid URL")
     }
-    guard let targetURL = URL(string: opts.larkTargetURL) else {
-      exitWithError("--target-url must be a valid URL")
-    }
-
     let signatureURL = LarkSignatureURLBuilder.signatureURL(
       slotID: slotID,
-      baseURL: baseURL,
-      targetURL: targetURL
+      baseURL: baseURL
     )
 
     if opts.jsonOutput {
@@ -935,7 +923,6 @@ private func runLarkSignature(opts: CLIOptions) async {
         "base_url": baseURL.absoluteString,
         "signature_url": signatureURL.absoluteString,
         "slot_id": slotID,
-        "target_url": targetURL.absoluteString,
         "template": #"{{slot id="\#(slotID)"}}"#
       ]
       if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
@@ -967,12 +954,14 @@ private func runLarkSignature(opts: CLIOptions) async {
     guard !opts.larkCredential.isEmpty else {
       exitWithError("--credential is required when using --enable-auto-sync")
     }
+    let existingConfig = await store.load()
     let config = LarkSignatureAutoSyncConfig(
       enabled: true,
       credential: opts.larkCredential,
       slotID: opts.larkSlotID,
       label: opts.larkLabel,
       baseURL: opts.larkBaseURL,
+      targetURL: existingConfig.targetURL,
       useLocalSummary: opts.larkUseLocalSummary
     )
     await store.save(config)
@@ -1074,7 +1063,6 @@ private func printHelp() {
     --slot-id <str>      Lark custom slot ID
     --label <str>        Prefix label for signature summary (default: empty)
     --base-url <url>     Lark slot API base URL (default: https://l.garyyang.work)
-    --target-url <url>   Click target for generated Lark signature URL
     --local-only         Use local-device totals instead of merged totals
     --dry-run            Print signature text without writing slot
     --signature-url      Print copyable Lark signature URL without writing slot

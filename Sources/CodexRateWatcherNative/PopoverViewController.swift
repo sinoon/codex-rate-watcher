@@ -124,6 +124,8 @@ final class PopoverViewController: NSViewController {
   private var larkSignatureWrapper: NSView!
   private let larkSignatureSectionLabel = NSTextField(labelWithString: "")
   private let larkSignaturePreviewBodyLabel = NSTextField(labelWithString: "")
+  private let larkSignatureTargetURLField = NSTextField(string: "")
+  private let larkSignatureTargetURLSaveButton = NSButton()
   private let costSignatureURLButton = NSButton()
 
   // Profile section
@@ -799,9 +801,31 @@ final class PopoverViewController: NSViewController {
     larkSignaturePreviewBodyLabel.maximumNumberOfLines = 1
     larkSignaturePreviewBodyLabel.translatesAutoresizingMaskIntoConstraints = false
 
+    larkSignatureTargetURLField.placeholderString = Copy.larkSignatureTargetURLPlaceholder
+    larkSignatureTargetURLField.font = .systemFont(ofSize: LN.fontMicro, weight: .regular)
+    larkSignatureTargetURLField.textColor = LN.textSecondary
+    larkSignatureTargetURLField.drawsBackground = true
+    larkSignatureTargetURLField.backgroundColor = LN.elevated
+    larkSignatureTargetURLField.isBordered = true
+    larkSignatureTargetURLField.isBezeled = true
+    larkSignatureTargetURLField.bezelStyle = .roundedBezel
+    larkSignatureTargetURLField.lineBreakMode = .byTruncatingMiddle
+    larkSignatureTargetURLField.translatesAutoresizingMaskIntoConstraints = false
+
+    larkSignatureTargetURLSaveButton.title = Copy.larkSignatureSaveTargetURL
+    larkSignatureTargetURLSaveButton.bezelStyle = .inline
+    larkSignatureTargetURLSaveButton.isBordered = false
+    larkSignatureTargetURLSaveButton.font = .systemFont(ofSize: LN.fontMicro, weight: .semibold)
+    larkSignatureTargetURLSaveButton.contentTintColor = LN.blue
+    larkSignatureTargetURLSaveButton.target = self
+    larkSignatureTargetURLSaveButton.action = #selector(saveLarkSignatureTargetURLTapped)
+    larkSignatureTargetURLSaveButton.translatesAutoresizingMaskIntoConstraints = false
+
     card.addSubview(larkSignatureSectionLabel)
     card.addSubview(costSignatureURLButton)
     card.addSubview(preview)
+    card.addSubview(larkSignatureTargetURLField)
+    card.addSubview(larkSignatureTargetURLSaveButton)
     preview.addSubview(larkSignaturePreviewBodyLabel)
 
     let cPad = LN.cardPad
@@ -816,12 +840,22 @@ final class PopoverViewController: NSViewController {
       preview.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
       preview.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
       preview.topAnchor.constraint(equalTo: larkSignatureSectionLabel.bottomAnchor, constant: LN.gapSm),
-      preview.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+      preview.heightAnchor.constraint(equalToConstant: 30),
 
       larkSignaturePreviewBodyLabel.leadingAnchor.constraint(equalTo: preview.leadingAnchor, constant: 10),
       larkSignaturePreviewBodyLabel.trailingAnchor.constraint(equalTo: preview.trailingAnchor, constant: -10),
       larkSignaturePreviewBodyLabel.topAnchor.constraint(equalTo: preview.topAnchor, constant: 9),
       larkSignaturePreviewBodyLabel.bottomAnchor.constraint(equalTo: preview.bottomAnchor, constant: -9),
+
+      larkSignatureTargetURLField.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cPad),
+      larkSignatureTargetURLField.trailingAnchor.constraint(equalTo: larkSignatureTargetURLSaveButton.leadingAnchor, constant: -8),
+      larkSignatureTargetURLField.topAnchor.constraint(equalTo: preview.bottomAnchor, constant: LN.gapXs),
+      larkSignatureTargetURLField.heightAnchor.constraint(equalToConstant: 24),
+      larkSignatureTargetURLField.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cPad),
+
+      larkSignatureTargetURLSaveButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -cPad),
+      larkSignatureTargetURLSaveButton.centerYAnchor.constraint(equalTo: larkSignatureTargetURLField.centerYAnchor),
+      larkSignatureTargetURLSaveButton.widthAnchor.constraint(equalToConstant: 46),
     ])
 
     wrapper.addSubview(card)
@@ -1160,6 +1194,26 @@ final class PopoverViewController: NSViewController {
     }
   }
 
+  @objc private func saveLarkSignatureTargetURLTapped() {
+    let rawTargetURL = larkSignatureTargetURLField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard rawTargetURL.isEmpty || Self.isValidLarkSignatureTargetURL(rawTargetURL) else {
+      showSignatureTargetURLFeedback(Copy.larkSignatureTargetInvalid)
+      return
+    }
+
+    let store = larkSignatureStore
+    Task { [weak self] in
+      var config = await store.load()
+      config.targetURL = rawTargetURL.isEmpty ? nil : rawTargetURL
+      await store.save(config)
+
+      await MainActor.run {
+        self?.applyLarkSignatureConfig(config)
+        self?.showSignatureTargetURLFeedback(Copy.larkSignatureTargetSaved)
+      }
+    }
+  }
+
   @objc private func recSwitchTapped() {
     guard let pid = recProfileID else { return }
     Task { await monitor.switchToProfile(id: pid) }
@@ -1371,6 +1425,8 @@ final class PopoverViewController: NSViewController {
     latestLarkSignatureConfig = config
     costSignatureURLButton.title = Copy.costCopySignatureURL
     costSignatureURLButton.isEnabled = !config.slotID.isEmpty
+    larkSignatureTargetURLField.stringValue = config.targetURL ?? ""
+    larkSignatureTargetURLSaveButton.title = Copy.larkSignatureSaveTargetURL
     updateLarkSignaturePreview()
   }
 
@@ -1389,17 +1445,42 @@ final class PopoverViewController: NSViewController {
   }
 
   private func copyLarkSignatureURL(config: LarkSignatureAutoSyncConfig) {
-    guard !config.slotID.isEmpty else {
+    guard let signatureURL = signatureURL(for: config) else {
       return
     }
-
-    let signatureURL = LarkSignatureURLBuilder.signatureURL(
-      slotID: config.slotID,
-      baseURL: URL(string: config.baseURL) ?? LarkSignatureURLBuilder.defaultBaseURL
-    )
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(signatureURL.absoluteString, forType: .string)
     showSignatureURLCopiedFeedback()
+  }
+
+  private func signatureURL(for config: LarkSignatureAutoSyncConfig) -> URL? {
+    guard !config.slotID.isEmpty else {
+      return nil
+    }
+
+    let targetURL: URL?
+    if let rawTargetURL = config.targetURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+       Self.isValidLarkSignatureTargetURL(rawTargetURL) {
+      targetURL = URL(string: rawTargetURL)
+    } else {
+      targetURL = nil
+    }
+
+    return LarkSignatureURLBuilder.signatureURL(
+      slotID: config.slotID,
+      baseURL: URL(string: config.baseURL) ?? LarkSignatureURLBuilder.defaultBaseURL,
+      targetURL: targetURL
+    )
+  }
+
+  private static func isValidLarkSignatureTargetURL(_ value: String) -> Bool {
+    guard let url = URL(string: value),
+          let scheme = url.scheme?.lowercased(),
+          scheme == "http" || scheme == "https",
+          url.host != nil else {
+      return false
+    }
+    return true
   }
 
   private func showSignatureURLCopiedFeedback() {
@@ -1408,6 +1489,17 @@ final class PopoverViewController: NSViewController {
       guard let self, self.costSignatureURLButton.title == Copy.costCopySignatureURLCopied else { return }
       self.costSignatureURLButton.title = Copy.costCopySignatureURL
       self.updateLarkSignaturePreview()
+    }
+  }
+
+  private func showSignatureTargetURLFeedback(_ title: String) {
+    larkSignatureTargetURLSaveButton.title = title
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+      guard let self,
+            self.larkSignatureTargetURLSaveButton.title == title else {
+        return
+      }
+      self.larkSignatureTargetURLSaveButton.title = Copy.larkSignatureSaveTargetURL
     }
   }
 
@@ -1620,6 +1712,10 @@ final class PopoverViewController: NSViewController {
 
   func costSublineTextForTesting() -> String {
     costSublineLabel.stringValue
+  }
+
+  func larkSignatureURLForTesting(config: LarkSignatureAutoSyncConfig) -> URL? {
+    signatureURL(for: config)
   }
 
   private func applyToolTip(_ toolTip: String?, to view: NSView) {

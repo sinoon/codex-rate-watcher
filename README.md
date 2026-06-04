@@ -168,23 +168,19 @@ Need the same token picture outside the app? Codex Rate Watcher can write a comp
 #### Quick setup
 
 1. Create or locate your Lark custom slot and keep both the `credential` and `slot-id`.
-2. Generate the copyable signature URL. The `t=` value renders the live badge text; the `u=` value controls where people land after clicking it. By default the generated URL points clicks back to this README section:
+2. Generate the copyable signature URL. The `t=` value renders the live badge text. The default URL omits a click target so Lark preview fetches the token text instead of following a redirect:
 
    ```bash
    codex-rate lark-signature --slot-id <slot-id> --signature-url
    ```
 
-   To point clicks somewhere else:
-
-   ```bash
-   codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
-   ```
-
    The generated URL has this shape:
 
    ```text
-   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D&u=https%3A%2F%2Fgithub.com%2Fsinoon%2Fcodex-rate-watcher%23-lark-url-preview-signature-sync
+   https://l.garyyang.work/?t=%7B%7Bslot%20id%3D%22<slot-id>%22%7D%7D
    ```
+
+   To point clicks somewhere else, set the optional target URL from the menu bar UI in the `LARK SIGNATURE` card. Leaving it empty keeps the copied URL in the short form above.
 
 3. Preview what Codex Rate Watcher will write:
 
@@ -201,7 +197,7 @@ Need the same token picture outside the app? Codex Rate Watcher can write a comp
 
 #### Common pitfall
 
-If your Lark signature link looks like `https://l.garyyang.work/?t=Token%20...`, that link is **static** and will never auto-update. Auto-sync only works when the link itself reads from `{{slot id="..."}}`. The click target is independent: keep the dynamic `t={{slot ...}}` value, then change only `u=` when you want the badge to open a different page.
+If your Lark signature link looks like `https://l.garyyang.work/?t=Token%20...`, that link is **static** and will never auto-update. Auto-sync only works when the link itself reads from `{{slot id="..."}}`. If the link carries `u=`, Lark preview may follow the redirect to the target page and stop showing token text; prefer the short URL that only contains the dynamic `t={{slot ...}}` value.
 
 ### ☁️ iCloud Device Ledger Sync
 
@@ -285,9 +281,6 @@ codex-rate lark-signature --slot-id <slot-id> --dry-run
 
 # Generate the copyable Lark signature URL
 codex-rate lark-signature --slot-id <slot-id> --signature-url
-
-# Generate a signature URL with a custom click target
-codex-rate lark-signature --slot-id <slot-id> --signature-url --target-url https://example.com
 
 # Push the latest token summary into a Lark custom slot
 codex-rate lark-signature --credential <credential> --slot-id <slot-id>

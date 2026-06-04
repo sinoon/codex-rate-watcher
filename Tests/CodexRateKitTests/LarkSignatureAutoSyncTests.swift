@@ -12,6 +12,7 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
       slotID: "slot-abc",
       label: "",
       baseURL: "https://l.garyyang.work",
+      targetURL: "https://example.com/docs",
       useLocalSummary: false,
       lastSyncedValue: "今日 1.0K tok $1.00 · 12:00",
       lastSyncedAt: Self.baseDate
@@ -21,6 +22,29 @@ final class LarkSignatureAutoSyncTests: XCTestCase {
     let loaded = await store.load()
 
     XCTAssertEqual(loaded, config)
+  }
+
+  func testStoreLoadsLegacyConfigWithoutTargetURL() async throws {
+    let fileURL = makeTempFileURL()
+    let legacyJSON = """
+    {
+      "baseURL" : "https:\\/\\/l.garyyang.work",
+      "credential" : "cred-123",
+      "enabled" : true,
+      "label" : "",
+      "lastSyncedValue" : "Token 今日1.0K",
+      "slotID" : "slot-abc",
+      "useLocalSummary" : false
+    }
+    """
+    try Data(legacyJSON.utf8).write(to: fileURL, options: .atomic)
+
+    let store = LarkSignatureAutoSyncStore(fileURL: fileURL)
+    let loaded = await store.load()
+
+    XCTAssertTrue(loaded.enabled)
+    XCTAssertEqual(loaded.slotID, "slot-abc")
+    XCTAssertNil(loaded.targetURL)
   }
 
   func testServiceSkipsPushWhenValueIsUnchanged() async throws {

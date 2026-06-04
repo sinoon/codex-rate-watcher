@@ -145,7 +145,7 @@ public enum LarkSignatureURLBuilder {
   public static func signatureURL(
     slotID: String,
     baseURL: URL = defaultBaseURL,
-    targetURL: URL? = defaultTargetURL
+    targetURL: URL? = nil
   ) -> URL {
     var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) ?? URLComponents()
     components.path = "/"
@@ -256,6 +256,7 @@ public struct LarkSignatureAutoSyncConfig: Codable, Equatable, Sendable {
   public var slotID: String
   public var label: String
   public var baseURL: String
+  public var targetURL: String?
   public var useLocalSummary: Bool
   public var lastSyncedValue: String?
   public var lastSyncedAt: Date?
@@ -266,6 +267,7 @@ public struct LarkSignatureAutoSyncConfig: Codable, Equatable, Sendable {
     slotID: String = "",
     label: String = "",
     baseURL: String = "https://l.garyyang.work",
+    targetURL: String? = nil,
     useLocalSummary: Bool = false,
     lastSyncedValue: String? = nil,
     lastSyncedAt: Date? = nil
@@ -275,6 +277,7 @@ public struct LarkSignatureAutoSyncConfig: Codable, Equatable, Sendable {
     self.slotID = slotID
     self.label = label
     self.baseURL = baseURL
+    self.targetURL = targetURL
     self.useLocalSummary = useLocalSummary
     self.lastSyncedValue = lastSyncedValue
     self.lastSyncedAt = lastSyncedAt
