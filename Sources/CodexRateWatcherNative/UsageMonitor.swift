@@ -414,7 +414,9 @@ final class UsageMonitor {
     apiClient: UsageAPIClient = UsageAPIClient(),
     tokenRefresher: any AuthTokenRefreshing = TokenRefresher(),
     tokenCostLoader: TokenCostSnapshotLoading = LiveTokenCostSnapshotLoader(),
-    larkSignatureAutoSync: LarkSignatureAutoSyncing = LarkSignatureAutoSyncService(),
+    larkSignatureAutoSync: LarkSignatureAutoSyncing = LarkSignatureFeature.isEnabled
+      ? LarkSignatureAutoSyncService()
+      : NoopLarkSignatureAutoSyncService(),
     sampleStore: SampleStore = SampleStore(),
     profileStore: AuthProfileStore? = nil,
     managedAccountService: ManagedCodexAccountService = ManagedCodexAccountService(),

@@ -160,7 +160,9 @@ final class PopoverViewController: NSViewController {
     observerID = monitor.addObserver { [weak self] s in
       DispatchQueue.main.async { self?.render(state: s) }
     }
-    refreshLarkSignatureURLButton()
+    if LarkSignatureFeature.isEnabled {
+      refreshLarkSignatureURLButton()
+    }
   }
 
   override func viewDidLayout() {
@@ -200,7 +202,7 @@ final class PopoverViewController: NSViewController {
     let primaryCard = makePrimaryCard()
     let quotaCard = makeQuotaCard()
     let costCard = makeCostCard()
-    let larkSignatureCard = makeLarkSignatureCard()
+    let larkSignatureCard = LarkSignatureFeature.isEnabled ? makeLarkSignatureCard() : nil
     let relayCard = makeRelayCard()
     let recView = makeRecBanner()
     let profileSection = makeProfileSection()
@@ -210,7 +212,9 @@ final class PopoverViewController: NSViewController {
     root.addArrangedSubview(primaryCard)
     root.addArrangedSubview(quotaCard)
     root.addArrangedSubview(costCard)
-    root.addArrangedSubview(larkSignatureCard)
+    if let larkSignatureCard {
+      root.addArrangedSubview(larkSignatureCard)
+    }
     root.addArrangedSubview(relayCard)
     root.addArrangedSubview(recView)
     root.addArrangedSubview(profileSection)
@@ -220,7 +224,9 @@ final class PopoverViewController: NSViewController {
     root.setCustomSpacing(LN.gapSm, after: primaryCard)
     root.setCustomSpacing(LN.gapSm, after: quotaCard)
     root.setCustomSpacing(LN.gapSm, after: costCard)
-    root.setCustomSpacing(LN.gapSm, after: larkSignatureCard)
+    if let larkSignatureCard {
+      root.setCustomSpacing(LN.gapSm, after: larkSignatureCard)
+    }
     root.setCustomSpacing(LN.gap, after: relayCard)
     root.setCustomSpacing(LN.gap, after: recView)
     root.setCustomSpacing(LN.gapSm, after: profileSection)

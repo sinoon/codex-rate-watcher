@@ -73,15 +73,15 @@ final class TokenCostDashboardViewTests: XCTestCase {
     XCTAssertNotNil(findButton("Share", in: viewController.view))
   }
 
-  func testPopoverCostCardShowsCopySignatureURLButton() {
+  func testPopoverCostCardHidesCopySignatureURLButton() {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
     viewController.view.layoutSubtreeIfNeeded()
 
-    XCTAssertNotNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
+    XCTAssertNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
   }
 
-  func testPopoverShowsLarkSignaturePreviewCard() {
+  func testPopoverHidesLarkSignaturePreviewCard() {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
     viewController.view.layoutSubtreeIfNeeded()
@@ -90,17 +90,16 @@ final class TokenCostDashboardViewTests: XCTestCase {
     viewController.view.layoutSubtreeIfNeeded()
 
     let visibleText = Self.visibleTextValues(in: viewController.view)
-    XCTAssertTrue(visibleText.contains(Copy.larkSignatureSectionTitle))
-    XCTAssertTrue(visibleText.contains { $0.contains("7天40.0K/$8.5") })
-    XCTAssertNotNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
+    XCTAssertFalse(visibleText.contains(Copy.larkSignatureSectionTitle))
+    XCTAssertNil(findButton(Copy.costCopySignatureURL, in: viewController.view))
   }
 
-  func testPopoverLarkSignatureURLUsesConfiguredClickTarget() throws {
+  func testDormantLarkSignatureURLBuilderUsesConfiguredClickTarget() throws {
     let viewController = PopoverViewController(monitor: UsageMonitor())
     _ = viewController.view
     viewController.view.layoutSubtreeIfNeeded()
 
-    XCTAssertNotNil(findButton(Copy.larkSignatureSaveTargetURL, in: viewController.view))
+    XCTAssertNil(findButton(Copy.larkSignatureSaveTargetURL, in: viewController.view))
 
     let config = LarkSignatureAutoSyncConfig(
       enabled: true,

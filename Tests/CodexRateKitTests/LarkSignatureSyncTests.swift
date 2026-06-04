@@ -2,6 +2,10 @@ import XCTest
 @testable import CodexRateKit
 
 final class LarkSignatureSyncTests: XCTestCase {
+  func testLarkSignatureFeatureIsTemporarilyDisabled() {
+    XCTAssertFalse(LarkSignatureFeature.isEnabled)
+    XCTAssertTrue(LarkSignatureFeature.unavailableMessage.contains("temporarily unavailable"))
+  }
 
   func testSummaryUsesMergedTotalsByDefault() {
     let summary = LarkSignatureFormatter.summary(

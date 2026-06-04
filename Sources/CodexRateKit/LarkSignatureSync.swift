@@ -1,5 +1,13 @@
 import Foundation
 
+public enum LarkSignatureFeature {
+  // Temporarily disabled: the old l.garyyang.work slot preview service no longer
+  // works in Lark, and the Magic replacement does not yet provide a compatible
+  // persistent slot update backend for automatic status refreshes.
+  public static let isEnabled = false
+  public static let unavailableMessage = "Lark signature preview sync is temporarily unavailable while the preview backend is being replaced."
+}
+
 public enum LarkSignatureFormatter {
   public static func summary(
     snapshot: TokenCostSnapshot,

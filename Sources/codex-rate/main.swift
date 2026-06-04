@@ -862,6 +862,34 @@ private func runCost(json: Bool) async {
 private func runLarkSignature(opts: CLIOptions) async {
   let store = LarkSignatureAutoSyncStore()
 
+  if !LarkSignatureFeature.isEnabled {
+    if opts.larkDisableAutoSync {
+      await store.disable()
+      if opts.jsonOutput {
+        print(#"{"enabled":false,"available":false}"#)
+      } else {
+        print(ANSI.c(ANSI.green, "Disabled app auto-sync for Lark signature."))
+        print(ANSI.c(ANSI.dim, LarkSignatureFeature.unavailableMessage))
+      }
+      return
+    }
+
+    if opts.jsonOutput {
+      let payload: [String: Any] = [
+        "available": false,
+        "enabled": false,
+        "message": LarkSignatureFeature.unavailableMessage
+      ]
+      if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+         let text = String(data: data, encoding: .utf8) {
+        print(text)
+      }
+      return
+    }
+
+    exitWithError(LarkSignatureFeature.unavailableMessage)
+  }
+
   if opts.larkShowAutoSync {
     let config = await store.load()
     var payload: [String: Any] = [
@@ -1051,7 +1079,6 @@ private func printHelp() {
     history     Show usage history with sparklines
     relay       Show relay plan across accounts
     cost        Show local token cost from Codex session logs
-    lark-signature  Sync token cost summary into a Lark URL preview slot
     help        Show this help message
 
   \(ANSI.c(ANSI.bold, "OPTIONS"))
@@ -1059,16 +1086,6 @@ private func printHelp() {
     --interval <secs>    Watch polling interval (default: 30, min: 10)
     --hours <N>          History window in hours (default: 24)
     --strategy <name>    Relay strategy: reset-aware (default), greedy, max-runway
-    --credential <str>   Lark custom slot credential
-    --slot-id <str>      Lark custom slot ID
-    --label <str>        Prefix label for signature summary (default: empty)
-    --base-url <url>     Lark slot API base URL (default: https://l.garyyang.work)
-    --local-only         Use local-device totals instead of merged totals
-    --dry-run            Print signature text without writing slot
-    --signature-url      Print copyable Lark signature URL without writing slot
-    --enable-auto-sync   Save Lark sync config for the menu bar app
-    --disable-auto-sync  Remove saved app auto-sync config
-    --show-auto-sync     Show saved app auto-sync status
     -v, --version        Show version
     -h, --help           Show help
 
@@ -1082,11 +1099,6 @@ private func printHelp() {
     codex-rate relay --strategy greedy  Use greedy strategy
     codex-rate cost              Show local token cost
     codex-rate cost --json       Local token cost as JSON
-    codex-rate lark-signature --slot-id <id> --signature-url
-    codex-rate lark-signature --slot-id <id> --dry-run
-    codex-rate lark-signature --credential <cred> --slot-id <id>
-    codex-rate lark-signature --credential <cred> --slot-id <id> --enable-auto-sync
-    codex-rate lark-signature --show-auto-sync
   \(ANSI.c(ANSI.dim, "Part of Codex Rate Watcher \u{00B7} https://github.com/sinoon/codex-rate-watcher"))
   """
   print(help)
