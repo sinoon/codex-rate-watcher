@@ -49,6 +49,7 @@ final class PopoverViewController: NSViewController {
   private var observerID: UUID?
   private var latestTokenCostSnapshot: TokenCostSnapshot?
   private var latestState: UsageMonitor.State?
+  private var rootStack: NSStackView?
 
   // Header
   private let titleLabel    = NSTextField(labelWithString: "Codex Rate Watcher")
@@ -167,8 +168,19 @@ final class PopoverViewController: NSViewController {
 
   override func viewDidLayout() {
     super.viewDidLayout()
-    let fitting = view.fittingSize
-    let newSize = NSSize(width: LN.popoverW, height: fitting.height)
+    updatePreferredContentSize()
+  }
+
+  private func relayoutAndUpdatePreferredContentSize() {
+    view.needsLayout = true
+    view.layoutSubtreeIfNeeded()
+    updatePreferredContentSize()
+  }
+
+  private func updatePreferredContentSize() {
+    guard let rootStack else { return }
+    let contentHeight = max(1, ceil(rootStack.fittingSize.height))
+    let newSize = NSSize(width: LN.popoverW, height: contentHeight)
     if preferredContentSize != newSize {
       preferredContentSize = newSize
     }
@@ -188,13 +200,13 @@ final class PopoverViewController: NSViewController {
     root.spacing = 0
     root.alignment = .leading
     root.translatesAutoresizingMaskIntoConstraints = false
+    rootStack = root
     view.addSubview(root)
 
     NSLayoutConstraint.activate([
       root.topAnchor.constraint(equalTo: view.topAnchor),
       root.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       root.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-      root.bottomAnchor.constraint(equalTo: view.bottomAnchor),
       root.widthAnchor.constraint(equalToConstant: LN.popoverW),
     ])
 
@@ -1228,6 +1240,8 @@ final class PopoverViewController: NSViewController {
   // MARK: - Render
 
   private func render(state: UsageMonitor.State) {
+    defer { relayoutAndUpdatePreferredContentSize() }
+
     latestState = state
     updatedLabel.stringValue = state.lastUpdatedLabel
     refreshButton.isEnabled = !state.isRefreshing && !state.isAddingAccount
