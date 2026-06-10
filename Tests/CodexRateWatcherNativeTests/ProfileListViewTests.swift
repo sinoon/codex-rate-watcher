@@ -149,6 +149,62 @@ final class ProfileListViewTests: XCTestCase {
     XCTAssertEqual(allButtons(in: viewController.view).filter { $0.title == " Unavailable " }.count, 2)
   }
 
+  func testCollapsingUnavailableProfilesDoesNotLeaveRecommendationBannerExpanded() throws {
+    let monitor = UsageMonitor()
+    let viewController = PopoverViewController(monitor: monitor)
+    _ = viewController.view
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let activeID = UUID()
+    let recommendedID = UUID()
+    let hiddenProfiles = (0..<5).map { idx in
+      makeRecord(
+        id: UUID(),
+        email: "expired\(idx)@example.com",
+        usage: makeUsage(planType: "plus", primaryUsed: 30, secondaryUsed: 30),
+        validationError: "认证已过期，请重新登录 (401)"
+      )
+    }
+
+    let state = UsageMonitor.State(
+      snapshot: makeSnapshot(primaryUsed: 78, secondaryUsed: 85),
+      profiles: [
+        makeRecord(id: activeID, email: "active@example.com", usage: makeUsage(planType: "pro", primaryUsed: 78, secondaryUsed: 85)),
+        makeRecord(id: recommendedID, email: "best@example.com", usage: makeUsage(planType: "plus", primaryUsed: 10, secondaryUsed: 15)),
+      ] + hiddenProfiles,
+      activeProfileID: activeID,
+      errorMessage: nil,
+      lastUpdatedAt: Date(),
+      isRefreshing: false,
+      isAddingAccount: false,
+      tokenCostSnapshot: nil,
+      primaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 45, percentPerHour: 18, statusText: "steady"),
+      secondaryEstimate: BurnEstimate(timeUntilExhausted: 60 * 60 * 8, percentPerHour: 1, statusText: "calm"),
+      reviewEstimate: BurnEstimate(timeUntilExhausted: nil, percentPerHour: nil, statusText: "idle")
+    )
+
+    viewController.renderForTesting(state: state)
+    viewController.view.layoutSubtreeIfNeeded()
+    let collapsedHeight = viewController.preferredContentSize.height
+
+    let disclosureButton = try XCTUnwrap(findButton("Unavailable Profiles · 5 hidden", in: viewController.view))
+    disclosureButton.performClick(nil)
+    viewController.view.layoutSubtreeIfNeeded()
+    let expandedHeight = viewController.preferredContentSize.height
+    XCTAssertGreaterThan(expandedHeight, collapsedHeight)
+
+    viewController.view.setFrameSize(NSSize(width: 400, height: expandedHeight))
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let collapseButton = try XCTUnwrap(findButton("Unavailable Profiles · 5 shown", in: viewController.view))
+    collapseButton.performClick(nil)
+    viewController.view.layoutSubtreeIfNeeded()
+
+    let banner = try XCTUnwrap(findRecommendationBanner(in: viewController.view))
+    XCTAssertLessThanOrEqual(banner.frame.height, 64)
+    XCTAssertLessThan(viewController.preferredContentSize.height, expandedHeight)
+  }
+
   func testRenderSwitchRecommendationShowsDetailText() throws {
     let monitor = UsageMonitor()
     let viewController = PopoverViewController(monitor: monitor)
@@ -253,6 +309,12 @@ final class ProfileListViewTests: XCTestCase {
 
   private func findButton(_ title: String, in view: NSView) -> NSButton? {
     allButtons(in: view).first { $0.title == title }
+  }
+
+  private func findRecommendationBanner(in view: NSView) -> NSView? {
+    allTextFields(in: view)
+      .first { $0.stringValue.contains("建议切到") }
+      .flatMap(\.superview)
   }
 
   private func makeRecord(
